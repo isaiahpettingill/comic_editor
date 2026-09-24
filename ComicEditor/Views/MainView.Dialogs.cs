@@ -83,10 +83,12 @@ public partial class MainView
     private void CloseModal()
     {
         if (updateInstalling) return;
+        fontInstall?.Cancel();
         if (modal is not null) shell?.Children.Remove(modal);
         modal = null; if (rootGrid is not null) rootGrid.IsEnabled = true;
         returnFocus?.Focus(); returnFocus = null;
         if (UseCompactLayout != compact || compact && compactSingleRow != CompactLandscape) Build(UseCompactLayout);
+        QueueFontCheck();
     }
 
     private void RenameLayer(ArtworkLayer layer)
@@ -158,7 +160,7 @@ public partial class MainView
             var isCustom = font.SelectedIndex == fontIds.Count; custom.IsVisible = isCustom;
             requirement.Text = isCustom ? "Install this font on machines that edit or compile the project. The game uses rasterized text." : "Font family reference. Noto supplies missing glyphs.";
             if (isCustom && !CutsceneFonts.IsInstalled(FontId())) requirement.Text += " Unavailable here: preview uses Noto.";
-            sample.FontFamily = CutsceneFonts.Resolve(isCustom && string.IsNullOrWhiteSpace(custom.Text) ? "noto-sans" : FontId());
+            sample.FontFamily = CutsceneFonts.Resolve(isCustom && string.IsNullOrWhiteSpace(custom.Text) ? "noto-sans" : FontId(), editor.Language);
             sample.FontSize = (double)(size.Value ?? 16); sample.FontWeight = bold.IsChecked == true ? FontWeight.Bold : FontWeight.Normal;
             sample.FontStyle = italic.IsChecked == true ? FontStyle.Italic : FontStyle.Normal;
         }

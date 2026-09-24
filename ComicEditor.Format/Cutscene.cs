@@ -8,6 +8,7 @@ public sealed class Cutscene
     public int Width { get; set; } = 320;
     public int Height { get; set; } = 180;
     public string FallbackLanguage { get; set; } = "en";
+    public List<string> FallbackFontIds { get; set; } = [];
     public List<string> Palette { get; set; } = DefaultPalette();
 
     public static List<string> DefaultPalette()
@@ -99,6 +100,8 @@ public sealed class Cutscene
             throw new InvalidDataException("Unsupported cutscene dimensions, version, palette, or empty storyboard.");
         if (Palette.Any(p => p.Length != 7 || p[0] != '#' || !p[1..].All(Uri.IsHexDigit)))
             throw new InvalidDataException("Palette entries must be #RRGGBB colors.");
+        if (FallbackFontIds.Count > 128 || FallbackFontIds.Any(id => !id.StartsWith("google:", StringComparison.Ordinal) || id.Length is < 8 or > 107 || !id[7..].All(c => char.IsAsciiLetterOrDigit(c) || c is ' ' or '-')))
+            throw new InvalidDataException("Fallback fonts must be Google Fonts family references.");
         foreach (var frame in Frames)
         {
             if (frame.Layers.Count == 0) throw new InvalidDataException("Every frame needs an artwork layer.");

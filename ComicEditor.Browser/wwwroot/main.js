@@ -70,6 +70,27 @@ globalThis.comicEditorPalettes = {
     }
 };
 
+globalThis.comicEditorFonts = {
+    async read(key) {
+        const db = await openSessionDatabase();
+        return new Promise((resolve, reject) => {
+            const request = db.transaction('session').objectStore('session').get('fonts/' + key);
+            request.onsuccess = () => resolve(request.result ?? null);
+            request.onerror = () => reject(request.error);
+        });
+    },
+    async write(key, json) {
+        const db = await openSessionDatabase();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction('session', 'readwrite');
+            transaction.objectStore('session').put(json, 'fonts/' + key);
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(transaction.error ?? new Error('Font cache write was interrupted.'));
+        });
+    }
+};
+
 try {
     const runtime = await dotnet.withDiagnosticTracing(false).create();
     await runtime.runMain(runtime.getConfig().mainAssemblyName, [globalThis.location.href]);

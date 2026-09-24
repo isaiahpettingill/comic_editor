@@ -76,7 +76,7 @@ public partial class MainView
         if (currentFile is null && snapshot.FileName is not null) editor.MarkUnsaved();
         SetSaveMessage(snapshot.Dirty ? "Recovered unsaved edits from your last session." : "Reopened your last cutscene.");
         Build(compact);
-        try { await CutsceneFonts.EnsureAsync(editor.Scene); RefreshCanvas(); }
+        try { await CutsceneFonts.EnsureAsync(editor.Scene); RefreshCanvas(); QueueFontCheck(); }
         catch (Exception ex) { SetSaveMessage("Cutscene recovered; font loading failed: " + ex.Message, true); }
     }
 

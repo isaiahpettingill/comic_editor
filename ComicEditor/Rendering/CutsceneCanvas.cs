@@ -94,7 +94,7 @@ public sealed class CutsceneCanvas : Control
         {
             var text = scene.Text(language, obj.Key);
             var missing = string.IsNullOrWhiteSpace(text);
-            var font = CutsceneFonts.Resolve(obj.FontId);
+            var font = CutsceneFonts.Resolve(obj.FontId, language);
             var rendered = scene.RenderText(language, obj.Key);
             var formatted = new FormattedText(rendered,
                 Culture(language), Culture(language).TextInfo.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight,

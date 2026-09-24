@@ -1,4 +1,4 @@
-param([int]$Port = 8098, [int]$DebugPort = 9234, [string]$WebRoot, [switch]$CheckPreferences, [switch]$CheckRecovery, [switch]$CheckPalettes)
+param([int]$Port = 8098, [int]$DebugPort = 9234, [string]$WebRoot, [switch]$CheckPreferences, [switch]$CheckRecovery, [switch]$CheckPalettes, [switch]$CheckFonts, [string]$FontProject)
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path -Parent $PSScriptRoot
 $artifactRoot = Join-Path $workspace 'artifacts'
@@ -86,6 +86,27 @@ try {
         $saved = $palettes.result.result.value | ConvertFrom-Json
         if ($saved.files -notcontains 'Smoke.gpl' -or $saved.text -notmatch '255 255 255 White') { throw 'Browser palette library did not survive reload.' }
         'Browser GPL palette library survived reload.'
+    }
+    if ($CheckFonts) {
+        if (!$FontProject) { throw 'CheckFonts requires a Chinese cutscene fixture through FontProject.' }
+        $font = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $workspace 'ComicEditor.Rendering.Tests/Assets/NotoSansSC-Fixture.ttf')))
+        $project = [Convert]::ToBase64String([IO.File]::ReadAllBytes($FontProject))
+        $key = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes('Noto Sans SC')))
+        $fontJson = @{Family='Noto Sans SC';FileName='fixture.ttf';Data=$font;License='OFL';SourceUrl='offline test fixture'} | ConvertTo-Json -Compress
+        $encodedJson = $fontJson | ConvertTo-Json -Compress
+        $expression = "(async()=>{await comicEditorFonts.write('$key',$encodedJson);const s=JSON.parse(await comicEditorSession.load());s.Project='$project';s.FileName='font-smoke.cutscene';s.Dirty=true;s.Frame=0;await comicEditorSession.save(JSON.stringify(s))})()"
+        $null = Invoke-Cdp 'Runtime.evaluate' @{expression=$expression;awaitPromise=$true}
+        $null = Invoke-Cdp 'Network.enable'
+        $null = Invoke-Cdp 'Network.setBlockedURLs' @{urls=@('*raw.githubusercontent.com*','*fonts.googleapis.com*')}
+        $null = Invoke-Cdp 'Page.reload'
+        $fontReady = $false
+        for ($attempt=0; $attempt -lt 30; $attempt++) {
+            Start-Sleep -Seconds 1
+            $stored = Invoke-Cdp 'Runtime.evaluate' @{expression='(async()=>{const raw=await globalThis.comicEditorSession?.load();return raw && atob(JSON.parse(raw).Project).includes("google:Noto Sans SC")})()';awaitPromise=$true;returnByValue=$true}
+            if ($stored.result.result.value -eq $true) { $fontReady = $true; break }
+        }
+        if (!$fontReady) { throw 'The .NET renderer did not load the cached Chinese font after browser reload.' }
+        'Browser font cache survived reload and was loaded by .NET with Google Fonts requests blocked.'
     }
     $capture = Invoke-Cdp 'Page.captureScreenshot' @{format='png'}
     [IO.File]::WriteAllBytes((Join-Path $artifactRoot 'browser-smoke.png'),[Convert]::FromBase64String($capture.result.data))

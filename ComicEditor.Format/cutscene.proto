@@ -13,6 +13,7 @@ message CutsceneDocument {
   repeated Frame frames = 5;
   repeated Language languages = 6;
   string fallback_language = 7; // Missing/blank translations use this language, then blank.
+  repeated string fallback_font_ids = 8; // Optional google:<family> references; fonts cached separately.
 }
 
 message Frame {

@@ -14,6 +14,7 @@ public static class DisplayCompiler
     public static DisplayCutscene Compile(Cutscene scene)
     {
         scene.Validate();
+        CutsceneFonts.RequireAvailable(scene);
         foreach (var obj in scene.Frames.Where(f => f.TextVisible).SelectMany(f => f.TextObjects))
             if (CutsceneFonts.IsCustom(obj.FontId) && !CutsceneFonts.IsInstalled(obj.FontId))
                 throw new InvalidDataException($"Required font is unavailable: {obj.FontId}. Install it before compiling.");
@@ -87,7 +88,7 @@ public static class DisplayCompiler
         {
             var culture = CutsceneCanvas.Culture(language);
             var formatted = new FormattedText(text, culture, culture.TextInfo.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight,
-                new Typeface(CutsceneFonts.Resolve(obj.FontId), obj.Italic ? FontStyle.Italic : FontStyle.Normal,
+                new Typeface(CutsceneFonts.Resolve(obj.FontId, language), obj.Italic ? FontStyle.Italic : FontStyle.Normal,
                     obj.Bold ? FontWeight.Bold : FontWeight.Normal), obj.FontSize, Brushes.White)
             { MaxTextWidth = obj.Width };
             using (context.PushClip(new Rect(obj.X - left, obj.Y - top, obj.Width, obj.Height)))

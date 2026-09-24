@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Browser;
 using ComicEditor;
 using ComicEditor.Editing;
+using ComicEditor.Fonts;
 using System.Runtime.InteropServices.JavaScript;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -29,6 +30,11 @@ internal sealed partial class Program
     [JSImport("globalThis.comicEditorPalettes.write")]
     private static partial Task WritePalette(string name, string text);
 
+    [JSImport("globalThis.comicEditorFonts.read")]
+    private static partial Task<string?> ReadFont(string key);
+    [JSImport("globalThis.comicEditorFonts.write")]
+    private static partial Task WriteFont(string key, string json);
+
     private static Task Main(string[] args)
     {
         PreferencesStorage.Read = LoadPreferences;
@@ -37,6 +43,7 @@ internal sealed partial class Program
         SessionStorage.Write = SaveSession;
         PaletteLibrary.List = async () => JsonSerializer.Deserialize(await ListPalettes(), PaletteListJson.Default.StringArray) ?? [];
         PaletteLibrary.Read = ReadPalette; PaletteLibrary.Write = WritePalette;
+        FontStorage.BrowserRead = ReadFont; FontStorage.BrowserWrite = WriteFont;
         OnBackground(async () => { if (SessionStorage.Flush is { } flush) await flush(); });
         return BuildAvaloniaApp()
             .WithInterFont()

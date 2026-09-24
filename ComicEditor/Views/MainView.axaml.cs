@@ -69,6 +69,7 @@ public partial class MainView : UserControl
         DetachedFromVisualTree += (_, _) => StopUpdates();
         DetachedFromVisualTree += (_, _) => StopSpray();
         DetachedFromVisualTree += (_, _) => ResetCanvasNavigation();
+        DetachedFromVisualTree += (_, _) => { fontCheck?.Cancel(); fontInstall?.Cancel(); };
     }
 
     private bool UseCompactLayout => touchLayout || Bounds.Width < 900 || Bounds.Height is > 0 and < 540;
@@ -388,7 +389,7 @@ public partial class MainView : UserControl
     }
 
     private void RefreshAll()
-    { SyncLanguages(); RefreshCanvas(); RefreshStoryboard(); RefreshInspector(); RefreshPalette(); RefreshTitle(); }
+    { SyncLanguages(); RefreshCanvas(); RefreshStoryboard(); RefreshInspector(); RefreshPalette(); RefreshTitle(); QueueFontCheck(); }
 
     private void RefreshTitle()
     {

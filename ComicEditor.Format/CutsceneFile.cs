@@ -17,6 +17,7 @@ public static class CutsceneFile
             FallbackLanguage = scene.FallbackLanguage
         };
         document.PaletteRgb.Add(scene.Palette.Select(hex => Convert.ToUInt32(hex[1..], 16)));
+        document.FallbackFontIds.Add(scene.FallbackFontIds);
         foreach (var frame in scene.Frames)
         {
             var target = new Wire.Frame { Id = frame.Id, TextHidden = !frame.TextVisible };
@@ -70,6 +71,7 @@ public static class CutsceneFile
             Width = (int)document.CanvasWidth,
             Height = (int)document.CanvasHeight,
             FallbackLanguage = document.FallbackLanguage,
+            FallbackFontIds = document.FallbackFontIds.ToList(),
             Palette = document.PaletteRgb.Select(color => $"#{color:X6}").ToList(),
             Frames = document.Frames.Select(frame => new Frame
             {

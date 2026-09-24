@@ -16,11 +16,12 @@ public class NativeCompilerTests
     }
 
     [NativeCompilerFact]
-    public void PublishedCompilerPreservesArtworkAndRendersBundledMultilingualFonts()
+    public void PublishedCompilerPreservesArtworkAndRendersCachedMultilingualFonts()
     {
         var folder = Directory.CreateTempSubdirectory("comic native compiler ");
         try
         {
+            var cache = Path.Combine(folder.FullName, "fonts"); FontFixture.SeedCache(cache);
             var scene = Cutscene.Create(320, 100);
             scene.Frames[0].Layers[0].SetPixel(0, 0, 127);
             scene.Translations.Clear();
@@ -47,6 +48,7 @@ public class NativeCompilerTests
                 File.WriteAllBytes(input, CutsceneFile.Write(scene));
                 var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("COMIC_TEST_COMPILER")!)
                 { UseShellExecute = false, CreateNoWindow = true };
+                start.Environment["COMIC_EDITOR_FONT_CACHE"] = cache;
                 start.ArgumentList.Add(input); start.ArgumentList.Add(output);
                 using var process = Process.Start(start)!;
                 if (!process.WaitForExit(60_000))

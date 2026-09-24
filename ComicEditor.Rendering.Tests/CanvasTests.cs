@@ -526,6 +526,7 @@ public partial class CanvasTests
         using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
         await session.Dispatch(() =>
         {
+            FontFixture.Register();
             var scene = Cutscene.Create(160, 60);
             scene.Translations["zh-CN"] = new() { ["warning"] = "海洋警告" };
             scene.Translations["en"]["warning"] = "Ocean warning";

@@ -164,6 +164,7 @@ public partial class CanvasTests
         using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
         await session.Dispatch(() =>
         {
+            FontFixture.Register("Noto Sans JP");
             var scene = Cutscene.Create(160, 64); var frame = scene.Frames[0];
             frame.Layers[0].SetPixel(0, 0, 3); scene.Palette[4] = scene.Palette[3]; frame.Layers[0].SetPixel(1, 0, 4);
             var hidden = ArtworkLayer.Create("Hidden", 160, 64); hidden.Visible = false; hidden.SetPixel(2, 0, 5); frame.Layers.Add(hidden);

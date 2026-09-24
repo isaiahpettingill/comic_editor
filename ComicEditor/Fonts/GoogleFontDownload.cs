@@ -7,9 +7,23 @@ public sealed record DownloadedFont(string Family, string FileName, byte[] Data,
 
 public static partial class GoogleFontDownload
 {
-    private static readonly HttpClient Client = new();
+    private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(60) };
     private const string Repository = "https://raw.githubusercontent.com/google/fonts/main/";
     private const int MaximumFontBytes = 32 * 1024 * 1024;
+
+    public static async Task<bool> IsReachableAsync(CancellationToken cancellationToken = default)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(4));
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Head, Repository + "ofl/notosans/METADATA.pb");
+            using var response = await Client.SendAsync(request, timeout.Token);
+            return response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException) { return false; }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return false; }
+    }
 
     public static string FamilyFromLink(string link)
     {

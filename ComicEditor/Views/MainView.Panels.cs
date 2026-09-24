@@ -75,6 +75,7 @@ public partial class MainView
 
     private void RefreshInspector()
     {
+        refreshFontWarning = null;
         if (inspector is null) return;
         inspector.Children.Clear();
         inspector.Children.Add(Label("Layers", true));
@@ -199,14 +200,16 @@ public partial class MainView
         {
             var text = translation.Text ?? "";
             var missing = string.IsNullOrWhiteSpace(text);
-            var font = CutsceneFonts.Resolve(obj.FontId);
+            var font = CutsceneFonts.Resolve(obj.FontId, lang);
             var measure = new FormattedText(text, CutsceneCanvas.Culture(lang), CutsceneCanvas.Culture(lang).TextInfo.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight,
                 new Typeface(font, obj.Italic ? FontStyle.Italic : FontStyle.Normal, obj.Bold ? FontWeight.Bold : FontWeight.Normal), obj.FontSize, Brushes.Black)
             { MaxTextWidth = obj.Width };
             var overflow = measure.Height > obj.Height + .5 || measure.Width > obj.Width + .5;
             warning.Text = missing ? $"Missing — fallback: {editor.Scene.FallbackLanguage}" : overflow ? "Text overflows its area" : "Translation fits";
             if (CutsceneFonts.IsCustom(obj.FontId) && !CutsceneFonts.IsInstalled(obj.FontId)) warning.Text += " · Custom font unavailable; using Noto";
-            warning.Foreground = missing || overflow ? Brush("#AB3B13") : Brush("#406543");
+            var missingFonts = CutsceneFonts.Missing(text, obj.FontId, lang);
+            if (missingFonts.Count > 0) warning.Text += " · Missing font: " + string.Join(", ", missingFonts.Select(f => f.Family.Length > 0 ? f.Family : f.Sample));
+            warning.Foreground = missing || overflow || missingFonts.Count > 0 ? Brush("#AB3B13") : Brush("#406543");
         }
         translation.TextChanged += (_, _) =>
         {
@@ -214,13 +217,17 @@ public partial class MainView
             var next = translation.Text ?? "";
             if (editor.Scene.Text(lang, obj.Key) == next) return;
             if (!captured) { editor.BeforeChange(); captured = true; }
-            entries[obj.Key] = next; UpdateWarning(); RefreshCanvas(); RefreshTitle();
+            entries[obj.Key] = next; UpdateWarning(); RefreshCanvas(); RefreshTitle(); QueueFontCheck();
         };
+        refreshFontWarning = UpdateWarning;
         UpdateWarning(); inspector.Children.Add(warning); inspector.Children.Add(translation);
         var edit = Button("Layout & style…", () => EditTextProperties(obj)); edit.Name = "EditTextProperties";
         var textActions = new WrapPanel { Orientation = Orientation.Horizontal };
         edit.Margin = new Thickness(0, 0, 4, 4); textActions.Children.Add(edit);
         textActions.Children.Add(Button("Languages…", ManageLanguages)); inspector.Children.Add(textActions);
+        var installFonts = Button("Install missing fonts…", () => _ = CheckFontsAsync(CancellationToken.None, explicitlyRequested: true));
+        installFonts.Name = "InstallMissingFonts";
+        inspector.Children.Add(installFonts);
     }
 
     private void MoveLayer(int delta)

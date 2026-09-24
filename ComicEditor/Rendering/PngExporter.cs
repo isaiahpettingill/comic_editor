@@ -6,6 +6,7 @@ public static class PngExporter
 {
     public static void Write(Stream stream, Cutscene scene, int frameIndex, string language)
     {
+        CutsceneFonts.RequireAvailable(scene, language);
         var frame = scene.Frames[frameIndex];
         var palette = scene.Palette.Select(c => Convert.ToUInt32(c[1..], 16)).ToArray();
         var rgb = Enumerable.Repeat(0xffffffu, scene.Width * scene.Height).ToArray();

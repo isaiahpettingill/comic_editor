@@ -75,7 +75,7 @@ jobs:
       - name: Test native updater helper
         shell: bash
         run: python tools/test_update_helper.py artifacts/${{ matrix.rid }}
-      - name: Test native compiler fonts and artwork
+      - name: Test native compiler cached fonts and artwork
         shell: pwsh
         run: |
           $executable = if ($IsWindows) { 'comic-compile.exe' } else { 'comic-compile' }

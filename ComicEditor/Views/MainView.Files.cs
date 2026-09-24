@@ -132,7 +132,7 @@ public partial class MainView
     private async Task ExportPngFiles(bool all, string language)
     {
         var storage = TopLevel.GetTopLevel(this)?.StorageProvider; if (storage is null) return;
-        try { await CutsceneFonts.EnsureAsync(editor.Scene); }
+        try { await CutsceneFonts.EnsureAsync(editor.Scene); CutsceneFonts.RequireAvailable(editor.Scene, language); }
         catch (Exception ex) { await ShowError(ex.Message); return; }
         if (all)
         {

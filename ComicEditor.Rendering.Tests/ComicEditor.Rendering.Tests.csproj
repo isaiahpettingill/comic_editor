@@ -18,4 +18,5 @@
   </ItemGroup>
 
   <ItemGroup><ProjectReference Include="..\ComicEditor\ComicEditor.csproj" /><PackageReference Include="Avalonia.Headless" /><PackageReference Include="Avalonia.Skia" /></ItemGroup>
+  <ItemGroup><None Update="Assets/**" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

@@ -29,6 +29,7 @@ public partial class MainView
             RefreshCanvas(); RefreshTools(); e.Handled = true; return;
         }
         if (!properties.IsLeftButtonPressed) return;
+        if (e.Pointer.Type == PointerType.Pen) e.PreventGestureRecognition();
         canvas.Focus(); var point = canvas.CanvasPoint(e);
         startX = lastX = (int)point.X; startY = lastY = (int)point.Y;
         if (editor.Tool is Tool.Select or Tool.Lasso)

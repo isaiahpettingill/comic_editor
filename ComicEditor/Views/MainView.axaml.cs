@@ -345,7 +345,7 @@ public partial class MainView : UserControl
         canvasPair.Children.Add(previous);
         AddAt(canvasPair, new Border { Child = canvas, BorderBrush = Brush(UiTheme.Border), BorderThickness = new Thickness(1) }, 1);
         canvasFit = new Viewbox { Child = canvasPair, Stretch = Stretch.Uniform };
-        canvasScroll = new ScrollViewer
+        canvasScroll = new DrawingViewport
         {
             Name = "CanvasViewport",
             Content = canvasFit,

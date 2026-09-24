@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Input.GestureRecognizers;
 using Avalonia.VisualTree;
 using ComicEditor.Editing;
 using ComicEditor.Format;
@@ -12,6 +14,38 @@ namespace ComicEditor.Rendering.Tests;
 
 public partial class CanvasTests
 {
+    [Fact]
+    public async Task PenDrawsOnZoomedCanvasWithoutScrolling()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(); var window = new Window { Content = view, Width = 1100, Height = 800 };
+            window.Show(); _ = Capture(window);
+            var editor = State(view); editor.Preferences.Zoom = 4; Invoke(view, "RefreshCanvas"); _ = Capture(window);
+            var viewport = Named<ScrollViewer>(window, "CanvasViewport");
+            viewport.Offset = new Vector(200, 100); _ = Capture(window);
+            var presenter = viewport.GetVisualDescendants().OfType<ScrollContentPresenter>().Single();
+            Assert.DoesNotContain(presenter.GestureRecognizers, r => r is ScrollGestureRecognizer);
+            var canvas = window.GetVisualDescendants().OfType<CutsceneCanvas>().Single(c => c.Focusable);
+            var start = canvas.TranslatePoint(new Point(80, 70), window)!.Value;
+            var end = canvas.TranslatePoint(new Point(95, 75), window)!.Value;
+            var offset = viewport.Offset; var before = CutsceneFile.Write(editor.Scene);
+            using var pen = new Pointer(Pointer.GetNextFreeId(), PointerType.Pen, true);
+            var down = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed, 0, .6f, 0, 0);
+            var move = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other, 0, .6f, 0, 0);
+            var up = new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased);
+            canvas.RaiseEvent(new PointerPressedEventArgs(canvas, pen, window, start, 1, down, KeyModifiers.None));
+            canvas.RaiseEvent(new PointerEventArgs(InputElement.PointerMovedEvent, canvas, pen, window, end, 2, move, KeyModifiers.None));
+            canvas.RaiseEvent(new PointerReleasedEventArgs(canvas, pen, window, end, 3, up, KeyModifiers.None, MouseButton.Left));
+            Assert.Equal(offset, viewport.Offset);
+            Assert.NotEqual(before, CutsceneFile.Write(editor.Scene));
+            Assert.Equal(0, editor.Layer.Pixel(80, 70));
+            Assert.Equal(0, editor.Layer.Pixel(95, 75));
+            window.Close();
+        }, CancellationToken.None);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

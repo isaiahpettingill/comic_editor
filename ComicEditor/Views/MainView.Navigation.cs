@@ -42,7 +42,8 @@ public partial class MainView
         if (canvasScroll is null || canvas is null) return;
         // Keep scrollbar controls usable on desktop.
         if (e.Source is Visual source && (source is ScrollBar || source.GetVisualAncestors().Any(v => v is ScrollBar))) return;
-        if (e.Pointer.Type == PointerType.Mouse && e.GetCurrentPoint(canvasScroll).Properties.IsMiddleButtonPressed)
+        var buttons = e.GetCurrentPoint(canvasScroll).Properties;
+        if (e.Pointer.Type == PointerType.Mouse && buttons.IsMiddleButtonPressed && !buttons.IsLeftButtonPressed)
         {
             if (dragging || canvasTouches.Count != 0) return;
             panPointer = e.Pointer; panPoint = e.GetPosition(canvasScroll);

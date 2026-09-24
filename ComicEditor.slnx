@@ -1,0 +1,12 @@
+<Solution>
+  <Project Path="ComicEditor.Cli/ComicEditor.Cli.csproj" />
+  <Project Path="ComicEditor.Android/ComicEditor.Android.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="ComicEditor.Browser/ComicEditor.Browser.csproj" />
+  <Project Path="ComicEditor.Desktop/ComicEditor.Desktop.csproj" />
+  <Project Path="ComicEditor.Format.Tests/ComicEditor.Format.Tests.csproj" />
+  <Project Path="ComicEditor.Format/ComicEditor.Format.csproj" />
+  <Project Path="ComicEditor.Rendering.Tests/ComicEditor.Rendering.Tests.csproj" />
+  <Project Path="ComicEditor/ComicEditor.csproj" />
+</Solution>

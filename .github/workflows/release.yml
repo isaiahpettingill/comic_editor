@@ -1,0 +1,181 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet test ComicEditor.Format.Tests/ComicEditor.Format.Tests.csproj --configuration Release
+      - run: dotnet test ComicEditor.Rendering.Tests/ComicEditor.Rendering.Tests.csproj --configuration Release
+      - name: Test Linux installer
+        run: |
+          bash -n tools/install-linux.sh
+          python3 -m unittest discover -s tools -p 'test_linux_installer.py' -v
+
+  desktop:
+    needs: tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-24.04
+            rid: linux-x64
+          - os: macos-15-intel
+            rid: osx-x64
+          - os: macos-15
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Install Linux AOT dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+      - name: Publish native desktop app
+        run: dotnet publish ComicEditor.Desktop/ComicEditor.Desktop.csproj -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o artifacts/${{ matrix.rid }}
+      - name: Publish CLI compiler
+        run: dotnet publish ComicEditor.Cli/ComicEditor.Cli.csproj -c Release -r ${{ matrix.rid }} -o artifacts/${{ matrix.rid }}/compiler
+      - name: Add licenses and schema
+        shell: bash
+        run: |
+          cp LICENSE artifacts/${{ matrix.rid }}/
+          cp -r licenses docs artifacts/${{ matrix.rid }}/
+          cp licenses/Comic-Shanns-MIT.txt artifacts/${{ matrix.rid }}/
+          cp licenses/IconPacks-MIT.txt artifacts/${{ matrix.rid }}/
+          cp licenses/MaterialDesignIcons-LICENSE.txt artifacts/${{ matrix.rid }}/
+          cp licenses/Apache-2.0.txt artifacts/${{ matrix.rid }}/
+          cp ComicEditor.Format/display.proto artifacts/${{ matrix.rid }}/
+          cp ComicEditor.Format/cutscene.proto artifacts/${{ matrix.rid }}/
+          cp ComicEditor/Assets/comic-editor.svg artifacts/${{ matrix.rid }}/
+          cp ComicEditor/Assets/comic-editor.png artifacts/${{ matrix.rid }}/
+          cp README.md artifacts/${{ matrix.rid }}/
+      - name: Zip Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path 'artifacts/${{ matrix.rid }}/*' -DestinationPath 'ComicEditor-${{ matrix.rid }}.zip'
+      - name: Archive Unix build
+        if: runner.os != 'Windows'
+        shell: bash
+        run: tar -C artifacts/${{ matrix.rid }} -czf ComicEditor-${{ matrix.rid }}.tar.gz .
+      - name: Package Linux installer
+        if: runner.os == 'Linux'
+        run: python3 tools/package-linux-installer.py
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: linux-installer
+          path: |
+            install-comic-editor.sh
+            ComicEditor-linux-x64.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.rid }}
+          path: ComicEditor-${{ matrix.rid }}.*
+
+  browser:
+    needs: tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Install WebAssembly tools
+        run: dotnet workload install wasm-tools
+      - name: Publish WebAssembly AOT
+        run: dotnet publish ComicEditor.Browser/ComicEditor.Browser.csproj -c Release -o artifacts/browser
+      - name: Package static website
+        run: |
+          cp LICENSE README.md ComicEditor.Format/cutscene.proto ComicEditor.Format/display.proto artifacts/browser/wwwroot/
+          cp -r licenses docs artifacts/browser/wwwroot/
+          cd artifacts/browser/wwwroot
+          zip -r ../../../ComicEditor-browser-wasm.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: browser-wasm
+          path: ComicEditor-browser-wasm.zip
+
+  android:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: tests
+    runs-on: ubuntu-24.04
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android workload
+        run: dotnet workload install android
+      - name: Install Android SDK components
+        run: >-
+          dotnet build ComicEditor.Android/ComicEditor.Android.csproj -t:InstallAndroidDependencies
+          -r android-arm64 -p:PublishAot=true -p:EnablePreviewFeatures=true
+          -p:MicrosoftNETCoreAppRefPackageVersion=11.0.0-rc.1.26425.128
+          -p:AndroidSdkDirectory=$ANDROID_HOME -p:JavaSdkDirectory=$JAVA_HOME
+          -p:AcceptAndroidSdkLicenses=true
+      - name: Require release signing secrets
+        shell: bash
+        run: |
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then echo "Missing $name GitHub secret" >&2; exit 1; fi
+          done
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+      - name: Publish signed Android AOT APK
+        shell: bash
+        run: |
+          dotnet publish ComicEditor.Android/ComicEditor.Android.csproj -c Release -r android-arm64 \
+            -p:PublishAot=true -p:EnablePreviewFeatures=true -p:AndroidPackageFormat=apk \
+            -p:MicrosoftNETCoreAppRefPackageVersion=11.0.0-rc.1.26425.128 \
+            -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" \
+            -p:AndroidKeyStore=true -p:AndroidSigningKeyStore="$RUNNER_TEMP/release.keystore" \
+            -p:AndroidSigningStorePass="$ANDROID_KEYSTORE_PASSWORD" \
+            -p:AndroidSigningKeyAlias="$ANDROID_KEY_ALIAS" \
+            -p:AndroidSigningKeyPass="$ANDROID_KEY_PASSWORD"
+          find ComicEditor.Android/bin/Release -name '*-Signed.apk' -exec cp '{}' ComicEditor-android-arm64.apk \;
+          test -s ComicEditor-android-arm64.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-arm64
+          path: ComicEditor-android-arm64.apk
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [desktop, android, browser]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

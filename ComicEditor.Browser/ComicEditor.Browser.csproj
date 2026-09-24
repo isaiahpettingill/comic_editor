@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net11.0-browser</TargetFramework>
+    <RunAOTCompilation Condition="'$(Configuration)' == 'Release'">true</RunAOTCompilation>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Browser" />
+    <!-- The .NET 11 Emscripten ABI requires these newer native/managed pairs. -->
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.WebAssembly" />
+    <PackageReference Include="HarfBuzzSharp" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.WebAssembly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ComicEditor\ComicEditor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <StaticWebAssetFingerprintPattern Include="JS" Pattern="*.js" Expression="#[.{fingerprint}]!" />
+  </ItemGroup>
+  <!-- Avalonia 12.1's targets also inject net9 archives. Select exactly one .NET 11
+       archive pair after all NuGet targets have been evaluated. -->
+  <Target Name="SelectNet11GraphicsArchives" BeforeTargets="PrepareForBuild">
+    <ItemGroup>
+      <NativeFileReference Remove="@(NativeFileReference)"
+        Condition="$([System.String]::Copy('%(NativeFileReference.Identity)').Contains('libSkiaSharp')) or $([System.String]::Copy('%(NativeFileReference.Identity)').Contains('libHarfBuzzSharp'))" />
+      <NativeFileReference Include="$(SkiaSharpStaticLibraryPath)/5.0.6/st,simd/*.a" />
+      <NativeFileReference Include="$(HarfBuzzSharpStaticLibraryPath)/5.0.6/st,simd/*.a" />
+    </ItemGroup>
+    <Error Condition="!Exists('$(SkiaSharpStaticLibraryPath)/5.0.6/st,simd/libSkiaSharp.a')" Text="The .NET 11 Skia archive was not found." />
+  </Target>
+</Project>

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <title>ComicEditor</title>
+  <desc>A paintbrush, pencil, and red pen standing in a translucent drawing cup.</desc>
+
+  <!-- The one-pixel lower silhouettes follow the Papirus 64 px shadow convention. -->
+  <g opacity=".2" fill="#000000" transform="translate(0 1)">
+    <path d="M12 7 Q12 5 15 5 H20 Q22 5 22 8 L23 17 L16 19 Z"/>
+    <path d="M16 18 L23 16 L33 53 L26 55 Z"/>
+    <path d="M29 17 L33 7 L37 17 L37 54 L29 54 Z"/>
+    <path d="M44 11 L49 5 L52 12 L49 20 L42 20 Z"/>
+    <path d="M42 19 L49 21 L42 55 L35 53 Z"/>
+    <path d="M9 35 Q10 32 16 32 H48 Q54 32 55 35 L51 55 Q50 60 45 61 Q32 64 19 61 Q14 60 13 55 Z"/>
+  </g>
+
+  <!-- Back edge of the open cup. -->
+  <ellipse cx="32" cy="35" rx="23" ry="5" fill="#9dcbd0" fill-opacity=".45" stroke="#568d94" stroke-width="1"/>
+  <path d="M10 35 C15 29 49 29 54 35" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="1"/>
+
+  <!-- Left paintbrush: warm bristles, blue ferrule and handle. -->
+  <path d="M12 7 Q12 5 15 5 H20 Q22 5 22 8 L23 17 L16 19 Z" fill="#be7241"/>
+  <path d="M13 7 Q15 6 19 6 L20 16 L16 17 Z" fill="#eda45e"/>
+  <path d="M16 7 L17 7 L19 16 L18 17 Z" fill="#ffffff" fill-opacity=".24"/>
+  <path d="M16 18 L23 16 L26 26 L19 28 Z" fill="#8e8e8e"/>
+  <path d="M17 19 L20 18 L23 26 L20 27 Z" fill="#c5c5c5"/>
+  <path d="M19 28 L26 26 L33 53 Q29 57 26 55 Z" fill="#4f77a5"/>
+  <path d="M20 28 L22 27 L29 54 L27 54 Z" fill="#ffffff" fill-opacity=".2"/>
+
+  <!-- Centre yellow pencil, with a graphite tip and a pale wooden point. -->
+  <path d="M29 17 L33 7 L37 17 L37 54 Q33 57 29 54 Z" fill="#d69a2d"/>
+  <path d="M30 17 L33 8 L36 17 Z" fill="#e7bd79"/>
+  <path d="M32 10 L33 7 L34 10 Z" fill="#4f4f4f"/>
+  <path d="M30 17 H35 V54 H30 Z" fill="#f0bf43"/>
+  <path d="M30 18 H31 V53 H30 Z" fill="#ffffff" fill-opacity=".27"/>
+  <path d="M35 18 H37 V54 H35 Z" fill="#c88d29" fill-opacity=".65"/>
+
+  <!-- Right fountain pen, reduced to the recognisable nib and red barrel. -->
+  <path d="M44 11 L49 5 L52 12 L49 20 L42 20 Z" fill="#737a8d"/>
+  <path d="M45 11 L49 7 L50 12 L47 18 L43 18 Z" fill="#aeb4c3"/>
+  <path d="M49 6 L50 5 L50 8 Z" fill="#4f4f4f"/>
+  <circle cx="47" cy="14" r="1" fill="#4f4f4f"/>
+  <path d="M42 19 L49 21 L42 55 Q39 57 35 53 Z" fill="#b94842"/>
+  <path d="M42 20 L46 21 L39 54 L36 53 Z" fill="#dc6250"/>
+  <path d="M42 20 L44 20 L37 52 L36 52 Z" fill="#ffffff" fill-opacity=".2"/>
+  <path d="M41 21 L49 23 L48 26 L40 24 Z" fill="#e4e4e4"/>
+
+  <!-- Flat glass wall overlays the tool handles, with darker side panels. -->
+  <path d="M9 35 Q10 33 12 33 L16 54 Q17 58 21 59 Q32 62 43 59 Q47 58 48 54 L52 33 Q54 33 55 35 L51 55 Q50 60 45 61 Q32 64 19 61 Q14 60 13 55 Z"
+        fill="#72aeb5" fill-opacity=".7"/>
+  <path d="M9 35 L14 54 Q15 59 19 60 L17 60 Q14 59 13 55 Z" fill="#4a888f" fill-opacity=".8"/>
+  <path d="M55 35 L51 55 Q50 60 45 61 L47 58 L52 34 Z" fill="#4a888f" fill-opacity=".7"/>
+  <path d="M11 37 L15 54 Q16 57 18 58" fill="none" stroke="#ffffff" stroke-opacity=".28" stroke-width="1"/>
+  <path d="M10 35 C13 43 51 43 54 35" fill="none" stroke="#e4e4e4" stroke-width="1.5"/>
+  <path d="M19 60 Q32 64 45 60" fill="none" stroke="#ffffff" stroke-opacity=".3" stroke-width="1"/>
+</svg>

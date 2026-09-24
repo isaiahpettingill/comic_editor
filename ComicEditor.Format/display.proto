@@ -1,0 +1,29 @@
+syntax = "proto3";
+package comic_editor.display.v1;
+option csharp_namespace = "ComicEditor.Display";
+
+// Read-only game asset. No fonts, strings to shape, layer metadata or editor state.
+message DisplayCutscene {
+  uint32 version = 1; // 1
+  uint32 canvas_width = 2;
+  uint32 canvas_height = 3;
+  repeated uint32 palette_rgb = 4; // 128 entries, 0xRRGGBB.
+  repeated string languages = 5; // Language index used by each frame below.
+  repeated DisplayFrame frames = 6;
+  uint32 fallback_language_index = 7;
+}
+message DisplayFrame {
+  bytes indexed_artwork = 1; // Row-major, width*height bytes; 0..127, 255 transparent.
+  repeated LocalizedFrameText text = 2; // Same order as DisplayCutscene.languages.
+}
+message LocalizedFrameText {
+  repeated TextRaster runs = 1; // Composite in order after artwork.
+}
+message TextRaster {
+  uint32 x = 1;
+  uint32 y = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  uint32 palette_index = 5;
+  bytes alpha = 6; // Row-major 8-bit coverage, width*height bytes. Straight alpha.
+}

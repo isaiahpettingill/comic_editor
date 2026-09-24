@@ -1,0 +1,54 @@
+syntax = "proto3";
+package comic_editor.cutscene.v1;
+option csharp_namespace = "ComicEditor.Wire";
+
+// Artwork pixels are row-major palette indexes 0..127. 255 means transparent.
+// Version 1 files had 16 palette entries; version 2 has 128 entries.
+// A layer has exactly canvas_width * canvas_height bytes.
+message CutsceneDocument {
+  uint32 version = 1;
+  uint32 canvas_width = 2;
+  uint32 canvas_height = 3;
+  repeated uint32 palette_rgb = 4; // 128 entries in version 2, each 0xRRGGBB.
+  repeated Frame frames = 5;
+  repeated Language languages = 6;
+  string fallback_language = 7; // Missing/blank translations use this language, then blank.
+}
+
+message Frame {
+  string id = 1;
+  repeated ArtworkLayer layers = 2; // Ordered bottom to top.
+  repeated TextObject text_objects = 3; // Drawn above artwork.
+  bool text_hidden = 4; // False preserves text visibility in older files.
+}
+
+message ArtworkLayer {
+  string id = 1;
+  string name = 2;
+  bool visible = 3;
+  bytes pixels = 4;
+}
+
+message TextObject {
+  string id = 1;
+  string key = 2;
+  float x = 3;
+  float y = 4;
+  float width = 5;
+  float height = 6;
+  string font_id = 7; // comic-shanns (default), google:<Google Fonts family>, system:<installed family>.
+  float font_size = 8;
+  uint32 palette_index = 9;
+  bool bold = 10;
+  bool italic = 11;
+}
+
+message Language {
+  string code = 1; // For example en, es, pt, pt-BR.
+  repeated Translation entries = 2;
+}
+
+message Translation {
+  string key = 1;
+  string value = 2;
+}

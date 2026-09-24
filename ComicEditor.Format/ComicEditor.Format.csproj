@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup><PackageReference Include="Google.Protobuf" /><PackageReference Include="Grpc.Tools" PrivateAssets="All" /><Protobuf Include="cutscene.proto" GrpcServices="None" /><Protobuf Include="display.proto" GrpcServices="None" /></ItemGroup>
+</Project>

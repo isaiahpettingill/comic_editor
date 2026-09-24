@@ -94,6 +94,8 @@ The editor also exposes **File → Build game cutscene…**. The runtime format 
 
 ## Releases
 
-The [release workflow](.github/workflows/release.yml) runs format and rendering tests and publishes Native AOT builds for Windows x64, Linux x64, and macOS x64/arm64. A `v*` tag also produces an Android arm64 APK and attaches the builds to a GitHub Release. Android Native AOT on .NET 11 is experimental; the workflow builds it explicitly with `PublishAot=true`.
+The [release workflow](.github/workflows/release.yml) runs format and rendering tests and builds Native AOT artifacts for Windows x64, Linux x64, macOS x64/arm64, and WebAssembly. Pushes to `main`, version tags, and manual runs also build the signed Android arm64 APK. Pull requests skip Android because signing secrets are unavailable to external contributors. Android Native AOT on .NET 11 is experimental; the workflow builds it explicitly with `PublishAot=true`.
+
+To publish a release, push a version tag such as `git tag v0.1.0` followed by `git push origin v0.1.0`. Once every platform build succeeds, the workflow creates the GitHub Release and attaches all builds, the Linux installer, and its checksum. Ordinary pushes to `main` produce Actions artifacts; the GitHub Release publishing step runs only for version tags.
 
 Android releases require four repository secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Keep the same signing key for future releases so installed copies can update. The APK build requires these secrets and will fail clearly if they are absent.

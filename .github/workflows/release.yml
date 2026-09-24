@@ -113,7 +113,7 @@ jobs:
           path: ComicEditor-browser-wasm.zip
 
   android:
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'pull_request'
     needs: tests
     runs-on: ubuntu-24.04
     env:
@@ -165,6 +165,7 @@ jobs:
           path: ComicEditor-android-arm64.apk
 
   release:
+    name: Publish GitHub release (version tags)
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [desktop, android, browser]
     runs-on: ubuntu-24.04

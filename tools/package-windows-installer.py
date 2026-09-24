@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,7 @@ def package(payload: Path, output: Path) -> None:
         raise RuntimeError("NSIS makensis is required to build the Windows installer")
     root = Path(__file__).resolve().parent.parent
     shutil.copy2(root / "ComicEditor/Assets/comic-editor.ico", payload)
+    runpy.run_path(str(root / "tools/audit-release.py"))["audit"](payload)
     files = sorted(p for p in payload.rglob("*") if p.is_file())
     if any(p.is_symlink() for p in payload.rglob("*")):
         raise ValueError("Release payload cannot contain symbolic links")

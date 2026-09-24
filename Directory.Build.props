@@ -2,6 +2,19 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.1.7</Version>
+    <Version>0.1.8</Version>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Optimize>true</Optimize>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+    <StripSymbols>true</StripSymbols>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and ('$(MSBuildProjectName)' == 'ComicEditor.Desktop' or '$(MSBuildProjectName)' == 'ComicEditor.Cli')">
+    <PublishAot>true</PublishAot>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
   </PropertyGroup>
 </Project>

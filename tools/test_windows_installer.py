@@ -62,12 +62,25 @@ def check(installer: Path, payload: Path, registered: bool) -> None:
             assert shortcut.is_file()
         sentinel = target / "keep-my-project.cutscene"
         sentinel.write_text("user project")
+        user_symbols = target / "my-game.pdb"
+        user_symbols.write_text("user debug file")
+        old_symbols = [
+            target / "ComicEditor.Desktop.pdb",
+            target / "libSkiaSharp.pdb",
+            target / "compiler/comic-compile.pdb",
+            target / "compiler/libHarfBuzzSharp.pdb",
+        ]
+        for symbols in old_symbols:
+            symbols.parent.mkdir(exist_ok=True)
+            symbols.write_text("obsolete package symbols")
         (target / "update.json").write_text(
             json.dumps({"version": "0.0.0", "runtime": "win-x64"})
         )
         run(installer, f"/S {mode}/D={target}")
         assert json.loads((target / "update.json").read_text()) == expected
         assert sentinel.read_text() == "user project"
+        assert all(not symbols.exists() for symbols in old_symbols)
+        assert user_symbols.read_text() == "user debug file"
         # Registration-only must not recopy files or replace user changes.
         if registered:
             (target / "README.md").write_text("registration sentinel")

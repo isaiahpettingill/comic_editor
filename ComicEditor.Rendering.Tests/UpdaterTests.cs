@@ -34,10 +34,15 @@ public class UpdaterTests
         File.WriteAllText(Path.Combine(target, "update.json"), Manifest("win-x64", "0.0.0"));
         File.WriteAllText(Path.Combine(target, "ComicEditor.Desktop.exe"), "previous executable");
         File.WriteAllText(Path.Combine(target, "my-project.cutscene"), "user file");
+        File.WriteAllText(Path.Combine(target, "ComicEditor.Desktop.pdb"), "old debug symbols");
+        File.WriteAllText(Path.Combine(target, "my-game.pdb"), "user debug symbols");
         var work = Path.Combine(temp.Root, "work"); var plan = UpdateInstaller.Prepare(package, release, target, work);
         WindowsSetup.Stage(plan); UpdateInstaller.Apply(plan);
         Assert.Equal(next, ReleaseClient.ReadInstallation(target));
         Assert.Equal("user file", File.ReadAllText(Path.Combine(target, "my-project.cutscene")));
+        Assert.False(File.Exists(Path.Combine(target, "ComicEditor.Desktop.pdb")));
+        Assert.Equal("user debug symbols", File.ReadAllText(Path.Combine(target, "my-game.pdb")));
+        Assert.True(File.Exists(Path.Combine(plan.Backup, "ComicEditor.Desktop.pdb")));
         Assert.Equal("previous executable", File.ReadAllText(Path.Combine(plan.Backup, plan.Executable)));
         UpdateInstaller.Complete(Path.Combine(work, "plan.json"), target);
         Assert.False(Directory.Exists(plan.Backup));

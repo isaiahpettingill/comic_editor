@@ -1,0 +1,11 @@
+<Project>
+  <!-- Native dependencies can contribute PDBs as content, independently of
+       CopyOutputSymbolsToPublishDirectory. Exclude those from releases too. -->
+  <Target Name="ExcludeReleaseSymbols" AfterTargets="ComputeFilesToPublish"
+          Condition="'$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+        Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb' or '%(ResolvedFileToPublish.Extension)' == '.dbg' or $([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').Contains('.dSYM'))" />
+    </ItemGroup>
+  </Target>
+</Project>

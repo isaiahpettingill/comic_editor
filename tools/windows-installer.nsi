@@ -106,6 +106,19 @@ Section "ComicEditor"
       SetErrorLevel 2
       Abort
     ${EndIf}
+    ; Releases through 0.1.7 accidentally shipped these debug symbols. Remove
+    ; only those owned paths, including during an old updater's /STAGE install.
+    ; No wildcard deletion: projects and unrelated developer files must survive.
+    Delete "$INSTDIR\ComicEditor.Desktop.pdb"
+    Delete "$INSTDIR\ComicEditor.pdb"
+    Delete "$INSTDIR\ComicEditor.Format.pdb"
+    Delete "$INSTDIR\libSkiaSharp.pdb"
+    Delete "$INSTDIR\libHarfBuzzSharp.pdb"
+    Delete "$INSTDIR\compiler\comic-compile.pdb"
+    Delete "$INSTDIR\compiler\ComicEditor.pdb"
+    Delete "$INSTDIR\compiler\ComicEditor.Format.pdb"
+    Delete "$INSTDIR\compiler\libSkiaSharp.pdb"
+    Delete "$INSTDIR\compiler\libHarfBuzzSharp.pdb"
   ${EndIf}
   ${If} $StageOnly != 1
     IfFileExists "$INSTDIR\ComicEditor.Desktop.exe" +3

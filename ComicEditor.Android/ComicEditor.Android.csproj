@@ -5,8 +5,8 @@
     <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable>
     <ApplicationId>org.comiceditor.storyboard</ApplicationId>
-    <ApplicationVersion>8</ApplicationVersion>
-    <ApplicationDisplayVersion>0.1.7</ApplicationDisplayVersion>
+    <ApplicationVersion>9</ApplicationVersion>
+    <ApplicationDisplayVersion>0.1.8</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
   </PropertyGroup>

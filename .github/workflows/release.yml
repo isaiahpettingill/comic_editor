@@ -69,9 +69,18 @@ jobs:
       - name: Stamp updater metadata
         shell: bash
         run: python tools/write-update-manifest.py artifacts/${{ matrix.rid }} ${{ matrix.rid }} '${{ github.ref_name }}'
+      - name: Audit release size and reject debug symbols
+        shell: bash
+        run: python tools/audit-release.py artifacts/${{ matrix.rid }}
       - name: Test native updater helper
         shell: bash
         run: python tools/test_update_helper.py artifacts/${{ matrix.rid }}
+      - name: Test native compiler fonts and artwork
+        shell: pwsh
+        run: |
+          $executable = if ($IsWindows) { 'comic-compile.exe' } else { 'comic-compile' }
+          $env:COMIC_TEST_COMPILER = (Resolve-Path "artifacts/${{ matrix.rid }}/compiler/$executable").Path
+          dotnet test ComicEditor.Rendering.Tests -c Release --filter NativeCompilerTests
       - name: Zip Windows build
         if: runner.os == 'Windows'
         shell: pwsh

@@ -24,6 +24,10 @@ public partial class MainView : UserControl
     private Border? modal;
     private Control? returnFocus;
     private bool compact;
+    private readonly bool touchLayout;
+    private Button? undoButton, redoButton;
+    private Grid? compactTopBar;
+    private bool compactSingleRow;
     private double paletteHeight = 150;
     private bool paletteResized;
     private readonly Pane[] paneOrder = [Pane.Storyboard, Pane.Canvas, Pane.Inspector];
@@ -34,16 +38,27 @@ public partial class MainView : UserControl
     private ScrollViewer? canvasScroll;
     private Viewbox? canvasFit;
 
-    public MainView()
+    public MainView() : this(OperatingSystem.IsAndroid() || OperatingSystem.IsIOS()) { }
+
+    public MainView(bool touchLayout)
     {
+        this.touchLayout = touchLayout;
         InitializeComponent();
         Resources["SliderPreContentMargin"] = new GridLength(6);
         Resources["SliderPostContentMargin"] = new GridLength(6);
-        Build(false);
-        SizeChanged += (_, _) => { var small = Bounds.Width < 900; if (small != compact && modal is null) Build(small); };
+        Build(touchLayout);
+        SizeChanged += (_, _) =>
+        {
+            var small = UseCompactLayout;
+            if (modal is null && (small != compact || small && compactSingleRow != CompactLandscape)) Build(small);
+            if (modal?.Child is Border card) card.MaxHeight = Math.Max(120, Bounds.Height - 24);
+        };
         AttachedToVisualTree += (_, _) => RefreshTitle();
         KeyDown += OnKeyDown;
     }
+
+    private bool UseCompactLayout => touchLayout || Bounds.Width < 900 || Bounds.Height is > 0 and < 540;
+    private bool CompactLandscape => Bounds.Width >= 640 && Bounds.Height is > 0 and < 540;
 
     private static TextBlock Label(string text, bool bold = false) => new()
     {
@@ -53,12 +68,12 @@ public partial class MainView : UserControl
         TextWrapping = TextWrapping.Wrap
     };
 
-    private static Button Button(string text, Action action)
+    private Button Button(string text, Action action)
     {
         var button = new Button
         {
             Content = text,
-            Height = 32,
+            Height = compact ? 44 : 32,
             Padding = new Thickness(10, 4),
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalContentAlignment = HorizontalAlignment.Center
@@ -67,11 +82,11 @@ public partial class MainView : UserControl
         return button;
     }
 
-    private static Button Icon(PackIconMaterialKind kind, string tip, Action action)
+    private Button Icon(PackIconMaterialKind kind, string tip, Action action)
     {
         var button = Button("", action);
-        button.Content = new PackIconMaterial { Kind = kind, Width = 18, Height = 18 };
-        button.Width = 32; button.Padding = new Thickness(5);
+        button.Content = new PackIconMaterial { Kind = kind, Width = compact ? 22 : 18, Height = compact ? 22 : 18 };
+        button.Width = compact ? 44 : 32; button.Padding = new Thickness(5);
         ToolTip.SetTip(button, tip);
         Avalonia.Automation.AutomationProperties.SetName(button, tip);
         return button;
@@ -107,10 +122,10 @@ public partial class MainView : UserControl
             Name = pane + "Header",
             Background = Brush("#DBDEE3"),
             Padding = new Thickness(8, 5),
-            Child = Row(new PackIconMaterial { Kind = PackIconMaterialKind.Drag, Width = 16, Height = 16 }, Label(caption, true)),
-            Cursor = new Cursor(StandardCursorType.SizeAll)
+            Child = compact ? Label(caption, true) : Row(new PackIconMaterial { Kind = PackIconMaterialKind.Drag, Width = 16, Height = 16 }, Label(caption, true)),
+            Cursor = new Cursor(compact ? StandardCursorType.Arrow : StandardCursorType.SizeAll)
         };
-        ToolTip.SetTip(header, "Drag onto another pane to swap positions");
+        if (!compact) ToolTip.SetTip(header, "Drag onto another pane to swap positions");
         header.PointerPressed += (_, e) =>
         {
             if (compact || desktopWorkspace is null) return;
@@ -146,11 +161,13 @@ public partial class MainView : UserControl
         if (rootGrid is not null && !compact && rootGrid.RowDefinitions[4].ActualHeight > 60)
             paletteHeight = rootGrid.RowDefinitions[4].ActualHeight;
         compact = small;
+        compactSingleRow = small && CompactLandscape;
         shell = new Grid();
         var root = rootGrid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,5,Auto"), Background = Brush("#F0EFEA") };
-        root.RowDefinitions[2].MinHeight = small ? 240 : 300;
-        root.RowDefinitions[4].Height = new GridLength(small ? 120 : paletteHeight);
-        root.RowDefinitions[4].MinHeight = 90;
+        root.RowDefinitions[2].MinHeight = small ? 0 : 300;
+        root.RowDefinitions[3].Height = new GridLength(small ? 0 : 5);
+        root.RowDefinitions[4].Height = small ? GridLength.Auto : new GridLength(paletteHeight);
+        root.RowDefinitions[4].MinHeight = small ? 0 : 90;
         root.SizeChanged += (_, _) =>
         {
             if (!compact && !paletteResized)
@@ -159,7 +176,7 @@ public partial class MainView : UserControl
                 root.RowDefinitions[4].Height = new GridLength(48 + Math.Ceiling(128.0 / columns) * 28);
             }
         };
-        var menu = new Menu { Height = 30, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var menu = new Menu { Height = small ? 44 : 30, HorizontalAlignment = HorizontalAlignment.Stretch };
         menu.Items.Add(MenuGroup("_File", ("_New|Ctrl+N", New), ("_Open…|Ctrl+O", () => _ = Open()),
             ("_Save…|Ctrl+S", () => _ = Save()), ("Build game cutscene…", () => _ = ExportDisplay()), ("Export frame PNG…", () => _ = Export(false)), ("Export all PNGs…", () => _ = Export(true))));
         menu.Items.Add(MenuGroup("_Edit", ("_Undo|Ctrl+Z", Undo), ("_Redo|Ctrl+Y", Redo)));
@@ -187,25 +204,29 @@ public partial class MainView : UserControl
         if (small)
         {
             var groups = menu.Items.Cast<MenuItem>().ToArray(); menu.Items.Clear();
-            var drawer = new MenuItem { Header = "_Menu" };
+            var drawer = new MenuItem { Header = new PackIconMaterial { Kind = PackIconMaterialKind.Menu, Width = 22, Height = 22 }, Height = 44, Width = 44 };
+            Avalonia.Automation.AutomationProperties.SetName(drawer, "Menu");
             foreach (var group in groups) drawer.Items.Add(group);
             menu.Items.Add(drawer);
         }
-        root.Children.Add(menu);
+        if (!small) root.Children.Add(menu);
 
         frameCount = Label(""); frameCount.MinWidth = 52; frameCount.TextAlignment = TextAlignment.Center;
         previewLanguage = new ComboBox
         {
             Name = "PreviewLanguage",
-            Width = small ? 96 : 135,
-            Height = 32,
-            MinHeight = 32,
+            Width = small ? 80 : 135,
+            Height = small ? 44 : 32,
+            MinHeight = small ? 44 : 32,
             Padding = new Thickness(8, 3),
             VerticalAlignment = VerticalAlignment.Center
         };
         SyncLanguages();
         previewLanguage.SelectionChanged += (_, _) =>
         { if (previewLanguage.SelectedItem is string code && code != editor.Language) { editor.Language = code; RefreshAll(); } };
+        Avalonia.Automation.AutomationProperties.SetName(previewLanguage, "Preview language");
+        undoButton = Icon(PackIconMaterialKind.Undo, "Undo", Undo); undoButton.Name = "UndoButton";
+        redoButton = Icon(PackIconMaterialKind.Redo, "Redo", Redo); redoButton.Name = "RedoButton";
         var nav = Row(Icon(PackIconMaterialKind.ChevronLeft, "Previous frame (Alt+Left)", () => SelectFrame(editor.FrameIndex - 1)),
             frameCount, Icon(PackIconMaterialKind.ChevronRight, "Next frame (Alt+Right)", () => SelectFrame(editor.FrameIndex + 1)));
         var onion = new ToggleButton { Content = "Onion skin", IsChecked = editor.OnionSkin, Height = 32, VerticalAlignment = VerticalAlignment.Center };
@@ -227,12 +248,31 @@ public partial class MainView : UserControl
         var compare = new ToggleButton { Content = "Compare", IsChecked = editor.Compare, Height = 32, IsVisible = !small, VerticalAlignment = VerticalAlignment.Center };
         compare.Click += (_, _) => { editor.Compare = compare.IsChecked == true; RefreshCanvas(); };
         var controls = new WrapPanel { Margin = new Thickness(8, 4, 8, 6), Orientation = Orientation.Horizontal };
-        foreach (var group in new[] { nav, Row(Label("Language"), previewLanguage), Row(onion, opacity, percent, compare) })
+        foreach (var group in new[] { Row(undoButton, redoButton), nav, Row(Label("Language"), previewLanguage), Row(onion, opacity, percent, compare) })
         { group.Margin = new Thickness(0, 0, 12, 2); controls.Children.Add(group); }
-        AddAt(root, controls, row: 1);
+        if (small)
+        {
+            // Reparent the small controls into a single stable row; no wrapping on rotation.
+            controls.Children.Clear();
+            ((StackPanel)undoButton.Parent!).Children.Clear();
+            ((StackPanel)previewLanguage.Parent!).Children.Clear();
+            nav.Children.Remove(frameCount);
+            var top = compactTopBar = new Grid { Name = "CompactTopBar", ColumnDefinitions = new ColumnDefinitions(compactSingleRow ? "44,44,44,Auto,*,80" : "44,44,44,*,80"), Margin = new Thickness(4, 2) };
+            top.Children.Add(menu); AddAt(top, undoButton, 1); AddAt(top, redoButton, 2);
+            AddAt(top, frameCount, compactSingleRow ? 4 : 3); AddAt(top, previewLanguage, compactSingleRow ? 5 : 4); root.Children.Add(top);
+            // The original desktop comparison group is not used on compact screens.
+            ((StackPanel)onion.Parent!).Children.Clear();
+            var onionSettings = new StackPanel { Spacing = 8, Children = { onion, Row(opacity, percent) } };
+            compactOnionButton = Icon(PackIconMaterialKind.LayersOutline, "Onion skin settings", () => { });
+            compactOnionButton.Name = "CompactOnion";
+            compactOnionButton.Flyout = new Flyout { Content = onionSettings };
+            onion.Height = 44;
+            opacity.Height = 44; opacity.Width = 140;
+        }
+        else AddAt(root, controls, row: 1);
 
         var workspace = new Grid();
-        if (small) { workspace.RowDefinitions = new RowDefinitions("*,5,240"); desktopWorkspace = null; }
+        if (small) { desktopWorkspace = null; }
         else
         {
             desktopWorkspace = workspace;
@@ -250,15 +290,21 @@ public partial class MainView : UserControl
             Icon(PackIconMaterialKind.ArrowDown, "Move later", () => { editor.MoveFrame(1); RefreshAll(); }));
         storyActions.Spacing = 2; storyActions.Margin = new Thickness(6, 0, 6, 4);
         storyHeader.Children.Add(storyActions); DockPanel.SetDock(storyHeader, Dock.Top); story.Children.Add(storyHeader);
+        if (small)
+        {
+            var previousFrame = Button("Previous frame", () => SelectFrame(editor.FrameIndex - 1));
+            var nextFrame = Button("Next frame", () => SelectFrame(editor.FrameIndex + 1));
+            storyHeader.Children.Add(Row(previousFrame, nextFrame));
+        }
         story.Children.Add(new ScrollViewer { Content = storyboard, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
 
         var center = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
-        center.Children.Add(PaneHeader(Pane.Canvas, "Canvas"));
+        if (!small) center.Children.Add(PaneHeader(Pane.Canvas, "Canvas"));
         toolOptions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(8, 5) };
         AddAt(center, toolOptions, row: 1);
         var drawing = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
         toolRail = new StackPanel { Name = "ToolRail", Margin = new Thickness(4), Spacing = 3 };
-        AddAt(drawing, new ScrollViewer { Content = toolRail, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        if (!small) AddAt(drawing, new ScrollViewer { Content = toolRail, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         canvas = new CutsceneCanvas { Focusable = true };
         previous = new CutsceneCanvas { IsHitTestVisible = false };
         canvas.PointerPressed += CanvasPressed; canvas.PointerMoved += CanvasMoved; canvas.PointerReleased += CanvasReleased;
@@ -269,6 +315,7 @@ public partial class MainView : UserControl
         canvasFit = new Viewbox { Child = canvasPair, Stretch = Stretch.Uniform };
         canvasScroll = new ScrollViewer
         {
+            Name = "CanvasViewport",
             Content = canvasFit,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
@@ -281,13 +328,7 @@ public partial class MainView : UserControl
         var inspectorPane = new DockPanel(); var inspectorHeader = PaneHeader(Pane.Inspector, "Layers & text");
         DockPanel.SetDock(inspectorHeader, Dock.Top); inspectorPane.Children.Add(inspectorHeader);
         inspectorPane.Children.Add(new ScrollViewer { Content = inspector, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
-        if (small)
-        {
-            workspace.Children.Add(center);
-            AddAt(workspace, new GridSplitter { ResizeDirection = GridResizeDirection.Rows, Background = Brush("#B9BDC2") }, row: 1);
-            AddAt(workspace, new TabControl { Items = { new TabItem { Header = "Frames", Content = story }, new TabItem { Header = "Layers & text", Content = inspectorPane } } }, row: 2);
-        }
-        else
+        if (!small)
         {
             var panes = new Dictionary<Pane, Control> { [Pane.Storyboard] = story, [Pane.Canvas] = center, [Pane.Inspector] = inspectorPane };
             for (var i = 0; i < 3; i++) AddAt(workspace, panes[paneOrder[i]], i * 2);
@@ -296,9 +337,18 @@ public partial class MainView : UserControl
         AddAt(root, workspace, row: 2);
         var paletteDivider = new GridSplitter { ResizeDirection = GridResizeDirection.Rows, Background = Brush("#B9BDC2") };
         paletteDivider.AddHandler(PointerReleasedEvent, (_, _) => paletteResized = true, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
-        AddAt(root, paletteDivider, row: 3);
+        if (!small) AddAt(root, paletteDivider, row: 3);
         palette = new StackPanel { Margin = new Thickness(8, 5), Spacing = 5 };
-        AddAt(root, new ScrollViewer { Content = palette, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }, row: 4);
+        var palettePane = new ScrollViewer { Content = palette, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        if (small)
+        {
+            // Options stay above the drawing area; panels never consume its space.
+            center.Children.Remove(toolOptions);
+            if (compactSingleRow) AddAt(compactTopBar!, toolOptions, 3);
+            else AddAt(root, toolOptions, row: 1);
+            AddCompactWorkspace(root, workspace, center, story, inspectorPane, palettePane);
+        }
+        else AddAt(root, palettePane, row: 4);
         shell.Children.Add(root); Content = shell; RefreshAll(); RefreshTools();
     }
 
@@ -322,6 +372,8 @@ public partial class MainView : UserControl
 
     private void RefreshCanvas()
     {
+        if (undoButton is not null) undoButton.IsEnabled = editor.CanUndo;
+        if (redoButton is not null) redoButton.IsEnabled = editor.CanRedo;
         if (canvas is null || previous is null) return;
         canvas.Scene = editor.Scene; canvas.FrameIndex = editor.FrameIndex; canvas.Language = editor.Language;
         canvas.Width = previous.Width = editor.Scene.Width; canvas.Height = previous.Height = editor.Scene.Height;
@@ -344,6 +396,7 @@ public partial class MainView : UserControl
     {
         if (toolRail is null || toolOptions is null) return;
         toolRail.Children.Clear(); toolOptions.Children.Clear();
+        if (compact) { RefreshCompactTools(); return; }
         var kinds = new[] { PackIconMaterialKind.Pencil, PackIconMaterialKind.Brush, PackIconMaterialKind.Draw, PackIconMaterialKind.Eraser,
             PackIconMaterialKind.FormatColorFill, PackIconMaterialKind.VectorLine, PackIconMaterialKind.RectangleOutline,
             PackIconMaterialKind.EllipseOutline, PackIconMaterialKind.Eyedropper, PackIconMaterialKind.FormatText };

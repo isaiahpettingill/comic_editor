@@ -6,7 +6,7 @@ using Avalonia.Android;
 namespace ComicEditor.Android;
 
 [Activity(
-    Label = "ComicEditor.Android",
+    Label = "ComicEditor",
     Theme = "@style/MyTheme.NoActionBar",
     Icon = "@drawable/icon",
     MainLauncher = true,

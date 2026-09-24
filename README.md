@@ -49,7 +49,9 @@ dotnet build ComicEditor.Android
 
 ## Editing
 
-Use the storyboard's duplicate icon to create a new frame from the current one. **Alt+Left/Right** selects adjacent frames. **Compare** fits previous and current frames side by side on desktop. **Onion skin** overlays previous artwork, with an adjacent opacity control. Drag pane headers to swap desktop panes and drag dividers to resize them. Narrow displays use canvas and inspector tabs. The conventional menu bar includes File, Edit, Frame, View, Canvas, Palette, and Languages.
+Use the storyboard's duplicate icon to create a new frame from the current one. **Alt+Left/Right** selects adjacent frames. **Compare** fits previous and current frames side by side on desktop. **Onion skin** overlays previous artwork, with an adjacent opacity control. Drag pane headers to swap desktop panes and drag dividers to resize them. The conventional menu bar includes File, Edit, Frame, View, Canvas, Palette, and Languages. Undo and Redo buttons remain visible in the toolbar.
+
+Android keeps a touch layout in both portrait and landscape. Draw, Frames, Layers/text, and Colors buttons switch the workspace without permanently stacking panels around the canvas. The current tool icon opens all ten tools; the layers icon beside zoom opens onion-skin settings. The top bar keeps Undo, Redo, the frame count, and the preview language accessible. Small desktop/browser windows use this compact layout too.
 
 The vertical Material icon rail provides pixel, smooth, pressure, eraser, fill, line, rectangle, ellipse, eyedropper, and text tools. Brush size appears in the options row for brush tools. **Ctrl+mouse wheel** zooms at the pointer; the zoom selector offers Fit and fixed zoom levels. Indexed artwork uses nearest-neighbor bitmap rendering to avoid seams at fractional zoom.
 

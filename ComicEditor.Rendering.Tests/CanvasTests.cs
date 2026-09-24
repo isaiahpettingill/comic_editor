@@ -54,7 +54,7 @@ public sealed class TestApp : Application
 
 
 
-public class CanvasTests
+public partial class CanvasTests
 
 {
 

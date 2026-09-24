@@ -56,7 +56,7 @@ public partial class MainView
             BorderBrush = Brush("#989DA3"),
             BorderThickness = new Thickness(1),
             MaxWidth = 540,
-            MaxHeight = Math.Max(260, Bounds.Height - 32),
+            MaxHeight = Math.Max(120, Bounds.Height - 24),
             Margin = new Thickness(12),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Center
@@ -72,7 +72,7 @@ public partial class MainView
         if (modal is not null) shell?.Children.Remove(modal);
         modal = null; if (rootGrid is not null) rootGrid.IsEnabled = true;
         returnFocus?.Focus(); returnFocus = null;
-        if ((Bounds.Width < 900) != compact) Build(Bounds.Width < 900);
+        if (UseCompactLayout != compact || compact && compactSingleRow != CompactLandscape) Build(UseCompactLayout);
     }
 
     private void RenameLayer(ArtworkLayer layer)

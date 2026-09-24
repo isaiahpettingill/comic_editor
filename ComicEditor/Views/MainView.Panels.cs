@@ -34,7 +34,7 @@ public partial class MainView
                 }
             });
             var number = Label((i + 1).ToString("D3")); number.TextAlignment = TextAlignment.Center; AddAt(row, number, 1);
-            var button = Button("", () => SelectFrame(index)); button.Content = row; button.Height = 74;
+            var button = Button("", () => { SelectFrame(index); if (compact) ShowCompactPage(CompactPage.Draw); }); button.Content = row; button.Height = 74;
             button.HorizontalAlignment = HorizontalAlignment.Stretch; button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
             button.Padding = new Thickness(4);
             if (i == editor.FrameIndex) { button.BorderBrush = Brush("#147BC1"); button.Background = Brush("#D7EAF8"); }
@@ -45,6 +45,7 @@ public partial class MainView
     private void RefreshPalette()
     {
         if (palette is null) return;
+        if (compactColor is not null) compactColor.Background = Brush(editor.Scene.Palette[editor.Color]);
         palette.Children.Clear();
         var heading = Row(Label("Palette", true), Label($"{editor.Color:D3}  {editor.Scene.Palette[editor.Color]}"), Button("Edit color…", EditPaletteColor));
         palette.Children.Add(heading);
@@ -55,8 +56,8 @@ public partial class MainView
             var button = new Button
             {
                 Name = "Swatch" + i,
-                Width = compact ? 28 : 26,
-                Height = compact ? 28 : 26,
+                Width = compact ? 40 : 26,
+                Height = compact ? 40 : 26,
                 Background = Brush(editor.Scene.Palette[i]),
                 BorderBrush = i == editor.Color ? Brushes.DodgerBlue : Brush("#777B80"),
                 BorderThickness = new Thickness(i == editor.Color ? 3 : 1),
@@ -80,7 +81,7 @@ public partial class MainView
         var rows = new StackPanel { Spacing = 1 };
         void LayerRow(string name, bool visible, bool selected, Action select, Action toggle, Action? rename)
         {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("32,*"), Background = selected ? Brush("#D7EAF8") : Brush("#E2E3E3") };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions(compact ? "44,*" : "32,*"), Background = selected ? Brush("#D7EAF8") : Brush("#E2E3E3") };
             var eye = Icon(visible ? PackIconMaterialKind.EyeOutline : PackIconMaterialKind.EyeOffOutline, visible ? "Hide " + name : "Show " + name, toggle);
             eye.Background = Brushes.Transparent; eye.BorderThickness = default; row.Children.Add(eye);
             var item = Button(name, select); item.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -103,7 +104,7 @@ public partial class MainView
                 () => { editor.LayerIndex = index; if (editor.Tool == Tool.Text) editor.Tool = Tool.Pixel; RefreshTools(); RefreshInspector(); },
                 () => { editor.BeforeChange(); layer.Visible = !layer.Visible; RefreshAll(); }, () => RenameLayer(layer));
         }
-        inspector.Children.Add(new ScrollViewer { Content = rows, MaxHeight = compact ? 90 : 140 });
+        inspector.Children.Add(new ScrollViewer { Content = rows, MaxHeight = compact ? 180 : 140 });
         var layerActions = Row(Icon(PackIconMaterialKind.Plus, "Add artwork layer", () =>
             {
                 editor.BeforeChange(); editor.Frame.Layers.Add(ArtworkLayer.Create($"Layer {editor.Frame.Layers.Count + 1}", editor.Scene.Width, editor.Scene.Height));
@@ -140,8 +141,8 @@ public partial class MainView
                 SelectedIndex = Array.FindIndex(objects, t => t.Id == editor.SelectedTextId),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 PlaceholderText = "Select text object…",
-                Height = 32,
-                MinHeight = 32
+                Height = compact ? 44 : 32,
+                MinHeight = compact ? 44 : 32
             };
             selector.SelectionChanged += (_, _) =>
             {
@@ -157,7 +158,7 @@ public partial class MainView
         }
         var keyRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
         var keyLabel = Label("Key"); keyLabel.Margin = new Thickness(0, 0, 8, 0); keyRow.Children.Add(keyLabel);
-        var key = new TextBox { Name = "LocalizationKey", Text = obj.Key, Height = 32, MinHeight = 32 };
+        var key = new TextBox { Name = "LocalizationKey", Text = obj.Key, Height = compact ? 44 : 32, MinHeight = compact ? 44 : 32 };
         ToolTip.SetTip(key, "Stable localization key. Use an existing key to share translations.");
         key.LostFocus += (_, _) =>
         {
@@ -176,8 +177,8 @@ public partial class MainView
             Name = "TranslationLanguage",
             ItemsSource = editor.Scene.Translations.Keys.Order().ToArray(),
             SelectedItem = editor.Language,
-            Height = 32,
-            MinHeight = 32,
+            Height = compact ? 44 : 32,
+            MinHeight = compact ? 44 : 32,
             MinWidth = 90
         };
         language.SelectionChanged += (_, _) => { if (language.SelectedItem is string code && code != editor.Language) { editor.Language = code; RefreshAll(); } };

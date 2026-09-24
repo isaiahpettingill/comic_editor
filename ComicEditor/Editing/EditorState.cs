@@ -9,6 +9,8 @@ public sealed class EditorState
     private readonly Stack<(byte[] Data, int Frame)> undo = new();
     private readonly Stack<(byte[] Data, int Frame)> redo = new();
     private byte[]? saved;
+    public bool CanUndo => undo.Count > 0;
+    public bool CanRedo => redo.Count > 0;
     public bool IsDirty => saved is not null && !CutsceneFile.Write(Scene).AsSpan().SequenceEqual(saved);
     public void MarkSaved() => saved = CutsceneFile.Write(Scene);
     public EditorState() => MarkSaved();

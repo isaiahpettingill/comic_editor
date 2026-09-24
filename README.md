@@ -63,6 +63,14 @@ dotnet build ComicEditor.Android -t:InstallAndroidDependencies -p:AcceptAndroidS
 dotnet build ComicEditor.Android
 ```
 
+## Interface themes
+
+Choose **View > Theme** (inside Menu on mobile) to use Solarized light, Solarized dark, Catppuccin Mocha, Catppuccin Latte, Dark, or Gruvbox. The choice applies immediately and is saved in user preferences, including browser storage. Solarized light retains the original warm light appearance.
+
+Themes affect editor panels, controls, menus, and dialogs only. The white canvas, artwork, project palette, text colors, thumbnails, and PNG/game exports keep their original colors. Themes are not stored in cutscene files.
+
+Palette references: [Catppuccin](https://github.com/catppuccin/palette), [Solarized](https://ethanschoonover.com/solarized/), and [Gruvbox](https://github.com/morhetz/gruvbox).
+
 ## Editing
 
 Use the storyboard's duplicate icon to create a new frame from the current one. **Alt+Left/Right** selects adjacent frames. **Compare** fits previous and current frames side by side on desktop. **Onion skin** overlays previous artwork, with an adjacent opacity control. Drag pane headers to swap desktop panes and drag dividers to resize them. The conventional menu bar includes File, Edit, Frame, View, Canvas, Palette, and Languages. Undo and Redo buttons remain visible in the toolbar.
@@ -189,6 +197,8 @@ The [release workflow](.github/workflows/release.yml) runs format and rendering 
 
 Desktop and CLI Release publishes default to Native AOT with full trimming and `OptimizationPreference=Speed`. Release builds omit debugging symbols, including symbols supplied by native graphics packages. Packaging rejects debug files and checks a 160 MiB installed-size budget for the combined editor, CLI, native libraries, and bundled multilingual fonts. Version 0.1.8 Windows setup also removes the known package symbols accidentally shipped by earlier versions, including when invoked by the updater. Portable ZIP users should extract into a fresh folder to avoid keeping obsolete files.
 
-To publish a release, push a version tag such as `git tag v0.1.0` followed by `git push origin v0.1.0`. Once every platform build succeeds, the workflow creates the GitHub Release and attaches all builds, the Windows NSIS installer, the Linux installer, and its checksum. The Windows job compiles setup with NSIS 3.12 and tests silent installation, staged updates, shell registration, and uninstall. Ordinary pushes to `main` produce Actions artifacts; the GitHub Release publishing step runs only for version tags.
+Every successful push to **main** automatically publishes a GitHub Release after all platform jobs pass. CI uses the version in `Directory.Build.props` as a minimum and automatically advances the patch version when that number is already used. The editor, CLI, installers, source archive, and Android display version receive the same version; Android receives an increasing version code. Builds are serialized to prevent competing releases. A retry reuses its draft and never replaces an already published release. Version tags and manual runs on main remain supported.
+
+CI verifies desktop signatures, uploads all assets to a draft, then publishes it as the latest release. Assets include the Windows NSIS installer, Linux installer and checksum, macOS app bundles, portable archives, Android APK, WASM site, and complete source. The Windows job tests installation, staged updates, file associations, and uninstall. A successful main build also deploys the browser version to Cloudflare Pages.
 
 Android releases require four repository secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Keep the same signing key for future releases so installed copies can update. The APK build requires these secrets and will fail clearly if they are absent.

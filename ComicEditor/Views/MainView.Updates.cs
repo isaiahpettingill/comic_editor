@@ -34,7 +34,7 @@ public partial class MainView
     {
         if (updateMenu is not null) updateMenu.Header = availableUpdate is null ? "Check for updates…" : $"Update {availableUpdate.Version} available…";
         if (helpMenu is not null) helpMenu.Header = availableUpdate is null ? "_Help" : "_Help • Update";
-        if (compactDrawer is not null) compactDrawer.Foreground = availableUpdate is null ? Brushes.Black : Brushes.DodgerBlue;
+        if (compactDrawer is not null) compactDrawer.Foreground = availableUpdate is null ? Brush(UiTheme.Text) : Brush(UiTheme.Accent);
         if (updateStatus is not null) updateStatus.Text = updateMessage;
         if (updateAction is not null)
         {

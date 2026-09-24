@@ -159,7 +159,7 @@ public partial class MainView
         saveMessage = message;
         if (autosaveStatus is not null) autosaveStatus.Text = message;
         if (autosaveMenu is not null) autosaveMenu.Header = error ? "Autosave & recovery • Attention…" : "Autosave & recovery…";
-        if (compactDrawer is not null && error) compactDrawer.Foreground = Avalonia.Media.Brushes.DarkOrange;
+        if (compactDrawer is not null && error) compactDrawer.Foreground = Brush(UiTheme.Error);
     }
 
     private void ShowAutosave()

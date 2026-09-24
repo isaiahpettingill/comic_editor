@@ -24,10 +24,10 @@ public partial class MainView
         var caption = Label("");
         var hex = new TextBox { Name = "PaletteEditorHex", MaxLength = 7, Width = 105 };
         var picker = PaletteColorPicker.Create(Color.Parse(draft[selected].Hex));
-        var sample = new Border { Width = 38, Height = 32, BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1) };
+        var sample = new Border { Width = 38, Height = 32, BorderBrush = Brush(UiTheme.Border), BorderThickness = new Thickness(1) };
         var channels = Enumerable.Range(0, 3).Select(i => new NumericUpDown { Name = "Palette" + new[] { "Red", "Green", "Blue" }[i], Minimum = 0, Maximum = 255, Increment = 1, ShowButtonSpinner = !touchLayout }).ToArray();
         var message = Label("Changes stay in this cutscene. Save preset writes a shared .gpl file."); message.Name = "PaletteEditorStatus"; message.FontSize = 12;
-        void Report(string text, bool error = false) { message.Text = text; message.Foreground = error ? Brush("#AB3B13") : Brushes.Black; }
+        void Report(string text, bool error = false) { message.Text = text; message.Foreground = error ? Brush(UiTheme.Error) : Brush(UiTheme.Text); }
         void RefreshSelection()
         {
             syncing = true; caption.Text = $"Color {selected:D3}"; hex.Text = draft[selected].Hex;
@@ -38,7 +38,7 @@ public partial class MainView
             for (var i = 0; i < swatches.Children.Count; i++)
             {
                 var button = (Button)swatches.Children[i]; button.Background = Brush(draft[i].Hex);
-                button.BorderBrush = i == selected ? Brushes.DodgerBlue : Brushes.Gray;
+                button.BorderBrush = i == selected ? Brush(UiTheme.Accent) : Brush(UiTheme.Border);
                 button.BorderThickness = new Thickness(i == selected ? 3 : 1);
                 ToolTip.SetTip(button, $"{i:D3}  {draft[i].Hex}  {draft[i].Name}");
             }

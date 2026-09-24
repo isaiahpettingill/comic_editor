@@ -46,6 +46,8 @@ public partial class MainView : UserControl
         Styles.Add(new ComicEditor.Styles.EditorScrolling(touchLayout));
         editor.FinishPendingEdit = () => FinishPath();
         InitializeComponent();
+        ComicEditor.Styles.EditorThemes.Apply(editor.Preferences.Theme);
+        Foreground = Brush(UiTheme.Text);
         Resources["SliderPreContentMargin"] = new GridLength(6);
         Resources["SliderPostContentMargin"] = new GridLength(6);
         Build(touchLayout);
@@ -136,7 +138,7 @@ public partial class MainView : UserControl
         var header = new Border
         {
             Name = pane + "Header",
-            Background = Brush("#DBDEE3"),
+            Background = Brush(UiTheme.Header),
             Padding = new Thickness(8, 5),
             Child = compact ? Label(caption, true) : Row(new PackIconMaterial { Kind = PackIconMaterialKind.Drag, Width = 16, Height = 16 }, Label(caption, true)),
             Cursor = new Cursor(compact ? StandardCursorType.Arrow : StandardCursorType.SizeAll)
@@ -146,13 +148,13 @@ public partial class MainView : UserControl
         {
             if (compact || desktopWorkspace is null) return;
             draggingPane = pane; paneDragStart = e.GetPosition(desktopWorkspace); e.Pointer.Capture(header);
-            header.Background = Brush("#BDDDF2");
+            header.Background = Brush(UiTheme.Selection);
         };
         header.PointerReleased += (_, e) =>
         {
             var source = draggingPane; var workspace = desktopWorkspace;
             var x = workspace is null ? -1 : e.GetPosition(workspace).X;
-            draggingPane = null; e.Pointer.Capture(null); header.Background = Brush("#DBDEE3");
+            draggingPane = null; e.Pointer.Capture(null); header.Background = Brush(UiTheme.Header);
             if (source is null || workspace is null || x < 0 || x > workspace.Bounds.Width || Math.Abs(x - paneDragStart.X) < 12) return;
             var edge = 0.0; var destination = 2;
             for (var i = 0; i < 3; i++)
@@ -180,7 +182,7 @@ public partial class MainView : UserControl
         compact = small;
         compactSingleRow = small && CompactLandscape;
         shell = new Grid();
-        var root = rootGrid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,5,Auto"), Background = Brush("#F0EFEA") };
+        var root = rootGrid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,5,Auto"), Background = Brush(UiTheme.Background) };
         root.RowDefinitions[2].MinHeight = small ? 0 : 300;
         root.RowDefinitions[3].Height = new GridLength(small ? 0 : 5);
         root.RowDefinitions[4].Height = small ? GridLength.Auto : new GridLength(paletteHeight);
@@ -221,6 +223,7 @@ public partial class MainView : UserControl
                 paneWidths[0] = new(190); paneWidths[1] = new(1, GridUnitType.Star); paneWidths[2] = new(300); Build(compact);
             }
         )));
+        ((MenuItem)menu.Items[3]!).Items.Add(ThemeMenu());
         menu.Items.Add(MenuGroup("_Canvas", ("Resize canvas…", ResizeCanvas)));
         menu.Items.Add(MenuGroup("_Palette", ("Palette editor…", EditPalette), ("Edit selected color…", EditPaletteColor)));
         menu.Items.Add(MenuGroup("_Languages", ("Manage languages…", ManageLanguages)));
@@ -337,7 +340,7 @@ public partial class MainView : UserControl
         canvas.PointerCaptureLost += (_, e) => { if (e.Pointer != drawingPointer) return; drawingPointer = null; StopSpray(); dragging = false; shapeStart = null; creatingText = false; canvas.DraftTextBounds = null; canvas.InvalidateVisual(); };
         canvasPair = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), Margin = new Thickness(12) };
         canvasPair.Children.Add(previous);
-        AddAt(canvasPair, new Border { Child = canvas, BorderBrush = Brush("#959BA1"), BorderThickness = new Thickness(1) }, 1);
+        AddAt(canvasPair, new Border { Child = canvas, BorderBrush = Brush(UiTheme.Border), BorderThickness = new Thickness(1) }, 1);
         canvasFit = new Viewbox { Child = canvasPair, Stretch = Stretch.Uniform };
         canvasScroll = new ScrollViewer
         {
@@ -345,7 +348,7 @@ public partial class MainView : UserControl
             Content = canvasFit,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Background = Brush("#D9DCDF")
+            Background = Brush(UiTheme.Workspace)
         };
         canvasScroll.AddHandler(PointerWheelChangedEvent, ZoomWheel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         AttachCanvasNavigation();
@@ -359,10 +362,10 @@ public partial class MainView : UserControl
         {
             var panes = new Dictionary<Pane, Control> { [Pane.Storyboard] = story, [Pane.Canvas] = center, [Pane.Inspector] = inspectorPane };
             for (var i = 0; i < 3; i++) AddAt(workspace, panes[paneOrder[i]], i * 2);
-            for (var i = 0; i < 2; i++) AddAt(workspace, new GridSplitter { ResizeDirection = GridResizeDirection.Columns, Background = Brush("#B9BDC2") }, i * 2 + 1);
+            for (var i = 0; i < 2; i++) AddAt(workspace, new GridSplitter { ResizeDirection = GridResizeDirection.Columns, Background = Brush(UiTheme.Border) }, i * 2 + 1);
         }
         AddAt(root, workspace, row: 2);
-        var paletteDivider = new GridSplitter { ResizeDirection = GridResizeDirection.Rows, Background = Brush("#B9BDC2") };
+        var paletteDivider = new GridSplitter { ResizeDirection = GridResizeDirection.Rows, Background = Brush(UiTheme.Border) };
         paletteDivider.AddHandler(PointerReleasedEvent, (_, _) => paletteResized = true, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
         if (!small) AddAt(root, paletteDivider, row: 3);
         palette = new StackPanel { Margin = new Thickness(8, 5), Spacing = 5 };
@@ -432,7 +435,7 @@ public partial class MainView : UserControl
             var chosen = all[i];
             var button = Icon(ToolIcon(chosen), ToolName(chosen) + " — " + ToolHelp(chosen), () => ChooseTool(chosen));
             button.Width = button.Height = compact ? 40 : 34;
-            if (chosen == editor.Tool) { button.Background = Brush("#BBDDF5"); button.BorderBrush = Brush("#147BC1"); }
+            if (chosen == editor.Tool) { button.Background = Brush(UiTheme.Selection); button.BorderBrush = Brush(UiTheme.Accent); }
             toolRail.Children.Add(button);
         }
         toolOptions.Children.Add(Label(ToolName(editor.Tool), true));

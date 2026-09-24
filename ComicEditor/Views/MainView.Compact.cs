@@ -21,7 +21,7 @@ public partial class MainView
     {
         compactPages = [draw, frames, layers, colors];
         foreach (var page in compactPages) workspace.Children.Add(page);
-        var navigation = new Grid { Name = "CompactNavigation", ColumnDefinitions = new ColumnDefinitions("*,*,*,*"), Background = Brush("#E2E3E3") };
+        var navigation = new Grid { Name = "CompactNavigation", ColumnDefinitions = new ColumnDefinitions("*,*,*,*"), Background = Brush(UiTheme.Surface) };
         compactTabs = new Button[4];
         var names = new[] { "Draw", "Frames", "Layers/text", "Colors" };
         for (var i = 0; i < names.Length; i++)
@@ -33,7 +33,7 @@ public partial class MainView
             button.HorizontalAlignment = HorizontalAlignment.Stretch;
             compactTabs[i] = button; AddAt(navigation, button, i);
         }
-        compactColor = new Border { Width = 16, Height = 16, BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Background = Brush(editor.Scene.Palette[editor.Color]) };
+        compactColor = new Border { Width = 16, Height = 16, BorderBrush = Brush(UiTheme.Border), BorderThickness = new Thickness(1), Background = Brush(editor.Scene.Palette[editor.Color]) };
         compactTabs[3].Content = Row(compactColor, Label("Colors"));
         AddAt(root, navigation, row: 4);
         ShowCompactPage(compactPage);
@@ -46,7 +46,7 @@ public partial class MainView
         for (var i = 0; i < compactPages.Length; i++)
         {
             compactPages[i].IsVisible = i == (int)page;
-            compactTabs[i].Background = i == (int)page ? Brush("#BBDDF5") : Brushes.Transparent;
+            compactTabs[i].Background = i == (int)page ? Brush(UiTheme.Selection) : Brushes.Transparent;
         }
         if (toolOptions is not null) toolOptions.IsVisible = page == CompactPage.Draw;
     }
@@ -68,7 +68,7 @@ public partial class MainView
             var caption = Label(ToolName(tool)); caption.FontSize = 12;
             button.Content = Row(new PackIconMaterial { Kind = ToolIcon(tool), Width = 22, Height = 22 }, caption);
             button.Width = 140; button.Margin = new Thickness(2);
-            if (tool == editor.Tool) button.Background = Brush("#BBDDF5");
+            if (tool == editor.Tool) button.Background = Brush(UiTheme.Selection);
             AddAt(choices, button, (int)tool % 2, (int)tool / 2);
         }
         var chooseTool = Icon(ToolIcon(editor.Tool), "Choose drawing tool: " + ToolName(editor.Tool), () => { });

@@ -65,8 +65,8 @@ public partial class MainView
         {
             Name = "ModalCard",
             Child = panel,
-            Background = Brush("#F5F4F0"),
-            BorderBrush = Brush("#989DA3"),
+            Background = Brush(UiTheme.Surface),
+            BorderBrush = Brush(UiTheme.Border),
             BorderThickness = new Thickness(1),
             MaxWidth = 540,
             MaxHeight = Math.Max(120, Bounds.Height - 24),
@@ -198,7 +198,7 @@ public partial class MainView
         defaultLanguage.SelectionChanged += (_, _) => { if (defaultLanguage.SelectedItem is string value) fallback = value; };
         Refresh(); body.Children.Add(Label("Project languages", true)); body.Children.Add(list);
         var code = new TextBox { Name = "LanguageCode", PlaceholderText = "Language code, e.g. fr or pt-BR", MinWidth = 220 };
-        var message = Label(""); message.Foreground = Brush("#AB3B13");
+        var message = Label(""); message.Foreground = Brush(UiTheme.Error);
         var add = Button("Add", () =>
         {
             var value = code.Text?.Trim() ?? "";
@@ -247,7 +247,7 @@ public partial class MainView
             if (e.Property != Slider.ValueProperty || syncing) return;
             hex.Text = $"#{(int)sliders[0].Value:X2}{(int)sliders[1].Value:X2}{(int)sliders[2].Value:X2}";
         };
-        var error = Label(""); error.Foreground = Brush("#AB3B13"); body.Children.Add(error);
+        var error = Label(""); error.Foreground = Brush(UiTheme.Error); body.Children.Add(error);
         picker.PropertyChanged += (_, e) =>
         {
             if (syncing || e.Property != AvaloniaColorPicker.CustomColorPicker.ColorProperty) return;

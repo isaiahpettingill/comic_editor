@@ -10,11 +10,37 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'comic-editor-release' }}
+  cancel-in-progress: false
+
 jobs:
-  tests:
+  prepare:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write # Include draft releases when reserving version numbers.
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      android_code: ${{ steps.version.outputs.android_code }}
+      publish: ${{ steps.version.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/ci-version.py plan
+
+  tests:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    env:
+      COMIC_RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      COMIC_ANDROID_VERSION_CODE: ${{ needs.prepare.outputs.android_code }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: python tools/ci-version.py stamp
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -29,9 +55,10 @@ jobs:
           bash -n tools/install-linux.sh
           python3 -m unittest discover -s tools -p 'test_linux_installer.py' -v
           python3 -m unittest discover -s tools -p 'test_macos_package.py' -v
+          python3 -m unittest discover -s tools -p 'test_ci_version.py' -v
 
   desktop:
-    needs: tests
+    needs: [prepare, tests]
     strategy:
       fail-fast: false
       matrix:
@@ -45,8 +72,12 @@ jobs:
           - os: macos-15
             rid: osx-arm64
     runs-on: ${{ matrix.os }}
+    env:
+      COMIC_RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      COMIC_ANDROID_VERSION_CODE: ${{ needs.prepare.outputs.android_code }}
     steps:
       - uses: actions/checkout@v4
+      - run: python tools/ci-version.py stamp
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -163,10 +194,14 @@ jobs:
           path: ComicEditor-${{ matrix.rid }}*
 
   browser:
-    needs: tests
+    needs: [prepare, tests]
     runs-on: ubuntu-24.04
+    env:
+      COMIC_RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      COMIC_ANDROID_VERSION_CODE: ${{ needs.prepare.outputs.android_code }}
     steps:
       - uses: actions/checkout@v4
+      - run: python tools/ci-version.py stamp
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -187,15 +222,18 @@ jobs:
 
   android:
     if: github.event_name != 'pull_request'
-    needs: tests
+    needs: [prepare, tests]
     runs-on: ubuntu-24.04
     env:
+      COMIC_RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      COMIC_ANDROID_VERSION_CODE: ${{ needs.prepare.outputs.android_code }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+      - run: python tools/ci-version.py stamp
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -250,12 +288,16 @@ jobs:
           path: ComicEditor-android-arm64.apk
 
   release:
-    name: Publish GitHub release (version tags)
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [desktop, android, browser]
+    name: Publish GitHub release
+    if: needs.prepare.outputs.publish == 'true'
+    needs: [prepare, desktop, android, browser]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      COMIC_RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      COMIC_ANDROID_VERSION_CODE: ${{ needs.prepare.outputs.android_code }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -271,8 +313,17 @@ jobs:
           node tools/release-signing.mjs verify dist/ComicEditor-win-x64.zip dist/ComicEditor-win-x64-setup.exe dist/ComicEditor-linux-x64.tar.gz dist/ComicEditor-osx-x64.tar.gz dist/ComicEditor-osx-arm64.tar.gz dist/ComicEditor-osx-x64-app.zip dist/ComicEditor-osx-arm64-app.zip dist/install-comic-editor.sh
           cp signing/desktop-public.pem dist/
           cp signing/android-certificate.sha256 dist/
-          git archive --format=zip --output=dist/ComicEditor-source.zip HEAD
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
-          generate_release_notes: true
+          python3 tools/ci-version.py source dist/ComicEditor-source.zip
+          test -s dist/ComicEditor-android-arm64.apk
+          test -s dist/ComicEditor-browser-wasm.zip
+      - name: Upload complete draft and publish
+        shell: bash
+        run: |
+          tag="v$COMIC_RELEASE_VERSION"
+          if gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/release.json" 2>/dev/null; then
+            jq -e --arg sha "$GITHUB_SHA" '.isDraft == true and .targetCommitish == $sha' "$RUNNER_TEMP/release.json"
+          else
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "ComicEditor $tag" --generate-notes
+          fi
+          gh release upload "$tag" dist/* --clobber
+          gh release edit "$tag" --draft=false --latest

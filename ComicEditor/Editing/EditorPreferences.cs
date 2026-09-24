@@ -6,6 +6,7 @@ namespace ComicEditor.Editing;
 
 public sealed class EditorPreferences
 {
+    public string Theme { get; set; } = Styles.EditorThemes.Default;
     public int CanvasWidth { get; set; } = 320;
     public int CanvasHeight { get; set; } = 180;
     public string FontId { get; set; } = "comic-shanns";
@@ -35,6 +36,7 @@ public sealed class EditorPreferences
         EditorPreferences value;
         try { value = json is null ? new() : JsonSerializer.Deserialize(json, PreferencesJson.Default.EditorPreferences) ?? new(); }
         catch (JsonException) { value = new(); }
+        value.Theme = Styles.EditorThemes.Find(value.Theme).Id;
         value.CanvasWidth = Math.Clamp(value.CanvasWidth, 1, 2048);
         value.AutoSaveMinutes = Math.Clamp(value.AutoSaveMinutes, 1, 60);
         value.CanvasHeight = Math.Clamp(value.CanvasHeight, 1, 2048);

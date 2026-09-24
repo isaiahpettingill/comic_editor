@@ -37,7 +37,7 @@ public partial class MainView
             var button = Button("", () => { SelectFrame(index); if (compact) ShowCompactPage(CompactPage.Draw); }); button.Content = row; button.Height = 74;
             button.HorizontalAlignment = HorizontalAlignment.Stretch; button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
             button.Padding = new Thickness(4);
-            if (i == editor.FrameIndex) { button.BorderBrush = Brush("#147BC1"); button.Background = Brush("#D7EAF8"); }
+            if (i == editor.FrameIndex) { button.BorderBrush = Brush(UiTheme.Accent); button.Background = Brush(UiTheme.Selection); }
             storyboard.Children.Add(button);
         }
     }
@@ -59,7 +59,7 @@ public partial class MainView
                 Width = compact ? 40 : 26,
                 Height = compact ? 40 : 26,
                 Background = Brush(editor.Scene.Palette[i]),
-                BorderBrush = i == editor.Color ? Brushes.DodgerBlue : Brush("#777B80"),
+                BorderBrush = i == editor.Color ? Brush(UiTheme.Accent) : Brush(UiTheme.Border),
                 BorderThickness = new Thickness(i == editor.Color ? 3 : 1),
                 Margin = new Thickness(1),
                 Padding = default
@@ -82,7 +82,7 @@ public partial class MainView
         var rows = new StackPanel { Spacing = 1 };
         void LayerRow(string name, bool visible, bool selected, Action select, Action toggle, Action? rename)
         {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions(compact ? "44,*" : "32,*"), Background = selected ? Brush("#D7EAF8") : Brush("#E2E3E3") };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions(compact ? "44,*" : "32,*"), Background = selected ? Brush(UiTheme.Selection) : Brush(UiTheme.Surface) };
             var eye = Icon(visible ? PackIconMaterialKind.EyeOutline : PackIconMaterialKind.EyeOffOutline, visible ? "Hide " + name : "Show " + name, toggle);
             eye.Background = Brushes.Transparent; eye.BorderThickness = default; row.Children.Add(eye);
             var item = Button(name, select); item.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -209,7 +209,7 @@ public partial class MainView
             if (CutsceneFonts.IsCustom(obj.FontId) && !CutsceneFonts.IsInstalled(obj.FontId)) warning.Text += " · Custom font unavailable; using Noto";
             var missingFonts = CutsceneFonts.Missing(text, obj.FontId, lang);
             if (missingFonts.Count > 0) warning.Text += " · Missing font: " + string.Join(", ", missingFonts.Select(f => f.Family.Length > 0 ? f.Family : f.Sample));
-            warning.Foreground = missing || overflow || missingFonts.Count > 0 ? Brush("#AB3B13") : Brush("#406543");
+            warning.Foreground = missing || overflow || missingFonts.Count > 0 ? Brush(UiTheme.Error) : Brush(UiTheme.Success);
         }
         translation.TextChanged += (_, _) =>
         {

@@ -75,6 +75,23 @@ public sealed class EditorState
     public bool Undo() => Restore(undo, redo);
     public bool Redo() => Restore(redo, undo);
 
+    // A first touch may become a multi-finger navigation gesture. Restore both
+    // history stacks so cancelling that provisional edit doesn't destroy redo.
+    public Action CaptureProvisionalEdit()
+    {
+        var owner = Scene; var data = CutsceneFile.Write(Scene); var frame = FrameIndex; var layer = LayerIndex;
+        var text = SelectedTextId; var color = Color;
+        var priorUndo = undo.Reverse().ToArray(); var priorRedo = redo.Reverse().ToArray();
+        return () =>
+        {
+            if (!ReferenceEquals(Scene, owner)) return; // A new/opened project or history restore supersedes the gesture.
+            Scene = CutsceneFile.Parse(data); FrameIndex = frame; layerIndex = layer;
+            SelectedTextId = text; Color = color;
+            undo.Clear(); foreach (var entry in priorUndo) undo.Push(entry);
+            redo.Clear(); foreach (var entry in priorRedo) redo.Push(entry);
+        };
+    }
+
     private bool Restore(Stack<(byte[] Data, int Frame)> source, Stack<(byte[] Data, int Frame)> destination)
     {
         if (!source.TryPop(out var state)) return false;

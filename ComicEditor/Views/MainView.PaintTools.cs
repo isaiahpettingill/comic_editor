@@ -53,7 +53,7 @@ public partial class MainView
         Tool.Polygon => "Click corners. Double-click, Enter, or Finish closes the polygon. Escape cancels.",
         Tool.Select or Tool.Lasso => "Drag to select artwork on the current layer, then drag inside to move it. Use Edit to copy, cut, paste, or delete.",
         Tool.Spray => "Hold to spray; move to cover an area. Diameter and density are adjustable.",
-        Tool.Zoom => "Click to zoom in. Right-click or Shift-click to zoom out. Ctrl+scroll also zooms.",
+        Tool.Zoom => "Click to zoom in; right-click or Shift-click to zoom out. Scroll or pinch with two fingers to zoom. Middle-drag or drag three fingers to pan.",
         Tool.Text => "Drag to create a text area; click existing text to select it.",
         _ => "Drag to draw on the current artwork layer."
     };

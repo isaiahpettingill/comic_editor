@@ -19,7 +19,8 @@ public partial class MainView
 
     private void CanvasPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (canvas is null) return;
+        if (canvas is null || dragging || panPointer is not null) return;
+        drawingPointer = e.Pointer;
         var properties = e.GetCurrentPoint(canvas).Properties;
         if (editor.Tool == Tool.Zoom && (properties.IsLeftButtonPressed || properties.IsRightButtonPressed))
         {
@@ -77,7 +78,7 @@ public partial class MainView
 
     private void CanvasMoved(object? sender, PointerEventArgs e)
     {
-        if (canvas is null) return;
+        if (canvas is null || dragging && e.Pointer != drawingPointer) return;
         if (!dragging)
         {
             if (pathBase is not null && pathTool == Tool.Polygon) { var hover = canvas.CanvasPoint(e); DrawPath((int)hover.X, (int)hover.Y); RefreshCanvas(); }
@@ -132,7 +133,7 @@ public partial class MainView
 
     private void CanvasReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if (!dragging) return;
+        if (!dragging || e.Pointer != drawingPointer) return;
         var endpoint = canvas!.CanvasPoint(e);
         if (editor.Tool is Tool.Select or Tool.Lasso)
         {

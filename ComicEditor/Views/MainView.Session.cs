@@ -119,7 +119,7 @@ public partial class MainView
 
     private async Task SessionTick()
     {
-        if (fileBusy || updateInstalling || dragging || pathBase is not null) return;
+        if (fileBusy || updateInstalling || dragging || pathBase is not null || cancelTouchEdit is not null) return;
         await SaveSessionSafely();
         if (!editor.Preferences.AutoSave || autoSavePaused || currentFile is null || !editor.IsDirty ||
             DateTimeOffset.UtcNow - lastAutoSave < TimeSpan.FromMinutes(editor.Preferences.AutoSaveMinutes)) return;

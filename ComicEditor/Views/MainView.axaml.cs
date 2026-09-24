@@ -68,6 +68,7 @@ public partial class MainView : UserControl
         DetachedFromVisualTree += (_, _) => { sessionTimer?.Stop(); if (SessionStorage.Flush == SaveSessionSafely) SessionStorage.Flush = null; };
         DetachedFromVisualTree += (_, _) => StopUpdates();
         DetachedFromVisualTree += (_, _) => StopSpray();
+        DetachedFromVisualTree += (_, _) => ResetCanvasNavigation();
     }
 
     private bool UseCompactLayout => touchLayout || Bounds.Width < 900 || Bounds.Height is > 0 and < 540;
@@ -170,6 +171,7 @@ public partial class MainView : UserControl
 
     private void Build(bool small)
     {
+        ResetCanvasNavigation();
         if (desktopWorkspace is not null && !compact)
             for (var i = 0; i < 3; i++) paneWidths[i] = desktopWorkspace.ColumnDefinitions[i * 2].Width;
         if (rootGrid is not null && !compact && rootGrid.RowDefinitions[4].ActualHeight > 60)
@@ -331,7 +333,7 @@ public partial class MainView : UserControl
         canvas = new CutsceneCanvas { Focusable = true };
         previous = new CutsceneCanvas { IsHitTestVisible = false };
         canvas.PointerPressed += CanvasPressed; canvas.PointerMoved += CanvasMoved; canvas.PointerReleased += CanvasReleased;
-        canvas.PointerCaptureLost += (_, _) => { StopSpray(); dragging = false; shapeStart = null; creatingText = false; canvas.DraftTextBounds = null; canvas.InvalidateVisual(); };
+        canvas.PointerCaptureLost += (_, e) => { if (e.Pointer != drawingPointer) return; drawingPointer = null; StopSpray(); dragging = false; shapeStart = null; creatingText = false; canvas.DraftTextBounds = null; canvas.InvalidateVisual(); };
         canvasPair = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), Margin = new Thickness(12) };
         canvasPair.Children.Add(previous);
         AddAt(canvasPair, new Border { Child = canvas, BorderBrush = Brush("#959BA1"), BorderThickness = new Thickness(1) }, 1);
@@ -345,6 +347,7 @@ public partial class MainView : UserControl
             Background = Brush("#D9DCDF")
         };
         canvasScroll.AddHandler(PointerWheelChangedEvent, ZoomWheel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        AttachCanvasNavigation();
         AddAt(drawing, canvasScroll, 1); AddAt(center, drawing, row: 2);
 
         inspector = new StackPanel { Margin = new Thickness(10), Spacing = 6 };
@@ -469,16 +472,11 @@ public partial class MainView : UserControl
 
     private void ZoomWheel(object? sender, PointerWheelEventArgs e)
     {
-        if (!(e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)) || canvasScroll is null || canvasFit is null || e.Delta.Y == 0) return;
-        var point = e.GetPosition(canvasScroll);
-        var origin = canvasFit.TranslatePoint(default, canvasScroll) ?? default;
-        var current = zoom > 0 ? zoom : canvasPair?.TranslatePoint(new Point(1, 0), canvasScroll)?.X - canvasPair?.TranslatePoint(default, canvasScroll)?.X ?? 1;
-        zoom = Math.Clamp(current * Math.Pow(1.25, e.Delta.Y), .1, 32);
-        var ratio = zoom / Math.Max(.001, current);
-        RefreshCanvas(); RefreshTools();
-        canvasScroll.UpdateLayout();
-        canvasScroll.Offset = new Vector(Math.Max(0, (point.X - origin.X) * ratio - point.X),
-            Math.Max(0, (point.Y - origin.Y) * ratio - point.Y));
+        if (canvasScroll is null || e.Delta.Y == 0) return;
+        if (!dragging && canvasTouches.Count == 0 && panPointer is null)
+        {
+            ZoomAt(CanvasScale * Math.Pow(1.25, e.Delta.Y), e.GetPosition(canvasScroll)); RefreshTools();
+        }
         e.Handled = true;
     }
 

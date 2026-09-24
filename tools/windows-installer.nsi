@@ -9,8 +9,15 @@ Unicode true
 !define PROJECT_PROGID "ComicEditor.Cutscene"
 
 !macro RegisterProjectExtension EXT
-  WriteRegStr HKCU "Software\Classes\${EXT}\OpenWithProgids" "${PROJECT_PROGID}" ""
+  ${If} ${Errors}
+    SetErrorLevel 2
+    Abort
+  ${EndIf}
   ReadRegStr $0 HKCU "Software\Classes\${EXT}" ""
+  ; An unregistered extension is normal on first install. Do not carry the
+  ; ReadRegStr missing-value flag into the write-error check below.
+  ClearErrors
+  WriteRegStr HKCU "Software\Classes\${EXT}\OpenWithProgids" "${PROJECT_PROGID}" ""
   ${If} $0 == ""
     WriteRegStr HKCU "Software\Classes\${EXT}" "" "${PROJECT_PROGID}"
   ${EndIf}

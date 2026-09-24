@@ -1,8 +1,8 @@
-param([int]$Port = 8098, [int]$DebugPort = 9234)
+param([int]$Port = 8098, [int]$DebugPort = 9234, [string]$WebRoot, [switch]$CheckPreferences)
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path -Parent $PSScriptRoot
 $artifactRoot = Join-Path $workspace 'artifacts'
-$webRoot = Join-Path $artifactRoot 'browser/wwwroot'
+if (!$WebRoot) { $WebRoot = Join-Path $artifactRoot 'browser/wwwroot' }
 $profile = Join-Path $artifactRoot ('chrome-smoke-' + [Guid]::NewGuid().ToString('N'))
 $server = Start-Process python -ArgumentList @('-m','http.server',"$Port",'--bind','127.0.0.1','--directory',"`"$webRoot`"") -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $artifactRoot 'web-server.log') -RedirectStandardError (Join-Path $artifactRoot 'web-server-error.log')
 $chrome = Start-Process 'C:/Program Files/Google/Chrome/Application/chrome.exe' -ArgumentList @('--headless=new',"--remote-debugging-port=$DebugPort","--user-data-dir=$profile",'--no-first-run','--no-default-browser-check','--enable-unsafe-swiftshader','--window-size=1280,800',"http://127.0.0.1:$Port") -PassThru -WindowStyle Hidden
@@ -41,6 +41,21 @@ try {
         $state = Invoke-Cdp 'Runtime.evaluate' @{expression='JSON.stringify({canvases:document.querySelectorAll("canvas").length,text:document.body.innerText})';returnByValue=$true}
         if ($state.result.result.value -match '"canvases":[1-9]') { Start-Sleep -Seconds 3; break }
         if ($script:errors.Count -gt 0) { break }
+    }
+    if ($CheckPreferences) {
+        $null = Invoke-Cdp 'Runtime.evaluate' @{expression='localStorage.setItem("comic-editor.preferences", JSON.stringify({CanvasWidth:384,CanvasHeight:216,Tool:10,Color:999,Language:"unknown",FontSize:27,Tools:{Spray:{Size:25,SprayDensity:32}}}))'}
+        $null = Invoke-Cdp 'Page.reload'
+        $preferences = $null
+        for ($attempt=0; $attempt -lt 45; $attempt++) {
+            Start-Sleep -Seconds 1
+            $stored = Invoke-Cdp 'Runtime.evaluate' @{expression='localStorage.getItem("comic-editor.preferences")';returnByValue=$true}
+            if ($stored.result.result.value) { $preferences = $stored.result.result.value | ConvertFrom-Json }
+            # The .NET reader clamps color and resolves unknown languages, then saves through JS interop.
+            if ($preferences.Color -eq 127 -and $preferences.Language -eq 'en') { break }
+        }
+        if ($preferences.CanvasWidth -ne 384 -or $preferences.CanvasHeight -ne 216 -or $preferences.Tool -ne 10 -or $preferences.Color -ne 127 -or $preferences.Language -ne 'en' -or $preferences.Tools.Spray.Size -ne 25) { throw 'Browser preference read/write round trip failed.' }
+        'Browser preferences survived reload and passed through the .NET storage bridge.'
+        Start-Sleep -Seconds 2
     }
     $capture = Invoke-Cdp 'Page.captureScreenshot' @{format='png'}
     [IO.File]::WriteAllBytes((Join-Path $artifactRoot 'browser-smoke.png'),[Convert]::FromBase64String($capture.result.data))

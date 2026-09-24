@@ -2,7 +2,7 @@ using ComicEditor.Format;
 
 namespace ComicEditor.Editing;
 
-public enum Tool { Pixel, Smooth, Pressure, Eraser, Fill, Line, Rectangle, Ellipse, Eyedropper, Text }
+public enum Tool { Pixel, Smooth, Pressure, Eraser, Fill, Line, Rectangle, Ellipse, Eyedropper, Text, Spray, Select, Lasso, Curve, Polygon, RoundedRectangle, Zoom }
 
 public sealed class EditorState
 {
@@ -13,17 +13,46 @@ public sealed class EditorState
     public bool CanRedo => redo.Count > 0;
     public bool IsDirty => saved is not null && !CutsceneFile.Write(Scene).AsSpan().SequenceEqual(saved);
     public void MarkSaved() => saved = CutsceneFile.Write(Scene);
-    public EditorState() => MarkSaved();
-    public Cutscene Scene { get; private set; } = Cutscene.Create();
+    public EditorState(EditorPreferences? preferences = null)
+    {
+        Preferences = preferences ?? new();
+        Scene = CreateScene(); MarkSaved();
+    }
+    public EditorPreferences Preferences { get; }
+    public Action? FinishPendingEdit { get; set; }
+    public Cutscene Scene { get; private set; }
+    public TextObject CreateText() => new()
+    {
+        Key = NewTextKey(),
+        FontId = Preferences.FontId,
+        FontSize = Preferences.FontSize,
+        Bold = Preferences.Bold,
+        Italic = Preferences.Italic,
+        Color = Color
+    };
+    public void RememberCanvas()
+    {
+        Preferences.CanvasWidth = Scene.Width; Preferences.CanvasHeight = Scene.Height; Preferences.Save();
+    }
+    private Cutscene CreateScene()
+    {
+        var scene = Cutscene.Create(Preferences.CanvasWidth, Preferences.CanvasHeight);
+        if (Preferences.Palette is not null) scene.Palette = Preferences.Palette.ToList();
+        return scene;
+    }
+    public void New() => Load(CutsceneFile.Write(CreateScene()));
+    public PaintSettings Paint => Preferences.Tools.TryGetValue(Tool.ToString(), out var settings) ? settings :
+        Preferences.Tools[Tool.ToString()] = new PaintSettings { Size = Tool == Tool.Spray ? 16 : 1 };
     public int FrameIndex { get; private set; }
-    public int LayerIndex { get; set; }
-    public Tool Tool { get; set; } = Tool.Pixel;
-    public int Color { get; set; }
-    public int BrushSize { get; set; } = 1;
-    public string Language { get; set; } = "en";
-    public bool OnionSkin { get; set; }
-    public double OnionOpacity { get; set; } = 0.35;
-    public bool Compare { get; set; }
+    private int layerIndex;
+    public int LayerIndex { get => layerIndex; set { if (layerIndex != value) FinishPendingEdit?.Invoke(); layerIndex = value; } }
+    public Tool Tool { get => Preferences.Tool; set { if (Preferences.Tool != value) FinishPendingEdit?.Invoke(); Preferences.Tool = value; Preferences.Save(); } }
+    public int Color { get => Preferences.Color; set { Preferences.Color = value; Preferences.Save(); } }
+    public int BrushSize { get => Paint.Size; set { Paint.Size = value; Preferences.Save(); } }
+    public string Language { get => Preferences.Language; set { Preferences.Language = value; Preferences.Save(); } }
+    public bool OnionSkin { get => Preferences.OnionSkin; set { Preferences.OnionSkin = value; Preferences.Save(); } }
+    public double OnionOpacity { get => Preferences.OnionOpacity; set { Preferences.OnionOpacity = value; Preferences.Save(); } }
+    public bool Compare { get => Preferences.Compare; set { Preferences.Compare = value; Preferences.Save(); } }
     public string? SelectedTextId { get; set; }
     public string? FileName { get; set; }
     public Frame Frame => Scene.Frames[FrameIndex];
@@ -32,6 +61,7 @@ public sealed class EditorState
 
     public void BeforeChange()
     {
+        FinishPendingEdit?.Invoke();
         undo.Push((CutsceneFile.Write(Scene), FrameIndex));
         if (undo.Count > 60)
         {
@@ -58,11 +88,16 @@ public sealed class EditorState
 
     public void Load(byte[] data, string? name = null)
     {
+        FinishPendingEdit?.Invoke();
         Scene = CutsceneFile.Parse(data);
         FrameIndex = 0; LayerIndex = 0; SelectedTextId = null; FileName = name;
         undo.Clear(); redo.Clear();
         EnsureLanguage(); MarkSaved();
+        RememberCanvas();
+        RememberPalette();
     }
+
+    public void RememberPalette() { Preferences.Palette = Scene.Palette.ToArray(); Preferences.Save(); }
 
     public void EnsureLanguage()
     {
@@ -79,6 +114,7 @@ public sealed class EditorState
 
     public void SelectFrame(int index)
     {
+        FinishPendingEdit?.Invoke();
         FrameIndex = Math.Clamp(index, 0, Scene.Frames.Count - 1);
         LayerIndex = Math.Min(LayerIndex, Frame.Layers.Count - 1);
         SelectedTextId = null;

@@ -1,5 +1,10 @@
 import { dotnet } from './_framework/dotnet.js';
 
+globalThis.comicEditorPreferences = {
+    load() { try { return localStorage.getItem('comic-editor.preferences'); } catch { return null; } },
+    save(json) { try { localStorage.setItem('comic-editor.preferences', json); } catch { /* Private storage may be unavailable. */ } }
+};
+
 try {
     const runtime = await dotnet.withDiagnosticTracing(false).create();
     await runtime.runMain(runtime.getConfig().mainAssemblyName, [globalThis.location.href]);

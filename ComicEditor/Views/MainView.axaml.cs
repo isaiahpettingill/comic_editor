@@ -15,7 +15,7 @@ namespace ComicEditor.Views;
 public partial class MainView : UserControl
 {
     private enum Pane { Storyboard, Canvas, Inspector }
-    private readonly EditorState editor = new();
+    private readonly EditorState editor = new(PreferencesStorage.Load());
     private CutsceneCanvas? canvas, previous;
     private StackPanel? storyboard, inspector, palette, toolRail, toolOptions;
     private TextBlock? status, frameCount;
@@ -34,7 +34,7 @@ public partial class MainView : UserControl
     private readonly GridLength[] paneWidths = [new(190), new(1, GridUnitType.Star), new(300)];
     private Pane? draggingPane;
     private Point paneDragStart;
-    private double zoom; // Zero fits the available canvas area.
+    private double zoom { get => editor.Preferences.Zoom; set { editor.Preferences.Zoom = value; editor.Preferences.Save(); } } // Zero fits.
     private ScrollViewer? canvasScroll;
     private Viewbox? canvasFit;
 
@@ -43,6 +43,7 @@ public partial class MainView : UserControl
     public MainView(bool touchLayout)
     {
         this.touchLayout = touchLayout;
+        editor.FinishPendingEdit = () => FinishPath();
         InitializeComponent();
         Resources["SliderPreContentMargin"] = new GridLength(6);
         Resources["SliderPostContentMargin"] = new GridLength(6);
@@ -54,7 +55,15 @@ public partial class MainView : UserControl
             if (modal?.Child is Border card) card.MaxHeight = Math.Max(120, Bounds.Height - 24);
         };
         AttachedToVisualTree += (_, _) => RefreshTitle();
+        AttachedToVisualTree += async (_, _) =>
+        {
+            var id = CutsceneFonts.Normalize(editor.Preferences.FontId);
+            if (!id.StartsWith("google:") || CutsceneFonts.Ids.Contains(id)) return;
+            try { await CutsceneFonts.LoadGoogleAsync("https://fonts.google.com/specimen/" + Uri.EscapeDataString(id[7..])); RefreshCanvas(); }
+            catch (Exception ex) { await ShowError("Could not load the remembered font: " + ex.Message); }
+        };
         KeyDown += OnKeyDown;
+        DetachedFromVisualTree += (_, _) => StopSpray();
     }
 
     private bool UseCompactLayout => touchLayout || Bounds.Width < 900 || Bounds.Height is > 0 and < 540;
@@ -76,6 +85,7 @@ public partial class MainView : UserControl
             Height = compact ? 44 : 32,
             Padding = new Thickness(10, 4),
             VerticalAlignment = VerticalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
             HorizontalContentAlignment = HorizontalAlignment.Center
         };
         button.Click += (_, _) => action();
@@ -179,7 +189,11 @@ public partial class MainView : UserControl
         var menu = new Menu { Height = small ? 44 : 30, HorizontalAlignment = HorizontalAlignment.Stretch };
         menu.Items.Add(MenuGroup("_File", ("_New|Ctrl+N", New), ("_Open…|Ctrl+O", () => _ = Open()),
             ("_Save…|Ctrl+S", () => _ = Save()), ("Build game cutscene…", () => _ = ExportDisplay()), ("Export frame PNG…", () => _ = Export(false)), ("Export all PNGs…", () => _ = Export(true))));
-        menu.Items.Add(MenuGroup("_Edit", ("_Undo|Ctrl+Z", Undo), ("_Redo|Ctrl+Y", Redo)));
+        menu.Items.Add(MenuGroup("_Edit", ("_Undo|Ctrl+Z", Undo), ("_Redo|Ctrl+Y", Redo),
+            ("Cut artwork|Ctrl+X", () => CopySelection(true)), ("Copy artwork|Ctrl+C", () => CopySelection(false)),
+            ("Paste artwork|Ctrl+V", PasteSelection), ("Select all artwork|Ctrl+A", SelectAllArtwork),
+            ("Delete selected artwork", DeleteSelection), ("Deselect", Deselect),
+            ("Tool options…", EditToolOptions), ("Drawing input…", EditDrawingInput)));
         menu.Items.Add(MenuGroup("F_rame", ("Add frame", () => { editor.AddFrame(false); RefreshAll(); }
         ),
             ("Duplicate frame", () => { editor.AddFrame(true); RefreshAll(); }
@@ -301,14 +315,14 @@ public partial class MainView : UserControl
         var center = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
         if (!small) center.Children.Add(PaneHeader(Pane.Canvas, "Canvas"));
         toolOptions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(8, 5) };
-        AddAt(center, toolOptions, row: 1);
+        AddAt(center, small ? toolOptions : new ScrollViewer { Content = toolOptions, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled }, row: 1);
         var drawing = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
         toolRail = new StackPanel { Name = "ToolRail", Margin = new Thickness(4), Spacing = 3 };
         if (!small) AddAt(drawing, new ScrollViewer { Content = toolRail, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         canvas = new CutsceneCanvas { Focusable = true };
         previous = new CutsceneCanvas { IsHitTestVisible = false };
         canvas.PointerPressed += CanvasPressed; canvas.PointerMoved += CanvasMoved; canvas.PointerReleased += CanvasReleased;
-        canvas.PointerCaptureLost += (_, _) => { dragging = false; shapeStart = null; creatingText = false; canvas.DraftTextBounds = null; canvas.InvalidateVisual(); };
+        canvas.PointerCaptureLost += (_, _) => { StopSpray(); dragging = false; shapeStart = null; creatingText = false; canvas.DraftTextBounds = null; canvas.InvalidateVisual(); };
         canvasPair = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), Margin = new Thickness(12) };
         canvasPair.Children.Add(previous);
         AddAt(canvasPair, new Border { Child = canvas, BorderBrush = Brush("#959BA1"), BorderThickness = new Thickness(1) }, 1);
@@ -379,6 +393,8 @@ public partial class MainView : UserControl
         canvas.Width = previous.Width = editor.Scene.Width; canvas.Height = previous.Height = editor.Scene.Height;
         canvas.OnionSkin = editor.OnionSkin; canvas.OnionOpacity = editor.OnionOpacity;
         canvas.SelectedTextId = editor.SelectedTextId; canvas.ShowTextBounds = true; canvas.InvalidateVisual();
+        if (selection?.Owner != editor.Layer || editor.Tool is not (Tool.Select or Tool.Lasso)) selection = null;
+        canvas.SelectionBounds = selection is null ? null : new Rect(selection.X, selection.Y, selection.Width, selection.Height);
         previous.Scene = editor.Scene; previous.FrameIndex = Math.Max(0, editor.FrameIndex - 1); previous.Language = editor.Language;
         previous.IsVisible = editor.Compare && editor.FrameIndex > 0 && !compact;
         previous.Margin = previous.IsVisible ? new Thickness(0, 0, 8, 0) : default; previous.InvalidateVisual();
@@ -397,25 +413,25 @@ public partial class MainView : UserControl
         if (toolRail is null || toolOptions is null) return;
         toolRail.Children.Clear(); toolOptions.Children.Clear();
         if (compact) { RefreshCompactTools(); return; }
-        var kinds = new[] { PackIconMaterialKind.Pencil, PackIconMaterialKind.Brush, PackIconMaterialKind.Draw, PackIconMaterialKind.Eraser,
-            PackIconMaterialKind.FormatColorFill, PackIconMaterialKind.VectorLine, PackIconMaterialKind.RectangleOutline,
-            PackIconMaterialKind.EllipseOutline, PackIconMaterialKind.Eyedropper, PackIconMaterialKind.FormatText };
         var all = Enum.GetValues<Tool>();
         for (var i = 0; i < all.Length; i++)
         {
             var chosen = all[i];
-            var button = Icon(kinds[i], chosen + (chosen == Tool.Text ? " — drag to create a text area" : ""), () => { editor.Tool = chosen; RefreshTools(); RefreshInspector(); RefreshCanvas(); });
+            var button = Icon(ToolIcon(chosen), ToolName(chosen) + " — " + ToolHelp(chosen), () => ChooseTool(chosen));
             button.Width = button.Height = compact ? 40 : 34;
             if (chosen == editor.Tool) { button.Background = Brush("#BBDDF5"); button.BorderBrush = Brush("#147BC1"); }
             toolRail.Children.Add(button);
         }
-        toolOptions.Children.Add(Label(editor.Tool.ToString(), true));
-        if (editor.Tool is Tool.Pixel or Tool.Smooth or Tool.Pressure or Tool.Eraser)
+        toolOptions.Children.Add(Label(ToolName(editor.Tool), true));
+        if (UsesSize(editor.Tool))
         {
-            var size = new NumericUpDown { Value = editor.BrushSize, Minimum = 1, Maximum = 16, Width = 116, Height = 32, MinHeight = 32 };
+            var size = new NumericUpDown { Value = editor.BrushSize, Minimum = 1, Maximum = 64, Width = 120, Height = 32, MinHeight = 32 };
             size.ValueChanged += (_, _) => editor.BrushSize = (int)(size.Value ?? 1);
             toolOptions.Children.Add(size); ToolTip.SetTip(size, "Brush size in pixels");
         }
+        var options = Icon(PackIconMaterialKind.Tune, "Tool options", EditToolOptions); options.Name = "ToolOptions";
+        toolOptions.Children.Add(options);
+        if (pathBase is not null) toolOptions.Children.Add(Button("Finish", () => FinishPath()));
         var scales = new[] { "Fit", "100%", "200%", "400%", $"{zoom:P0}" }.Distinct().ToArray();
         var scale = new ComboBox
         {
@@ -432,10 +448,10 @@ public partial class MainView : UserControl
         status = Label($"{editor.Scene.Width} × {editor.Scene.Height}"); status.IsVisible = !compact; toolOptions.Children.Add(status);
     }
 
-    private void SelectFrame(int index) { editor.SelectFrame(index); RefreshAll(); }
-    private void Undo() { if (editor.Undo()) { RefreshAll(); RefreshTools(); } }
-    private void Redo() { if (editor.Redo()) { RefreshAll(); RefreshTools(); } }
-    private void New() { editor.Load(CutsceneFile.Write(Cutscene.Create())); Build(compact); }
+    private void SelectFrame(int index) { FinishPath(); selection = null; editor.SelectFrame(index); RefreshAll(); }
+    private void Undo() { if (pathBase is not null) { FinishPath(cancel: true); return; } if (editor.Undo()) { editor.RememberCanvas(); editor.RememberPalette(); RefreshAll(); RefreshTools(); } }
+    private void Redo() { FinishPath(); if (editor.Redo()) { editor.RememberCanvas(); editor.RememberPalette(); RefreshAll(); RefreshTools(); } }
+    private void New() { FinishPath(); selection = null; editor.New(); Build(compact); }
 
     private void ZoomWheel(object? sender, PointerWheelEventArgs e)
     {
@@ -456,6 +472,9 @@ public partial class MainView : UserControl
     {
         if (modal is not null) { if (e.Key == Key.Escape) { CloseModal(); e.Handled = true; } return; }
         var typing = e.Source is Visual visual && (visual is TextBox || visual.GetVisualAncestors().Any(v => v is TextBox or NumericUpDown));
+        if (!typing && e.Key == Key.Escape) { FinishPath(cancel: true); selection = null; RefreshCanvas(); e.Handled = true; return; }
+        if (!typing && e.Key == Key.Enter && pathBase is not null) { FinishPath(); e.Handled = true; return; }
+        if (!typing && e.Key == Key.Delete && selection is not null) { DeleteSelection(); e.Handled = true; return; }
         if (!typing && e.Key == Key.Delete && editor.SelectedText is { } selected)
         {
             editor.BeforeChange(); editor.Frame.TextObjects.Remove(selected); editor.SelectedTextId = null;
@@ -468,6 +487,10 @@ public partial class MainView : UserControl
             else if (e.Key == Key.N) { New(); e.Handled = true; }
             else if (!typing && e.Key == Key.Z) { if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) Redo(); else Undo(); e.Handled = true; }
             else if (!typing && e.Key == Key.Y) { Redo(); e.Handled = true; }
+            else if (!typing && e.Key == Key.C) { CopySelection(false); e.Handled = true; }
+            else if (!typing && e.Key == Key.X) { CopySelection(true); e.Handled = true; }
+            else if (!typing && e.Key == Key.V) { PasteSelection(); e.Handled = true; }
+            else if (!typing && e.Key == Key.A) { SelectAllArtwork(); e.Handled = true; }
         }
         else if (!typing && (e.KeyModifiers.HasFlag(KeyModifiers.Alt) || e.Source == canvas))
         {

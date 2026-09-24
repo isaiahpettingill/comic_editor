@@ -23,6 +23,8 @@ public sealed class CutsceneCanvas : Control
     public string? SelectedTextId { get; set; }
     public bool TextVisible { get; set; } = true;
     public Rect? DraftTextBounds { get; set; }
+    public Rect? SelectionBounds { get; set; }
+    public Point[]? SelectionOutline { get; set; }
 
     public static readonly FontFamily DefaultFont = CutsceneFonts.Resolve("comic-shanns");
 
@@ -41,6 +43,10 @@ public sealed class CutsceneCanvas : Control
             RenderFrame(context, Scene, FrameIndex, Language, TextVisible, ShowTextBounds, SelectedTextId, OnionSkin);
             if (DraftTextBounds is Rect draft)
                 context.DrawRectangle(null, new Pen(Brushes.DodgerBlue, 1), draft);
+            var selectionPen = new Pen(Brushes.DodgerBlue, 1, DashStyle.Dash);
+            if (SelectionBounds is Rect selection) context.DrawRectangle(null, selectionPen, selection);
+            if (SelectionOutline is { Length: > 1 } points)
+                for (var i = 0; i < points.Length; i++) context.DrawLine(selectionPen, points[i], points[(i + 1) % points.Length]);
         }
     }
 

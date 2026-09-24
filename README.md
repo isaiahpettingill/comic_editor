@@ -23,6 +23,8 @@ The release automatically includes this installer and a SHA-256 checksum file. T
 
 Files live under `~/.local/share/comic-editor`, with `comic-editor`, `comic-compile`, and `comic-editor-uninstall` commands in `~/.local/bin`. `XDG_DATA_HOME` and `COMIC_EDITOR_BIN_DIR` can override these locations. If your shell does not include `~/.local/bin` in `PATH`, the installer prints the full command paths; desktop menu launch works independently of `PATH`.
 
+The launcher uses the standard XDG application and icon directories for KDE Plasma, GNOME, XFCE, and other compatible desktops. Run the installer as your desktop user. Updates replace the launcher with a regular `.desktop` file and refresh Plasma's menu cache when `kbuildsycoca6` or `kbuildsycoca5` is available. Re-running the newest installer repairs the older launcher. If installing outside your desktop session, log in again or run `kbuildsycoca6 --noincremental` (Plasma 6) / `kbuildsycoca5 --noincremental` (Plasma 5).
+
 For an offline installation, download both assets from the same release:
 
 ```sh
@@ -51,9 +53,15 @@ dotnet build ComicEditor.Android
 
 Use the storyboard's duplicate icon to create a new frame from the current one. **Alt+Left/Right** selects adjacent frames. **Compare** fits previous and current frames side by side on desktop. **Onion skin** overlays previous artwork, with an adjacent opacity control. Drag pane headers to swap desktop panes and drag dividers to resize them. The conventional menu bar includes File, Edit, Frame, View, Canvas, Palette, and Languages. Undo and Redo buttons remain visible in the toolbar.
 
-Android keeps a touch layout in both portrait and landscape. Draw, Frames, Layers/text, and Colors buttons switch the workspace without permanently stacking panels around the canvas. The current tool icon opens all ten tools; the layers icon beside zoom opens onion-skin settings. The top bar keeps Undo, Redo, the frame count, and the preview language accessible. Small desktop/browser windows use this compact layout too.
+Android keeps a touch layout in both portrait and landscape. Draw, Frames, Layers/text, and Colors buttons switch the workspace without permanently stacking panels around the canvas. The current tool icon opens the tool picker; Options opens the selected tool's settings. The layers icon beside zoom opens onion-skin settings. The top bar keeps Undo, Redo, the frame count, and the preview language accessible. Small desktop/browser windows use this compact layout too.
 
-The vertical Material icon rail provides pixel, smooth, pressure, eraser, fill, line, rectangle, ellipse, eyedropper, and text tools. Brush size appears in the options row for brush tools. **Ctrl+mouse wheel** zooms at the pointer; the zoom selector offers Fit and fixed zoom levels. Indexed artwork uses nearest-neighbor bitmap rendering to avoid seams at fractional zoom.
+The vertical Material icon rail provides pixel, smooth, pressure, eraser, fill, line, rectangle, ellipse, eyedropper, text, spray, rectangular selection, freehand selection, curve, polygon, rounded rectangle, and zoom tools. **Tool options** (the sliders icon on desktop) sets the brush size, tip shape, shape fill, or spray density. Brush tips include round, square, two diagonal tips, horizontal, and vertical. Hold the spray can still to build up paint. Curves start with a dragged line followed by two dragged bends. Polygons accept clicked corners; double-click, Enter, or Finish closes them. Escape cancels an unfinished path.
+
+Drag a selection on the current artwork layer, then drag inside it to move pixels. **Edit** offers copy/cut/paste/delete/select all/deselect; desktop shortcuts are Ctrl+C/X/V/A and Delete. Transparent selected pixels paste transparently. These selections affect artwork, not separate text objects. Selection movement is undoable.
+
+**Edit → Drawing input…** enables mouse/touchpad smoothing for freehand tools. Pen input retains its pressure response; the Smooth brush also smooths pen strokes. **Ctrl+mouse wheel** zooms at the pointer; the zoom selector offers Fit and fixed zoom levels. The Zoom tool uses click to enlarge and right-click or Shift-click to reduce. Indexed artwork uses nearest-neighbor bitmap rendering to avoid seams at fractional zoom.
+
+New text reuses the last applied font, size, bold, and italic style. New projects reuse the latest canvas dimensions and palette. The active color/tool, each tool's size and brush shape, spray density, shape fill, smoothing, preview language, onion skin, comparison, and zoom are remembered across sessions. These preferences are separate from cutscene files, stored in the application's local data directory (`ComicEditor/preferences.json`) or browser local storage.
 
 **Canvas → Resize canvas…** changes every frame's dimensions. Choose Center or Top left anchoring. Enlarging adds transparent pixels; shrinking crops artwork. Text objects move with the chosen anchor. Resizing is undoable and does not resample artwork.
 
@@ -68,6 +76,8 @@ Choose **Text**, then **click and drag** to create its wrapping area. Clicking e
 Bundled fonts include Comic Shanns, Anton, Permanent Marker, and Noto Sans. Noto fallback families cover Latin, Greek, Cyrillic, Arabic, Hebrew, Devanagari, Thai, and CJK characters. Paste any Google Fonts specimen/CSS link into the text properties to load its family. The editing file stores `google:<family>` rather than font bytes. Custom system fonts use `system:<family>` and must be installed on editing/compiler machines. Compiled game assets need no fonts. The editor reports unavailable custom fonts and previews with Noto instead. Font licenses and download hashes are in `licenses/` and `ComicEditor/Assets/Fonts/sources.json`.
 
 Undo/redo covers artwork, palette edits, frame and layer operations, translation edits, language management, text properties, and canvas resizing. The desktop title displays the filename and an asterisk for unsaved changes.
+
+**File → Export frame PNG… / Export all PNGs…** lets you choose any project language without changing the preview. Each PNG is indexed (color type 3) with exactly the distinct RGB colors visible in that image, merging duplicate colors and dropping unused palette entries. Exports use crisp text edges and a white background; no antialias shades or selection markers are added. Each frame gets its own minimal palette and the smallest supported PNG bit depth. The editable project palette stays unchanged.
 
 ## Browser / WebAssembly
 

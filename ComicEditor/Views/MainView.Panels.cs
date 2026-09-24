@@ -233,7 +233,7 @@ public partial class MainView
 
     private void AddText()
     {
-        editor.BeforeChange(); var obj = new TextObject { Key = editor.NewTextKey() };
+        editor.BeforeChange(); var obj = editor.CreateText();
         editor.Frame.TextObjects.Add(obj); editor.SelectedTextId = obj.Id; editor.Tool = Tool.Text; RefreshAll(); RefreshTools();
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {

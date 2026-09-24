@@ -2,6 +2,7 @@ using Avalonia;
 using Google.Protobuf;
 using System.IO.Compression;
 using Avalonia.Controls;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
@@ -17,7 +18,7 @@ public partial class MainView
         hex = hex.Trim().ToUpperInvariant();
         if (hex.Length != 7 || hex[0] != '#' || !hex[1..].All(Uri.IsHexDigit) ||
             hex == editor.Scene.Palette[index]) return;
-        editor.BeforeChange(); editor.Scene.Palette[index] = hex; RefreshAll();
+        editor.BeforeChange(); editor.Scene.Palette[index] = hex; editor.RememberPalette(); RefreshAll();
     }
 
     private async Task Open()
@@ -41,6 +42,7 @@ public partial class MainView
 
     private async Task Save()
     {
+        FinishPath();
         var storage = TopLevel.GetTopLevel(this)?.StorageProvider; if (storage is null) return;
         var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
         {
@@ -62,6 +64,7 @@ public partial class MainView
 
     private async Task ExportDisplay()
     {
+        FinishPath();
         var storage = TopLevel.GetTopLevel(this)?.StorageProvider; if (storage is null) return;
         var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
         {
@@ -81,9 +84,32 @@ public partial class MainView
         catch (Exception ex) { await ShowError(ex.Message); }
     }
 
-    private async Task Export(bool all)
+    private Task Export(bool all)
+    {
+        FinishPath();
+        var languages = editor.Scene.Translations.Keys.Order().ToArray();
+        var language = new ComboBox { Name = "ExportLanguage", ItemsSource = languages, SelectedItem = editor.Language, HorizontalAlignment = HorizontalAlignment.Stretch };
+        if (language.SelectedIndex < 0 && languages.Length > 0) language.SelectedIndex = 0;
+        ShowModal(all ? "Export all frames as indexed PNGs" : "Export indexed PNG", new StackPanel
+        {
+            Spacing = 10,
+            Children =
+        {
+            Label("Language"), language,
+            Label("Crisp text edges, white background, and only the colors visible in each image. The preview language stays unchanged.")
+        }
+        }, () =>
+        {
+            var chosen = language.SelectedItem as string ?? "und"; CloseModal(); _ = ExportPngFiles(all, chosen);
+        }, "Export");
+        return Task.CompletedTask;
+    }
+
+    private async Task ExportPngFiles(bool all, string language)
     {
         var storage = TopLevel.GetTopLevel(this)?.StorageProvider; if (storage is null) return;
+        try { await CutsceneFonts.EnsureAsync(editor.Scene); }
+        catch (Exception ex) { await ShowError(ex.Message); return; }
         if (all)
         {
             if (OperatingSystem.IsBrowser() || !storage.CanPickFolder)
@@ -91,7 +117,7 @@ public partial class MainView
                 var archive = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
                 {
                     Title = "Export all frames",
-                    SuggestedFileName = $"frames-{editor.Language}.zip",
+                    SuggestedFileName = $"frames-{language}.zip",
                     DefaultExtension = "zip",
                     FileTypeChoices = [new FilePickerFileType("PNG archive") { Patterns = ["*.zip"] }]
                 });
@@ -99,11 +125,12 @@ public partial class MainView
                 try
                 {
                     await using var output = await archive.OpenWriteAsync();
+                    if (output.CanSeek) output.SetLength(0);
                     using var zip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true);
                     for (var i = 0; i < editor.Scene.Frames.Count; i++)
                     {
-                        using var entry = zip.CreateEntry($"frame-{i + 1:D4}-{editor.Language}.png").Open();
-                        RenderPng(entry, i);
+                        using var entry = zip.CreateEntry($"frame-{i + 1:D4}-{language}.png").Open();
+                        RenderPng(entry, i, language);
                     }
                 }
                 catch (Exception ex) { await ShowError(ex.Message); }
@@ -115,8 +142,8 @@ public partial class MainView
             {
                 for (var i = 0; i < editor.Scene.Frames.Count; i++)
                 {
-                    var file = await folders[0].CreateFileAsync($"frame-{i + 1:D4}-{editor.Language}.png"); if (file is null) continue;
-                    await using var stream = await file.OpenWriteAsync(); RenderPng(stream, i);
+                    var file = await folders[0].CreateFileAsync($"frame-{i + 1:D4}-{language}.png"); if (file is null) continue;
+                    await using var stream = await file.OpenWriteAsync(); RenderPng(stream, i, language);
                 }
             }
             catch (Exception ex) { await ShowError(ex.Message); }
@@ -126,22 +153,20 @@ public partial class MainView
             var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Export frame",
-                SuggestedFileName = $"frame-{editor.FrameIndex + 1:D4}-{editor.Language}.png",
+                SuggestedFileName = $"frame-{editor.FrameIndex + 1:D4}-{language}.png",
                 DefaultExtension = "png",
                 FileTypeChoices = [new FilePickerFileType("PNG image") { Patterns = ["*.png"] }]
             });
             if (file is null) return;
-            try { await using var stream = await file.OpenWriteAsync(); RenderPng(stream, editor.FrameIndex); }
+            try { await using var stream = await file.OpenWriteAsync(); RenderPng(stream, editor.FrameIndex, language); }
             catch (Exception ex) { await ShowError(ex.Message); }
         }
     }
 
-    private void RenderPng(Stream stream, int frame)
+    private void RenderPng(Stream stream, int frame, string language)
     {
-        var view = new CutsceneCanvas { Scene = editor.Scene, FrameIndex = frame, Language = editor.Language, Width = editor.Scene.Width, Height = editor.Scene.Height };
-        view.Measure(new Size(view.Width, view.Height)); view.Arrange(new Rect(view.DesiredSize));
-        using var bitmap = new RenderTargetBitmap(new PixelSize(editor.Scene.Width, editor.Scene.Height));
-        bitmap.Render(view); bitmap.Save(stream, PngBitmapEncoderOptions.Default);
+        if (stream.CanSeek) stream.SetLength(0);
+        PngExporter.Write(stream, editor.Scene, frame, language);
     }
 
     private Task ShowError(string message)

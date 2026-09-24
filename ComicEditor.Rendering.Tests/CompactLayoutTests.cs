@@ -77,7 +77,7 @@ public partial class CanvasTests
             var picker = Named<Button>(window, "CompactToolPicker"); Click(window, picker);
             var flyout = Assert.IsType<Flyout>(picker.Flyout);
             var choices = Assert.IsType<Grid>(Assert.IsType<ScrollViewer>(flyout.Content).Content);
-            Assert.Equal(10, choices.Children.Count);
+            Assert.Equal(Enum.GetValues<Tool>().Length, choices.Children.Count);
             var text = choices.Children.OfType<Button>().Single(b => b.Name == "CompactToolText");
             text.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); _ = Capture(window);
             Assert.Equal(Tool.Text, state.Tool);

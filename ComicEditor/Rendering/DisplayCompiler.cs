@@ -47,7 +47,7 @@ public static class DisplayCompiler
         return result;
     }
 
-    private static TextRaster? Rasterize(Cutscene scene, TextObject obj, string text, string language)
+    internal static TextRaster? Rasterize(Cutscene scene, TextObject obj, string text, string language)
     {
         var left = Math.Clamp((int)Math.Floor(obj.X), 0, scene.Width);
         var top = Math.Clamp((int)Math.Floor(obj.Y), 0, scene.Height);

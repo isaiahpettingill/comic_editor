@@ -56,32 +56,27 @@ public partial class MainView
         if (toolOptions is null) return;
         toolOptions.Margin = new Thickness(4, 2);
         toolOptions.Spacing = 4;
-        var kinds = new[] { PackIconMaterialKind.Pencil, PackIconMaterialKind.Brush, PackIconMaterialKind.Draw, PackIconMaterialKind.Eraser,
-            PackIconMaterialKind.FormatColorFill, PackIconMaterialKind.VectorLine, PackIconMaterialKind.RectangleOutline,
-            PackIconMaterialKind.EllipseOutline, PackIconMaterialKind.Eyedropper, PackIconMaterialKind.FormatText };
-        var choices = new Grid { Name = "CompactToolChoices", ColumnDefinitions = new ColumnDefinitions("*,*"), RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto") };
+        var choices = new Grid { Name = "CompactToolChoices", ColumnDefinitions = new ColumnDefinitions("*,*") };
+        for (var i = 0; i < (Enum.GetValues<Tool>().Length + 1) / 2; i++) choices.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         var toolScroll = new ScrollViewer { Content = choices, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var flyout = new Flyout { Content = toolScroll };
         flyout.Opening += (_, _) => toolScroll.MaxHeight = Math.Max(88, Bounds.Height - 100);
         foreach (var tool in Enum.GetValues<Tool>())
         {
-            var button = Button("", () => { flyout.Hide(); editor.Tool = tool; RefreshTools(); RefreshInspector(); RefreshCanvas(); });
+            var button = Button("", () => { flyout.Hide(); ChooseTool(tool); });
             button.Name = "CompactTool" + tool;
-            button.Content = Row(new PackIconMaterial { Kind = kinds[(int)tool], Width = 22, Height = 22 }, Label(tool.ToString()));
+            var caption = Label(ToolName(tool)); caption.FontSize = 12;
+            button.Content = Row(new PackIconMaterial { Kind = ToolIcon(tool), Width = 22, Height = 22 }, caption);
             button.Width = 140; button.Margin = new Thickness(2);
             if (tool == editor.Tool) button.Background = Brush("#BBDDF5");
             AddAt(choices, button, (int)tool % 2, (int)tool / 2);
         }
-        var chooseTool = Icon(kinds[(int)editor.Tool], "Choose drawing tool: " + editor.Tool, () => { });
+        var chooseTool = Icon(ToolIcon(editor.Tool), "Choose drawing tool: " + ToolName(editor.Tool), () => { });
         chooseTool.Name = "CompactToolPicker"; chooseTool.Flyout = flyout;
         toolOptions.Children.Add(chooseTool);
-        if (editor.Tool is Tool.Pixel or Tool.Smooth or Tool.Pressure or Tool.Eraser)
-        {
-            var size = new NumericUpDown { Name = "CompactBrushSize", Value = editor.BrushSize, Minimum = 1, Maximum = 16, Width = 112, Height = 44, MinHeight = 44 };
-            size.ValueChanged += (_, _) => editor.BrushSize = (int)(size.Value ?? 1);
-            Avalonia.Automation.AutomationProperties.SetName(size, "Brush size in pixels");
-            toolOptions.Children.Add(size);
-        }
+        var options = Button(pathBase is not null ? "Finish" : UsesSize(editor.Tool) ? $"{editor.BrushSize}px · Options" : "Options", () => { if (pathBase is not null) FinishPath(); else EditToolOptions(); });
+        options.Width = 112; options.Padding = new Thickness(4); options.FontSize = 12; options.Name = "ToolOptions";
+        toolOptions.Children.Add(options);
         var scales = new[] { "Fit", "100%", "200%", "400%", $"{zoom:P0}" }.Distinct().ToArray();
         var scale = new ComboBox { Name = "CompactZoom", ItemsSource = scales, SelectedItem = zoom == 0 ? "Fit" : $"{zoom:P0}", Width = 84, Height = 44, MinHeight = 44, Padding = new Thickness(6, 3) };
         Avalonia.Automation.AutomationProperties.SetName(scale, "Canvas zoom");

@@ -75,6 +75,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertEqual(self.command("comic-compile", "a b"), "compiler:a b\n")
         desktop = self.data / "applications/org.comiceditor.storyboard.desktop"
         self.assertTrue(desktop.is_file())
+        self.assertFalse(desktop.is_symlink())
         self.assertIn('Exec="', desktop.read_text())
         self.assertIn(r"\\$", desktop.read_text())
         self.assertTrue(
@@ -105,6 +106,58 @@ class LinuxInstallerTests(unittest.TestCase):
         )
         self.assertIn("checksum mismatch", result.stderr)
         self.assertEqual(self.command("comic-editor"), "one:\n")
+
+    def test_migrates_old_desktop_symlink_and_refreshes_plasma(self):
+        mock_bin = self.base / "mock"
+        mock_bin.mkdir()
+        log = self.base / "menu-refresh"
+        for name in [
+            "kbuildsycoca6",
+            "kbuildsycoca5",
+            "update-desktop-database",
+            "gtk-update-icon-cache",
+        ]:
+            tool = mock_bin / name
+            tool.write_text(
+                '#!/bin/sh\nprintf "%s:%s\\n" "${0##*/}" "$*" >> "$REFRESH_LOG"\n'
+            )
+            tool.chmod(0o755)
+        self.env.update(
+            PATH=str(mock_bin) + ":" + os.environ["PATH"], REFRESH_LOG=str(log)
+        )
+        self.run_installer("--archive", self.archive)
+        desktop = self.data / "applications/org.comiceditor.storyboard.desktop"
+        desktop.unlink()
+        desktop.symlink_to(self.root / "comic-editor.desktop")
+        self.run_installer("--archive", self.archive)
+        self.assertFalse(desktop.is_symlink())
+        self.assertIn("Categories=Graphics;2DGraphics;", desktop.read_text())
+        self.assertNotIn("OnlyShowIn", desktop.read_text())
+        self.assertNotIn("NoDisplay", desktop.read_text())
+        self.assertIn("kbuildsycoca6:--noincremental", log.read_text())
+        self.assertNotIn("kbuildsycoca5:", log.read_text())
+        self.assertIn("update-desktop-database:", log.read_text())
+        self.command("comic-editor-uninstall")
+        self.assertFalse(desktop.exists())
+        self.assertEqual(log.read_text().count("kbuildsycoca6:"), 3)
+
+    def test_plasma5_refresh_fallback_and_user_edited_desktop_is_preserved(self):
+        mock_bin = self.base / "mock"
+        mock_bin.mkdir()
+        log = self.base / "menu-refresh"
+        tool = mock_bin / "kbuildsycoca5"
+        tool.write_text('#!/bin/sh\nprintf "%s" "$*" > "$REFRESH_LOG"\n')
+        tool.chmod(0o755)
+        self.env.update(
+            PATH=str(mock_bin) + ":" + os.environ["PATH"], REFRESH_LOG=str(log)
+        )
+        self.run_installer("--archive", self.archive)
+        self.assertEqual(log.read_text(), "--noincremental")
+        desktop = self.data / "applications/org.comiceditor.storyboard.desktop"
+        desktop.write_text("user replacement")
+        self.run_installer("--archive", self.archive, success=False)
+        self.command("comic-editor-uninstall")
+        self.assertEqual(desktop.read_text(), "user replacement")
 
     def test_unrelated_command_is_not_overwritten(self):
         self.bin.mkdir()

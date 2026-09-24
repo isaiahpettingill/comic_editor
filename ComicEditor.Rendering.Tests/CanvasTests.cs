@@ -35,6 +35,8 @@ public sealed class TestApp : Application
     public override void Initialize()
 
     {
+        PreferencesStorage.Read = () => null;
+        PreferencesStorage.Write = _ => { };
 
         Styles.Add(new FluentTheme());
 
@@ -338,7 +340,7 @@ public partial class CanvasTests
 
             var tools = Named<StackPanel>(window, "ToolRail").Children;
 
-            Assert.Equal(10, tools.Count);
+            Assert.Equal(Enum.GetValues<Tool>().Length, tools.Count);
 
             Assert.Single(tools.Select(c => c.Bounds.X).Distinct());
 
@@ -485,10 +487,10 @@ public partial class CanvasTests
             canvas.Focus(); window.KeyPress(Key.Delete, RawInputModifiers.None, PhysicalKey.Delete, null); window.KeyRelease(Key.Delete, RawInputModifiers.None, PhysicalKey.Delete, null); _ = Capture(window);
             Assert.Empty(state.Frame.TextObjects); Assert.True(state.Undo()); Assert.Single(state.Frame.TextObjects);
             window.MouseWheel(start, new Vector(0, 1), RawInputModifiers.Control); _ = Capture(window);
-            var zoom = (double)typeof(MainView).GetField("zoom", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(view)!;
+            var zoom = state.Preferences.Zoom;
             Assert.True(zoom > 0);
             window.MouseWheel(start, new Vector(0, -1), RawInputModifiers.Control); _ = Capture(window);
-            var smaller = (double)typeof(MainView).GetField("zoom", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(view)!;
+            var smaller = state.Preferences.Zoom;
             Assert.True(smaller < zoom); window.Close();
         }, CancellationToken.None);
     }

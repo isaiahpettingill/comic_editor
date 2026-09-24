@@ -58,14 +58,29 @@ fi
 
 destinations=("$bin_home/comic-editor" "$bin_home/comic-compile" "$bin_home/comic-editor-uninstall" "$desktop" "$icon")
 targets=("$root/launch" "$root/compile" "$root/uninstall" "$root/comic-editor.desktop" "$root/current/comic-editor.svg")
+owned_destination() {
+    local destination="$1" target="$2"
+    if [[ -L "$destination" && $(readlink -- "$destination") == "$target" ]]; then return 0; fi
+    [[ "$destination" == "$desktop" && ! -L "$destination" && -f "$destination" && -f "$target" ]] && cmp -s -- "$destination" "$target"
+}
 refresh_desktop() {
     if command -v update-desktop-database >/dev/null; then update-desktop-database "$data_home/applications" >/dev/null 2>&1 || true; fi
     if command -v gtk-update-icon-cache >/dev/null; then gtk-update-icon-cache -f -t "$data_home/icons/hicolor" >/dev/null 2>&1 || true; fi
+    # update-desktop-database updates MIME associations, not Plasma's application menu.
+    local cache_tool
+    for cache_tool in kbuildsycoca6 kbuildsycoca5; do
+        if command -v "$cache_tool" >/dev/null; then
+            if ! "$cache_tool" --noincremental > /dev/null 2>&1; then
+                printf 'Plasma menu refresh was unavailable. Run %s --noincremental in your desktop session.\n' "$cache_tool" >&2
+            fi
+            break
+        fi
+    done
 }
 if "$uninstall"; then
     [[ -d "$root" ]] || { printf 'ComicEditor is not installed here.\n'; exit 0; }
     for i in "${!destinations[@]}"; do
-        if [[ -L "${destinations[i]}" && $(readlink -- "${destinations[i]}") == "${targets[i]}" ]]; then
+        if owned_destination "${destinations[i]}" "${targets[i]}"; then
             rm -- "${destinations[i]}"
         fi
     done
@@ -79,7 +94,7 @@ for tool in tar sha256sum mktemp install readlink; do command -v "$tool" >/dev/n
 for i in "${!destinations[@]}"; do
     destination="${destinations[i]}"
     if [[ -e "$destination" || -L "$destination" ]]; then
-        [[ -L "$destination" && $(readlink -- "$destination") == "${targets[i]}" ]] || die "Refusing to replace an unrelated file: $destination"
+        owned_destination "$destination" "${targets[i]}" || die "Refusing to replace an unrelated file: $destination"
     fi
 done
 
@@ -150,6 +165,7 @@ cat > "$root/comic-editor.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=ComicEditor
+GenericName=Cutscene Editor
 Comment=Draw and localize game cutscenes
 Exec="$exec_path"
 Icon=org.comiceditor.storyboard
@@ -157,10 +173,16 @@ Terminal=false
 Categories=Graphics;2DGraphics;
 Keywords=cutscene;storyboard;drawing;localization;
 StartupNotify=true
+X-ComicEditor-Managed=true
 EOF
 chmod 644 "$root/comic-editor.desktop"
 for i in "${!destinations[@]}"; do
-    ln -s -- "${targets[i]}" "$stage/link"
+    if [[ "${destinations[i]}" == "$desktop" ]]; then
+        # Install a regular entry in applications so desktop directory watchers see updates.
+        install -m 644 -- "$root/comic-editor.desktop" "$stage/link"
+    else
+        ln -s -- "${targets[i]}" "$stage/link"
+    fi
     mv -Tf -- "$stage/link" "${destinations[i]}"
 done
 refresh_desktop
@@ -170,4 +192,4 @@ if [[ "$old" == "$root/releases/"*/app && "$old" != "$version/app" ]]; then
     [[ $(dirname "$previous") == "$root/releases" && ! -L "$previous" ]] && rm -rf -- "$previous"
 fi
 printf 'Installed ComicEditor. Open it from your application menu or run:\n  %s\nCLI: %s\nUninstall: %s\n' "$bin_home/comic-editor" "$bin_home/comic-compile" "$bin_home/comic-editor-uninstall"
-case ":$PATH:" in *":$bin_home:"*) ;; *) printf 'For terminal commands, add %s to PATH. The desktop menu works immediately.\n' "$bin_home" ;; esac
+case ":$PATH:" in *":$bin_home:"*) ;; *) printf 'For terminal commands, add %s to PATH.\n' "$bin_home" ;; esac

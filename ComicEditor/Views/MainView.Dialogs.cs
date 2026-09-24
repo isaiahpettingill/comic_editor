@@ -10,6 +10,19 @@ namespace ComicEditor.Views;
 
 public partial class MainView
 {
+    private void EditDrawingInput()
+    {
+        var smooth = new CheckBox { Name = "SmoothMouse", Content = "Smooth mouse / touchpad strokes", IsChecked = editor.Preferences.SmoothMouse };
+        ShowModal("Drawing input", new StackPanel
+        {
+            Spacing = 12,
+            Children =
+        {
+            smooth, Label("Reduces small wobbles in freehand strokes. Pen input keeps its normal pressure response. Pixel edges stay crisp.")
+        }
+        }, () => { editor.Preferences.SmoothMouse = smooth.IsChecked == true; editor.Preferences.Save(); CloseModal(); });
+    }
+
     private void ResizeCanvas()
     {
         var width = new NumericUpDown { Name = "CanvasWidth", Value = editor.Scene.Width, Minimum = 1, Maximum = 2048, Height = 34 };
@@ -33,7 +46,7 @@ public partial class MainView
             if (width.Value is not decimal w || height.Value is not decimal h) return;
             if ((int)w != editor.Scene.Width || (int)h != editor.Scene.Height)
             { editor.BeforeChange(); editor.Scene.ResizeCanvas((int)w, (int)h, anchor.SelectedIndex == 0); }
-            CloseModal(); RefreshAll(); RefreshTools();
+            selection = null; editor.RememberCanvas(); CloseModal(); RefreshAll(); RefreshTools();
         }, "Resize");
     }
 
@@ -159,7 +172,9 @@ public partial class MainView
             editor.BeforeChange(); obj.X = (double)x.Value!.Value; obj.Y = (double)y.Value!.Value;
             obj.Width = (double)width.Value!.Value; obj.Height = (double)height.Value!.Value; obj.FontSize = (double)size.Value!.Value;
             obj.FontId = FontId(); obj.Color = color.SelectedIndex;
+            editor.Color = obj.Color;
             obj.Bold = bold.IsChecked == true; obj.Italic = italic.IsChecked == true;
+            editor.Preferences.Remember(obj);
             CloseModal(); RefreshAll();
         });
     }

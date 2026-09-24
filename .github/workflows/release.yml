@@ -18,6 +18,10 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test tools/test-release-signing.mjs
       - run: dotnet test ComicEditor.Format.Tests/ComicEditor.Format.Tests.csproj --configuration Release
       - run: dotnet test ComicEditor.Rendering.Tests/ComicEditor.Rendering.Tests.csproj --configuration Release
       - name: Test Linux installer
@@ -52,11 +56,27 @@ jobs:
         run: dotnet publish ComicEditor.Desktop/ComicEditor.Desktop.csproj -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o artifacts/${{ matrix.rid }}
       - name: Publish CLI compiler
         run: dotnet publish ComicEditor.Cli/ComicEditor.Cli.csproj -c Release -r ${{ matrix.rid }} -o artifacts/${{ matrix.rid }}/compiler
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Sign desktop and compiler binaries
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        env:
+          DESKTOP_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_SIGNING_PRIVATE_KEY }}
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          node tools/release-signing.mjs sign "artifacts/${{ matrix.rid }}/ComicEditor.Desktop$suffix" "artifacts/${{ matrix.rid }}/compiler/comic-compile$suffix"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:COMIC_TEST_SIGNED_BINARY = (Resolve-Path "artifacts/${{ matrix.rid }}/ComicEditor.Desktop$suffix").Path
+          dotnet test ComicEditor.Rendering.Tests -c Release --filter VerifyPublishedDesktopSignature
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Add licenses and schema
         shell: bash
         run: |
           cp LICENSE artifacts/${{ matrix.rid }}/
           cp -r licenses docs artifacts/${{ matrix.rid }}/
+          cp -r signing artifacts/${{ matrix.rid }}/
           cp licenses/Comic-Shanns-MIT.txt artifacts/${{ matrix.rid }}/
           cp licenses/IconPacks-MIT.txt artifacts/${{ matrix.rid }}/
           cp licenses/MaterialDesignIcons-LICENSE.txt artifacts/${{ matrix.rid }}/
@@ -102,11 +122,6 @@ jobs:
           $env:COMIC_TEST_SETUP = (Resolve-Path ComicEditor-win-x64-setup.exe).Path
           $env:COMIC_TEST_SETUP_PAYLOAD = (Resolve-Path artifacts/win-x64).Path
           dotnet test ComicEditor.Rendering.Tests -c Release --filter RealNsisPackageStagesAndSwapsThroughTheUpdater
-      - uses: actions/upload-artifact@v4
-        if: runner.os == 'Windows'
-        with:
-          name: windows-installer
-          path: ComicEditor-win-x64-setup.exe
       - name: Archive Unix build
         if: runner.os != 'Windows'
         shell: bash
@@ -114,13 +129,30 @@ jobs:
       - name: Package Linux installer
         if: runner.os == 'Linux'
         run: python3 tools/package-linux-installer.py
+      - name: Sign desktop release packages
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        env:
+          DESKTOP_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_SIGNING_PRIVATE_KEY }}
+        run: |
+          $files = @(Get-ChildItem -File 'ComicEditor-${{ matrix.rid }}.*' | Where-Object { $_.Extension -ne '.sig' } | ForEach-Object FullName)
+          if ($IsLinux) { $files += (Resolve-Path install-comic-editor.sh).Path }
+          node tools/release-signing.mjs sign @files
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: windows-installer
+          path: ComicEditor-win-x64-setup.exe*
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Linux'
         with:
           name: linux-installer
           path: |
             install-comic-editor.sh
+            install-comic-editor.sh.sig
             ComicEditor-linux-x64.tar.gz.sha256
+            ComicEditor-linux-x64.tar.gz.sha256.sig
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.rid }}
@@ -196,6 +228,18 @@ jobs:
             -p:AndroidSigningKeyPass="$ANDROID_KEY_PASSWORD"
           find ComicEditor.Android/bin/Release -name '*-Signed.apk' -exec cp '{}' ComicEditor-android-arm64.apk \;
           test -s ComicEditor-android-arm64.apk
+      - name: Verify Android release identity
+        shell: bash
+        run: |
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$apksigner" verify --verbose --print-certs ComicEditor-android-arm64.apk | tee "$RUNNER_TEMP/apk-signature.txt"
+          expected=$(tr -d '\r\n' < signing/android-certificate.sha256)
+          actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-signature.txt")
+          test "$actual" = "$expected"
+      - name: Remove temporary Android keystore
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/release.keystore"
       - uses: actions/upload-artifact@v4
         with:
           name: android-arm64
@@ -209,10 +253,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Require and verify all desktop release signatures
+        shell: bash
+        run: |
+          node tools/release-signing.mjs verify dist/ComicEditor-win-x64.zip dist/ComicEditor-win-x64-setup.exe dist/ComicEditor-linux-x64.tar.gz dist/ComicEditor-osx-x64.tar.gz dist/ComicEditor-osx-arm64.tar.gz dist/install-comic-editor.sh
+          cp signing/desktop-public.pem dist/
+          cp signing/android-certificate.sha256 dist/
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

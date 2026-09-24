@@ -57,6 +57,11 @@ public static class ReleaseClient
                 throw new InvalidDataException("The release does not include a valid download checksum and size. Try again after publication finishes.");
             var expected = $"https://github.com/{Repository}/releases/download/{tag}/{name}";
             if (asset.GetProperty("browser_download_url").GetString() != expected) throw new InvalidDataException("The release download is outside the expected repository.");
+            var hasSignature = root.GetProperty("assets").EnumerateArray().Any(candidate =>
+                candidate.GetProperty("name").GetString() == name + ".sig" &&
+                candidate.GetProperty("size").GetInt64() == ReleaseSignature.Size &&
+                candidate.GetProperty("browser_download_url").GetString() == expected + ".sig");
+            if (!hasSignature) throw new InvalidDataException("The release signature is missing. Try again after publication finishes.");
             return new(version, installation.Runtime, name, new Uri(expected), digest[7..], size);
         }
         throw new InvalidDataException("The new release does not yet have a package for this platform. Try again shortly.");
@@ -68,7 +73,10 @@ public static class ReleaseClient
         var json = await (client ?? Client).GetStringAsync($"https://api.github.com/repos/{Repository}/releases/latest", timeout.Token);
         return Select(json, installation);
     }
-    public static async Task<string> Download(UpdateRelease release, string directory, IProgress<double>? progress = null, CancellationToken cancellation = default, HttpClient? client = null)
+    public static Task<string> Download(UpdateRelease release, string directory, IProgress<double>? progress = null, CancellationToken cancellation = default, HttpClient? client = null)
+        => DownloadSigned(release, directory, ReleaseSignature.PublicKey, progress, cancellation, client);
+
+    internal static async Task<string> DownloadSigned(UpdateRelease release, string directory, string publicKey, IProgress<double>? progress = null, CancellationToken cancellation = default, HttpClient? client = null)
     {
         if (release.AssetName != AssetName(release.Runtime)) throw new InvalidDataException("Unexpected update asset name.");
         Directory.CreateDirectory(directory);
@@ -76,6 +84,7 @@ public static class ReleaseClient
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation); timeout.CancelAfter(TimeSpan.FromMinutes(15));
         try
         {
+            byte[] digest;
             using var response = await (client ?? Client).GetAsync(release.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             response.EnsureSuccessStatusCode();
             await using (var source = await response.Content.ReadAsStreamAsync(timeout.Token))
@@ -91,9 +100,17 @@ public static class ReleaseClient
                     hash.AppendData(buffer, 0, count); await output.WriteAsync(buffer.AsMemory(0, count), timeout.Token);
                     progress?.Report((double)total / release.Size);
                 }
-                if (total != release.Size || !Convert.ToHexString(hash.GetHashAndReset()).Equals(release.Sha256, StringComparison.OrdinalIgnoreCase))
+                digest = hash.GetHashAndReset();
+                if (total != release.Size || !Convert.ToHexString(digest).Equals(release.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Update verification failed. The installed application has not changed.");
             }
+            using var signed = await (client ?? Client).GetAsync(new Uri(release.DownloadUrl.AbsoluteUri + ".sig"), HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            signed.EnsureSuccessStatusCode();
+            await using var signatureStream = await signed.Content.ReadAsStreamAsync(timeout.Token);
+            var signature = new byte[ReleaseSignature.Size + 1];
+            var length = await signatureStream.ReadAtLeastAsync(signature, signature.Length, throwOnEndOfStream: false, timeout.Token);
+            if (length != ReleaseSignature.Size) throw new InvalidDataException("The update signature has an invalid length.");
+            ReleaseSignature.Verify(digest, signature[..length], publicKey);
             File.Move(temporary, destination, overwrite: true); return destination;
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }

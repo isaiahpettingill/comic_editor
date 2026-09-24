@@ -12,6 +12,27 @@ namespace ComicEditor.Rendering.Tests;
 
 public class UpdaterTests
 {
+    private sealed class SignedBinaryFactAttribute : FactAttribute
+    {
+        public SignedBinaryFactAttribute()
+        {
+            if (Environment.GetEnvironmentVariable("COMIC_TEST_SIGNED_BINARY") is null)
+                Skip = "Requires a release executable signed by the CI signing step.";
+        }
+    }
+
+    [SignedBinaryFact]
+    public void VerifyPublishedDesktopSignature()
+    {
+        var path = Environment.GetEnvironmentVariable("COMIC_TEST_SIGNED_BINARY")!;
+        using var file = File.OpenRead(path);
+        var hash = SHA256.HashData(file);
+        var signature = File.ReadAllBytes(path + ".sig");
+        ReleaseSignature.Verify(hash, signature, ReleaseSignature.PublicKey);
+        hash[0] ^= 1;
+        Assert.Throws<InvalidDataException>(() => ReleaseSignature.Verify(hash, signature, ReleaseSignature.PublicKey));
+    }
+
     private sealed class WindowsInstallerFactAttribute : FactAttribute
     {
         public WindowsInstallerFactAttribute()
@@ -67,6 +88,11 @@ public class UpdaterTests
                 ["size"] = bytes.Length,
                 ["digest"] = "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)),
                 ["browser_download_url"] = $"https://github.com/{ReleaseClient.Repository}/releases/download/v1.2.3/{name}"
+            }, new JsonObject
+            {
+                ["name"] = name + ".sig",
+                ["size"] = ReleaseSignature.Size,
+                ["browser_download_url"] = $"https://github.com/{ReleaseClient.Repository}/releases/download/v1.2.3/{name}.sig"
             })
         };
     }
@@ -120,10 +146,12 @@ public class UpdaterTests
         var release = Release("win-x64", [1]); release["assets"]![0]![key] = value;
         Assert.Throws<InvalidDataException>(() => ReleaseClient.Select(release.ToJsonString(), new(new Version(1, 0), "win-x64")));
     }
-    private sealed class Handler(byte[] bytes) : HttpMessageHandler
+    private sealed class Handler(byte[] bytes, byte[] signature, HttpStatusCode signatureStatus = HttpStatusCode.OK) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
+            => Task.FromResult(request.RequestUri!.AbsolutePath.EndsWith(".sig", StringComparison.Ordinal)
+                ? new HttpResponseMessage(signatureStatus) { Content = new ByteArrayContent(signature) }
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
     }
     [Theory]
     [InlineData(false, 3)]
@@ -133,11 +161,45 @@ public class UpdaterTests
     public async Task DownloadsVerifyDigestAndLengthAndCleanPartialFiles(bool corrupt, long size)
     {
         using var temp = new Temporary(); byte[] bytes = [1, 2, 3];
-        using var http = new HttpClient(new Handler(bytes));
+        using var rsa = RSA.Create(3072);
+        using var http = new HttpClient(new Handler(bytes, rsa.SignData(bytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pss)));
         var release = new UpdateRelease(new Version(1, 2, 3), "win-x64", ReleaseClient.AssetName("win-x64")!, new Uri("https://example.test/package"), corrupt ? new string('0', 64) : Convert.ToHexString(SHA256.HashData(bytes)), size);
-        if (corrupt || size != bytes.Length) await Assert.ThrowsAsync<InvalidDataException>(() => ReleaseClient.Download(release, temp.Root, client: http));
-        else Assert.Equal(bytes, await File.ReadAllBytesAsync(await ReleaseClient.Download(release, temp.Root, client: http)));
+        if (corrupt || size != bytes.Length) await Assert.ThrowsAsync<InvalidDataException>(() => ReleaseClient.DownloadSigned(release, temp.Root, rsa.ExportSubjectPublicKeyInfoPem(), client: http));
+        else Assert.Equal(bytes, await File.ReadAllBytesAsync(await ReleaseClient.DownloadSigned(release, temp.Root, rsa.ExportSubjectPublicKeyInfoPem(), client: http)));
         Assert.Empty(Directory.GetFiles(temp.Root, "*.partial"));
+    }
+
+    [Theory]
+    [InlineData("tampered")]
+    [InlineData("wrong-key")]
+    [InlineData("truncated")]
+    [InlineData("oversized")]
+    [InlineData("missing")]
+    public async Task SignatureFailurePreservesExistingDownloadEvenWithMatchingGithubChecksum(string failure)
+    {
+        using var temp = new Temporary();
+        using var rsa = RSA.Create(3072);
+        byte[] bytes = [1, 2, 3];
+        var signature = rsa.SignData(bytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pss);
+        if (failure == "tampered") bytes[0] ^= 1;
+        if (failure == "wrong-key") { using var wrong = RSA.Create(3072); signature = wrong.SignData(bytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pss); }
+        if (failure == "truncated") signature = signature[..^1];
+        if (failure == "oversized") signature = [.. signature, 0];
+        using var http = new HttpClient(new Handler(bytes, signature, failure == "missing" ? HttpStatusCode.NotFound : HttpStatusCode.OK));
+        var release = new UpdateRelease(new Version(1, 2, 3), "win-x64", ReleaseClient.AssetName("win-x64")!, new Uri("https://example.test/package"), Convert.ToHexString(SHA256.HashData(bytes)), bytes.Length);
+        var existing = Path.Combine(temp.Root, release.AssetName); File.WriteAllText(existing, "previous verified download");
+        var error = await Record.ExceptionAsync(() => ReleaseClient.DownloadSigned(release, temp.Root, rsa.ExportSubjectPublicKeyInfoPem(), client: http));
+        Assert.NotNull(error);
+        Assert.True(error is InvalidDataException or HttpRequestException, error.ToString());
+        Assert.Equal("previous verified download", File.ReadAllText(existing));
+        Assert.Empty(Directory.GetFiles(temp.Root, "*.partial"));
+    }
+
+    [Fact]
+    public void RejectsReleaseWithoutSignature()
+    {
+        var release = Release("win-x64", [1]); ((JsonArray)release["assets"]!).RemoveAt(1);
+        Assert.Throws<InvalidDataException>(() => ReleaseClient.Select(release.ToJsonString(), new(new Version(1, 0), "win-x64")));
     }
 
     private static string Manifest(string runtime, string version) => new JsonObject { ["runtime"] = runtime, ["version"] = version }.ToJsonString();

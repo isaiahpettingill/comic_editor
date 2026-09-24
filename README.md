@@ -169,6 +169,8 @@ Update recovery and logs live in the application's local data folder under `Comi
 
 ### Release builds
 
+Desktop binaries and release packages ship with repository-controlled `.sig` signatures. The private signing key is stored in GitHub Actions secrets and the public key is committed under [signing](signing/README.md). The updater verifies signatures before installing. Android retains its existing keystore; CI checks the final APK's signature and certificate identity. See the signing guide for manual verification and the distinction from OS-trusted publisher signing.
+
 The [release workflow](.github/workflows/release.yml) runs format and rendering tests and builds Native AOT artifacts for Windows x64, Linux x64, macOS x64/arm64, and WebAssembly. Pushes to `main`, version tags, and manual runs also build the signed Android arm64 APK. Pull requests skip Android because signing secrets are unavailable to external contributors. Android Native AOT on .NET 11 is experimental; the workflow builds it explicitly with `PublishAot=true`.
 
 Desktop and CLI Release publishes default to Native AOT with full trimming and `OptimizationPreference=Speed`. Release builds omit debugging symbols, including symbols supplied by native graphics packages. Packaging rejects debug files and checks a 160 MiB installed-size budget for the combined editor, CLI, native libraries, and bundled multilingual fonts. Version 0.1.8 Windows setup also removes the known package symbols accidentally shipped by earlier versions, including when invoked by the updater. Portable ZIP users should extract into a fresh folder to avoid keeping obsolete files.

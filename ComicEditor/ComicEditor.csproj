@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <EmbeddedResource Include="..\signing\desktop-public.pem" LogicalName="ComicEditor.DesktopSigningKey" />
+    <InternalsVisibleTo Include="ComicEditor.Rendering.Tests" />
   </ItemGroup>
 
   <ItemGroup>

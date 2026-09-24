@@ -1,0 +1,10 @@
+{
+  "name": "comic-editor-deployment",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler pages deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.139.0"
+  }
+}

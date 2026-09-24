@@ -1,11 +1,15 @@
-param([int]$Port = 8098, [int]$DebugPort = 9234, [string]$WebRoot, [switch]$CheckPreferences, [switch]$CheckRecovery, [switch]$CheckPalettes, [switch]$CheckFonts, [string]$FontProject)
+param([int]$Port = 8098, [int]$DebugPort = 9234, [string]$WebRoot, [string]$Url, [switch]$CheckPreferences, [switch]$CheckRecovery, [switch]$CheckPalettes, [switch]$CheckFonts, [string]$FontProject)
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path -Parent $PSScriptRoot
 $artifactRoot = Join-Path $workspace 'artifacts'
 if (!$WebRoot) { $WebRoot = Join-Path $artifactRoot 'browser/wwwroot' }
 $profile = Join-Path $artifactRoot ('chrome-smoke-' + [Guid]::NewGuid().ToString('N'))
-$server = Start-Process python -ArgumentList @('-m','http.server',"$Port",'--bind','127.0.0.1','--directory',"`"$webRoot`"") -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $artifactRoot 'web-server.log') -RedirectStandardError (Join-Path $artifactRoot 'web-server-error.log')
-$chrome = Start-Process 'C:/Program Files/Google/Chrome/Application/chrome.exe' -ArgumentList @('--headless=new',"--remote-debugging-port=$DebugPort","--user-data-dir=$profile",'--no-first-run','--no-default-browser-check','--enable-unsafe-swiftshader','--window-size=1280,800',"http://127.0.0.1:$Port") -PassThru -WindowStyle Hidden
+$server = $null
+if (!$Url) {
+    $Url = "http://127.0.0.1:$Port"
+    $server = Start-Process python -ArgumentList @('-m','http.server',"$Port",'--bind','127.0.0.1','--directory',"`"$webRoot`"") -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $artifactRoot 'web-server.log') -RedirectStandardError (Join-Path $artifactRoot 'web-server-error.log')
+}
+$chrome = Start-Process 'C:/Program Files/Google/Chrome/Application/chrome.exe' -ArgumentList @('--headless=new',"--remote-debugging-port=$DebugPort","--user-data-dir=$profile",'--no-first-run','--no-default-browser-check','--enable-unsafe-swiftshader','--window-size=1280,800',$Url) -PassThru -WindowStyle Hidden
 $socket = [System.Net.WebSockets.ClientWebSocket]::new()
 $script:commandId = 0
 $script:errors = [System.Collections.Generic.List[string]]::new()
@@ -117,5 +121,5 @@ try {
 } finally {
     $socket.Dispose()
     if (!$chrome.HasExited) { Stop-Process -Id $chrome.Id -ErrorAction SilentlyContinue }
-    if (!$server.HasExited) { Stop-Process -Id $server.Id -ErrorAction SilentlyContinue }
+    if ($server -and !$server.HasExited) { Stop-Process -Id $server.Id -ErrorAction SilentlyContinue }
 }

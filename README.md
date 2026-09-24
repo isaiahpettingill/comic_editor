@@ -111,6 +111,29 @@ dotnet publish ComicEditor.Browser -c Release -o artifacts/browser
 
 Serve `artifacts/browser/wwwroot` over HTTP(S), including all `_framework` files; it cannot run from a `file://` URL. The release workflow packages this directory as `ComicEditor-browser-wasm.zip`. All-frame PNG export downloads a ZIP in browsers. Open/save use the browser's file picker. The last project and unsaved edits are recovered from IndexedDB after reload; file downloads still require Save. Browser access to installed system fonts depends on the runtime, so prefer bundled fonts for portable previews.
 
+### Cloudflare Pages deployment
+
+The production address is **https://comic-editor.pages.dev**. [The Pages workflow](.github/workflows/pages.yml) deploys the existing WASM artifact after successful builds on `main`; pull requests never deploy. Superseded builds are skipped. You can also run this workflow manually with a successful **Build and release** run ID to deploy a release artifact or roll back.
+
+Configure these repository Actions secrets once:
+
+- `CLOUDFLARE_ACCOUNT_ID`: the account that will own the site.
+- `CLOUDFLARE_API_TOKEN`: a token with **Account → Cloudflare Pages → Edit**, scoped to that account.
+
+The workflow creates the `comic-editor` Pages project if necessary, with `main` as its production branch. The requested address must be available. It keeps the portable release ZIP unchanged and prepares a separate Pages directory. Oversized WASM files use explicit gzip downloads, browser-native decompression, and SHA-256 integrity verification before loading. Packaging verifies decompression against the original bytes and enforces Pages' 25 MiB asset limit.
+
+For local deployment after publishing the browser target:
+
+```sh
+pnpm install --frozen-lockfile
+node tools/prepare-pages.mjs artifacts/browser/wwwroot artifacts/pages
+pnpm exec wrangler login
+pnpm exec wrangler pages project create comic-editor --production-branch main
+pnpm deploy --branch main
+```
+
+Use a fresh output directory for preparation. The browser must support `DecompressionStream`, as current Chrome, Edge, Firefox, and Safari do.
+
 ## File formats and CLI
 
 [The format guide](docs/runtime-format.md) documents both protobuf schemas and runtime rendering. The game can generate its own reader with `protoc`, without referencing the editor's .NET library.

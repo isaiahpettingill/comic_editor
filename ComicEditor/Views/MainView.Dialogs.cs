@@ -151,7 +151,7 @@ public partial class MainView
         var size = new NumericUpDown { Name = "TextFontSize", Value = (decimal)obj.FontSize, Minimum = 1, Maximum = 2048, Width = 120, Height = 34 };
         var bold = new CheckBox { Content = "Bold", IsChecked = obj.Bold }; var italic = new CheckBox { Content = "Italic", IsChecked = obj.Italic };
         body.Children.Add(Row(Label("Size (px)"), size, bold, italic));
-        var sample = new TextBlock { Text = editor.Scene.RenderText(editor.Language, obj.Key), TextWrapping = TextWrapping.Wrap, MaxHeight = 75 };
+        var sample = new TextBlock { Name = "TextAppearancePreview", Foreground = Brush(editor.Scene.Palette[obj.Color]), Text = editor.Scene.RenderText(editor.Language, obj.Key), TextWrapping = TextWrapping.Wrap, MaxHeight = 75 };
         if (string.IsNullOrWhiteSpace(sample.Text)) sample.Text = "Hades is drinking the ocean!";
         body.Children.Add(new Border { Child = sample, Padding = new Thickness(8), Background = Brushes.White, ClipToBounds = true });
         string FontId() => font.SelectedIndex >= 0 && font.SelectedIndex < fontIds.Count ? fontIds[font.SelectedIndex] : "system:" + custom.Text?.Trim();

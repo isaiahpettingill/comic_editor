@@ -49,6 +49,12 @@ public partial class CanvasTests
             Assert.Equal(project, CutsceneFile.Write(editor.Scene));
             using var after = new MemoryStream(); PngExporter.Write(after, editor.Scene, 0, "en");
             Assert.Equal(before.ToArray(), after.ToArray());
+            var text = new TextObject { Key = "preview", Color = 0 };
+            Invoke(view, "EditTextProperties", text); _ = Capture(window);
+            var preview = Named<TextBlock>(window, "TextAppearancePreview");
+            Assert.Equal(Color.Parse(editor.Scene.Palette[text.Color]), Assert.IsAssignableFrom<ISolidColorBrush>(preview.Foreground).Color);
+            Assert.Equal(Colors.White, Assert.IsAssignableFrom<ISolidColorBrush>(((Border)preview.Parent!).Background).Color);
+            Invoke(view, "CloseModal");
             if (Environment.GetEnvironmentVariable("COMIC_THEME_SCREENSHOTS") is { } folder)
             {
                 Directory.CreateDirectory(folder); File.WriteAllBytes(Path.Combine(folder, id + (touch ? "-mobile" : "") + ".png"), Capture(window));

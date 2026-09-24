@@ -100,7 +100,7 @@ public partial class CanvasTests
 
     private static void AssertOutsideContent(ScrollBar bar)
     {
-        var owner = Assert.IsType<ScrollViewer>(bar.TemplatedParent);
+        var owner = Assert.IsAssignableFrom<ScrollViewer>(bar.TemplatedParent);
         var presenter = owner.GetVisualDescendants().OfType<ScrollContentPresenter>().First();
         var contentEnd = presenter.TranslatePoint(new Point(presenter.Bounds.Width, presenter.Bounds.Height), owner)!.Value;
         var barStart = bar.TranslatePoint(default, owner)!.Value;

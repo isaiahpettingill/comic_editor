@@ -22,10 +22,12 @@ public partial class MainView
 
     private void AddUpdateMenu(Menu menu)
     {
-        if (OperatingSystem.IsAndroid()) return;
         helpMenu = new MenuItem { Header = "_Help" };
+        var about = new MenuItem { Header = "About & licenses…" };
+        about.Click += (_, _) => ShowLicenses(); helpMenu.Items.Add(about); menu.Items.Add(helpMenu);
+        if (OperatingSystem.IsAndroid()) return;
         updateMenu = new MenuItem { Header = "Check for updates…", Name = "CheckForUpdates" };
-        updateMenu.Click += (_, _) => ShowUpdates(); helpMenu.Items.Add(updateMenu); menu.Items.Add(helpMenu);
+        updateMenu.Click += (_, _) => ShowUpdates(); helpMenu.Items.Add(updateMenu);
         RefreshUpdateControls();
     }
     private void RefreshUpdateControls()

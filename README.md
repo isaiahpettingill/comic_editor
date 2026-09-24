@@ -1,6 +1,6 @@
 # ComicEditor
 
-A small Avalonia 12 storyboard editor for hand-drawn, indexed-color cutscenes. It targets .NET 11. Editable `.cutscene` projects retain artwork, text, translations, and font references; compiled `.cutscene.runtime` game assets flatten artwork and prerender localized text. PNG export is optional. The software is [0BSD](LICENSE); the bundled Comic Shanns font has its own [MIT license](licenses/Comic-Shanns-MIT.txt). The [IconPacks package](licenses/IconPacks-MIT.txt) and [Material icons](licenses/MaterialDesignIcons-LICENSE.txt) retain their own licenses.
+A small Avalonia 12 storyboard editor for hand-drawn, indexed-color cutscenes. It targets .NET 11. Editable `.ctsc` / `.cutscene` projects retain artwork, text, translations, and font references; compiled `.cutscene.runtime` game assets flatten artwork and prerender localized text. PNG export is optional. The software is [0BSD](LICENSE); the bundled Comic Shanns font has its own [MIT license](licenses/Comic-Shanns-MIT.txt). The [IconPacks package](licenses/IconPacks-MIT.txt) and [Material icons](licenses/MaterialDesignIcons-LICENSE.txt) retain their own licenses.
 
 ## Build and run
 
@@ -33,9 +33,23 @@ bash install-comic-editor.sh --archive ComicEditor-linux-x64.tar.gz
 ~/.local/bin/comic-editor-uninstall
 ```
 
-The Linux binary targets x86-64, glibc-based desktop distributions compatible with the Ubuntu 24.04 build environment. ARM Linux and Alpine/musl are not included. Normal desktop libraries are required: X11 (or XWayland in a Wayland session), fontconfig, ICU, and the usual .NET native dependencies. The installer reports missing linked libraries before replacing an existing installation. Distribution package names vary; see [Avalonia's Linux dependency guidance](https://docs.avaloniaui.net/docs/deployment/linux). It does not change system packages or file associations.
+The Linux binary targets x86-64, glibc-based desktop distributions compatible with the Ubuntu 24.04 build environment. ARM Linux and Alpine/musl are not included. Normal desktop libraries are required: X11 (or XWayland in a Wayland session), fontconfig, ICU, and the usual .NET native dependencies. The installer reports missing linked libraries before replacing an existing installation. Distribution package names vary; see [Avalonia's Linux dependency guidance](https://docs.avaloniaui.net/docs/deployment/linux). It registers `.ctsc` and `.cutscene` with the desktop MIME database without changing system packages.
 
 For local builds, the unstamped source installer accepts `bash tools/install-linux.sh --archive /path/to/ComicEditor-linux-x64.tar.gz --sha256 HASH`; the checksum option is optional only for this source-checkout mode.
+
+## File associations and project extensions
+
+New projects default to **`.ctsc`**. Both `.ctsc` and `.cutscene` contain the same editable protobuf format, work in Open/Save As, and are accepted by the CLI. Existing `.cutscene` filenames remain unchanged when saved.
+
+- **Windows:** the NSIS installer registers both extensions, an icon, Open with, and Default Apps capabilities for the current user. Existing default app choices are preserved; uninstall removes only ComicEditor's registration. Portable ZIPs do not register themselves.
+- **Linux:** the installer registers a shared MIME type and desktop handler for KDE, GNOME, XFCE, and other XDG desktops.
+- **macOS:** download the appropriate `-app.zip`, extract it, and drag **ComicEditor.app** to Applications. Finder discovers its declared file types. The tar archive remains available for portable/CLI installations.
+- **Android:** registers an Open with handler for the cutscene MIME type and file/content URLs whose paths end in these extensions. Providers using opaque content URLs and generic MIME types may require opening the project from inside the editor.
+- **Browser:** use the file picker; the website does not register OS file associations.
+
+Opening an associated project prompts before discarding unsaved edits. Compiled `.cutscene.runtime` files are display assets, not editable projects.
+
+The palette editor and individual color dialog use [AvaloniaColorPicker](https://github.com/arklumpus/AvaloniaColorPicker) with a local Avalonia 12 compatibility port. Spectrum/hue selection, RGB, and hex entry edit opaque palette entries; transparency remains the reserved index. Its LGPL license, complete source, and rebuild instructions are in [third_party/AvaloniaColorPicker](third_party/AvaloniaColorPicker/README.comic-editor.md), the release source archive, and **Help > About & licenses**. ComicEditor's own software remains 0BSD.
 
 ## Development
 

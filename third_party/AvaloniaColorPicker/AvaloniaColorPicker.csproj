@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <AssemblyName>AvaloniaColorPicker</AssemblyName>
+    <RootNamespace>AvaloniaColorPicker</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="LabColorSpace.bin" />
+    <EmbeddedResource Include="Palettes/*.palette" />
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+</Project>

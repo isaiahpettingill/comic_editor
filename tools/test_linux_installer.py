@@ -77,6 +77,13 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertTrue(desktop.is_file())
         self.assertFalse(desktop.is_symlink())
         self.assertIn('Exec="', desktop.read_text())
+        self.assertIn('" %f', desktop.read_text())
+        self.assertIn(
+            "MimeType=application/vnd.comiceditor.cutscene;", desktop.read_text()
+        )
+        mime = self.data / "mime/packages/org.comiceditor.storyboard.xml"
+        self.assertIn('pattern="*.ctsc"', mime.read_text())
+        self.assertIn('pattern="*.cutscene"', mime.read_text())
         self.assertIn(r"\\$", desktop.read_text())
         self.assertTrue(
             (
@@ -93,6 +100,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.run_installer("--archive", self.archive)
         self.command("comic-editor-uninstall")
         self.assertFalse(self.root.exists())
+        self.assertFalse(mime.exists())
         self.assertFalse(desktop.is_symlink())
         self.assertFalse((self.bin / "comic-editor").is_symlink())
         self.assertEqual(document.read_text(), "keep this project")

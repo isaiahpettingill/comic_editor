@@ -50,20 +50,22 @@ bin_home=$(realpath -m -- "$bin_home")
 root="$data_home/comic-editor"
 desktop="$data_home/applications/org.comiceditor.storyboard.desktop"
 icon="$data_home/icons/hicolor/scalable/apps/org.comiceditor.storyboard.svg"
+mime="$data_home/mime/packages/org.comiceditor.storyboard.xml"
 marker='ComicEditor per-user installation v1'
 [[ ! -L "$root" ]] || die "Installation directory is a symlink: $root"
 if [[ -e "$root" ]]; then
     [[ -f "$root/.installer-owned" && $(cat "$root/.installer-owned") == "$marker" ]] || die "Refusing to replace an unmanaged directory: $root"
 fi
 
-destinations=("$bin_home/comic-editor" "$bin_home/comic-compile" "$bin_home/comic-editor-uninstall" "$desktop" "$icon")
-targets=("$root/launch" "$root/compile" "$root/uninstall" "$root/comic-editor.desktop" "$root/current/comic-editor.svg")
+destinations=("$bin_home/comic-editor" "$bin_home/comic-compile" "$bin_home/comic-editor-uninstall" "$desktop" "$icon" "$mime")
+targets=("$root/launch" "$root/compile" "$root/uninstall" "$root/comic-editor.desktop" "$root/current/comic-editor.svg" "$root/cutscene-mime.xml")
 owned_destination() {
     local destination="$1" target="$2"
     if [[ -L "$destination" && $(readlink -- "$destination") == "$target" ]]; then return 0; fi
-    [[ "$destination" == "$desktop" && ! -L "$destination" && -f "$destination" && -f "$target" ]] && cmp -s -- "$destination" "$target"
+    [[ ( "$destination" == "$desktop" || "$destination" == "$mime" ) && ! -L "$destination" && -f "$destination" && -f "$target" ]] && cmp -s -- "$destination" "$target"
 }
 refresh_desktop() {
+    if command -v update-mime-database >/dev/null && [[ -d "$data_home/mime" ]]; then update-mime-database "$data_home/mime" >/dev/null 2>&1 || true; fi
     if command -v update-desktop-database >/dev/null; then update-desktop-database "$data_home/applications" >/dev/null 2>&1 || true; fi
     if command -v gtk-update-icon-cache >/dev/null; then gtk-update-icon-cache -f -t "$data_home/icons/hicolor" >/dev/null 2>&1 || true; fi
     # update-desktop-database updates MIME associations, not Plasma's application menu.
@@ -143,7 +145,7 @@ if command -v ldd >/dev/null; then
 fi
 
 install -m 755 -- "${BASH_SOURCE[0]}" "$stage/installer.sh"
-mkdir -p -- "$root/releases" "$bin_home" "$(dirname "$desktop")" "$(dirname "$icon")"
+mkdir -p -- "$root/releases" "$bin_home" "$(dirname "$desktop")" "$(dirname "$icon")" "$(dirname "$mime")"
 printf '%s\n' "$marker" > "$root/.installer-owned"
 version=$(mktemp -d "$root/releases/build.XXXXXXXX")
 mv -- "$stage/app" "$version/app"
@@ -167,7 +169,8 @@ Type=Application
 Name=ComicEditor
 GenericName=Cutscene Editor
 Comment=Draw and localize game cutscenes
-Exec="$exec_path"
+Exec="$exec_path" %f
+MimeType=application/vnd.comiceditor.cutscene;
 Icon=org.comiceditor.storyboard
 Terminal=false
 Categories=Graphics;2DGraphics;
@@ -176,10 +179,22 @@ StartupNotify=true
 X-ComicEditor-Managed=true
 EOF
 chmod 644 "$root/comic-editor.desktop"
+cat > "$root/cutscene-mime.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/vnd.comiceditor.cutscene">
+    <comment>ComicEditor Cutscene</comment>
+    <sub-class-of type="application/octet-stream"/>
+    <glob pattern="*.ctsc"/>
+    <glob pattern="*.cutscene"/>
+    <icon name="org.comiceditor.storyboard"/>
+  </mime-type>
+</mime-info>
+EOF
 for i in "${!destinations[@]}"; do
-    if [[ "${destinations[i]}" == "$desktop" ]]; then
+    if [[ "${destinations[i]}" == "$desktop" || "${destinations[i]}" == "$mime" ]]; then
         # Install a regular entry in applications so desktop directory watchers see updates.
-        install -m 644 -- "$root/comic-editor.desktop" "$stage/link"
+        install -m 644 -- "${targets[i]}" "$stage/link"
     else
         ln -s -- "${targets[i]}" "$stage/link"
     fi

@@ -29,6 +29,19 @@ public partial class CanvasTests
             Assert.Equal(2, Named<WrapPanel>(window, "PaletteEditorSwatches").Children.Count);
             Named<TextBox>(window, "PaletteEditorHex").Text = "#112233"; _ = Capture(window);
             Assert.Equal(original, editor.Scene.Palette); Assert.Equal(preset, files["Two.gpl"]);
+            var picker = Named<AvaloniaColorPicker.CustomColorPicker>(window, "PaletteColorPicker");
+            Assert.Equal(Avalonia.Media.Color.Parse("#112233"), picker.Color);
+            picker.Color = Avalonia.Media.Color.Parse("#445566");
+            Assert.Equal("#445566", Named<TextBox>(window, "PaletteEditorHex").Text);
+            picker.Color = Avalonia.Media.Color.Parse("#112233");
+            _ = Capture(window);
+            Assert.False(Named<Canvas>(window, "AlphaCanvas").IsVisible);
+            if (!touch)
+            {
+                Click(window, Named<Canvas>(window, "Canvas2D"));
+                Assert.NotEqual("#112233", Named<TextBox>(window, "PaletteEditorHex").Text);
+                picker.Color = Avalonia.Media.Color.Parse("#112233");
+            }
             AssertInside(window, Named<Border>(window, "ModalCard"));
             SaveCapture(window, touch ? "COMIC_PALETTE_MOBILE" : "COMIC_PALETTE_DESKTOP");
             Click(window, Named<Button>(window, "ModalApply"));

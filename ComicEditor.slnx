@@ -9,4 +9,5 @@
   <Project Path="ComicEditor.Format/ComicEditor.Format.csproj" />
   <Project Path="ComicEditor.Rendering.Tests/ComicEditor.Rendering.Tests.csproj" />
   <Project Path="ComicEditor/ComicEditor.csproj" />
+  <Project Path="third_party/AvaloniaColorPicker/AvaloniaColorPicker.csproj" />
 </Solution>

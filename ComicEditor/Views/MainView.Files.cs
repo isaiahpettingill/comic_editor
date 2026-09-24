@@ -30,18 +30,24 @@ public partial class MainView
         {
             Title = "Open cutscene",
             AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType("Cutscene") { Patterns = ["*.cutscene"] }]
+            FileTypeFilter = [ProjectTypes.Editable]
         });
         if (files.Count == 0) return;
+        QueueOpenFile(files[0]);
+    }
+
+    private async Task OpenProjectFile(IStorageFile file)
+    {
         if (fileBusy) return;
+        FinishPath();
         fileBusy = true;
         try
         {
-            await using var stream = await files[0].OpenReadAsync(); using var buffer = new MemoryStream();
+            await using var stream = await file.OpenReadAsync(); using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer); var bytes = buffer.ToArray();
-            editor.Load(bytes, files[0].Name); await BindFile(files[0], bytes); Build(compact);
+            editor.Load(bytes, file.Name); await BindFile(file, bytes); Build(compact);
             selection = clipboardSelection = null;
-            SetSaveMessage($"Opened {files[0].Name}. Crash recovery is active.");
+            SetSaveMessage($"Opened {file.Name}. Crash recovery is active.");
             await SaveSessionSafely();
             await CutsceneFonts.EnsureAsync(editor.Scene); RefreshAll();
         }
@@ -65,9 +71,9 @@ public partial class MainView
         var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Save cutscene",
-            SuggestedFileName = editor.FileName ?? "cutscene.cutscene",
-            DefaultExtension = "cutscene",
-            FileTypeChoices = [new FilePickerFileType("Cutscene") { Patterns = ["*.cutscene"] }]
+            SuggestedFileName = editor.FileName ?? "cutscene.ctsc",
+            DefaultExtension = editor.FileName is { } name && Path.GetExtension(name).Equals(".cutscene", StringComparison.OrdinalIgnoreCase) ? "cutscene" : "ctsc",
+            FileTypeChoices = [ProjectTypes.Editable]
         });
         if (file is null) return;
         fileBusy = true;

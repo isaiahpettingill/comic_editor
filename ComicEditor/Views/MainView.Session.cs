@@ -46,6 +46,8 @@ public partial class MainView
             sessionTimer.Tick += async (_, _) => await SessionTick(); sessionTimer.Start();
             if (TopLevel.GetTopLevel(this) is Window window) window.Closing += ClosingSession;
         }
+        activationReady = true;
+        await OpenPendingFiles();
         StartUpdates();
     }
 
@@ -119,6 +121,7 @@ public partial class MainView
 
     private async Task SessionTick()
     {
+        await OpenPendingFiles();
         if (fileBusy || updateInstalling || dragging || pathBase is not null || cancelTouchEdit is not null) return;
         await SaveSessionSafely();
         if (!editor.Preferences.AutoSave || autoSavePaused || currentFile is null || !editor.IsDirty ||

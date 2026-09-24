@@ -28,6 +28,7 @@ jobs:
         run: |
           bash -n tools/install-linux.sh
           python3 -m unittest discover -s tools -p 'test_linux_installer.py' -v
+          python3 -m unittest discover -s tools -p 'test_macos_package.py' -v
 
   desktop:
     needs: tests
@@ -129,13 +130,16 @@ jobs:
       - name: Package Linux installer
         if: runner.os == 'Linux'
         run: python3 tools/package-linux-installer.py
+      - name: Package macOS Finder application
+        if: runner.os == 'macOS'
+        run: python3 tools/package-macos-app.py artifacts/${{ matrix.rid }} ComicEditor-${{ matrix.rid }}-app.zip
       - name: Sign desktop release packages
         if: github.event_name != 'pull_request'
         shell: pwsh
         env:
           DESKTOP_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_SIGNING_PRIVATE_KEY }}
         run: |
-          $files = @(Get-ChildItem -File 'ComicEditor-${{ matrix.rid }}.*' | Where-Object { $_.Extension -ne '.sig' } | ForEach-Object FullName)
+          $files = @(Get-ChildItem -File 'ComicEditor-${{ matrix.rid }}*' | Where-Object { $_.Extension -ne '.sig' } | ForEach-Object FullName)
           if ($IsLinux) { $files += (Resolve-Path install-comic-editor.sh).Path }
           node tools/release-signing.mjs sign @files
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -156,7 +160,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.rid }}
-          path: ComicEditor-${{ matrix.rid }}.*
+          path: ComicEditor-${{ matrix.rid }}*
 
   browser:
     needs: tests
@@ -234,7 +238,7 @@ jobs:
           apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           "$apksigner" verify --verbose --print-certs ComicEditor-android-arm64.apk | tee "$RUNNER_TEMP/apk-signature.txt"
           expected=$(tr -d '\r\n' < signing/android-certificate.sha256)
-          actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-signature.txt")
+          actual=$(sed -n 's/^.*certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-signature.txt" | sort -u)
           test "$actual" = "$expected"
       - name: Remove temporary Android keystore
         if: always()
@@ -264,9 +268,10 @@ jobs:
       - name: Require and verify all desktop release signatures
         shell: bash
         run: |
-          node tools/release-signing.mjs verify dist/ComicEditor-win-x64.zip dist/ComicEditor-win-x64-setup.exe dist/ComicEditor-linux-x64.tar.gz dist/ComicEditor-osx-x64.tar.gz dist/ComicEditor-osx-arm64.tar.gz dist/install-comic-editor.sh
+          node tools/release-signing.mjs verify dist/ComicEditor-win-x64.zip dist/ComicEditor-win-x64-setup.exe dist/ComicEditor-linux-x64.tar.gz dist/ComicEditor-osx-x64.tar.gz dist/ComicEditor-osx-arm64.tar.gz dist/ComicEditor-osx-x64-app.zip dist/ComicEditor-osx-arm64-app.zip dist/install-comic-editor.sh
           cp signing/desktop-public.pem dist/
           cp signing/android-certificate.sha256 dist/
+          git archive --format=zip --output=dist/ComicEditor-source.zip HEAD
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

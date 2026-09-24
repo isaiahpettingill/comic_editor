@@ -8,6 +8,8 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="..\signing\desktop-public.pem" LogicalName="ComicEditor.DesktopSigningKey" />
+    <EmbeddedResource Include="..\third_party\AvaloniaColorPicker\LICENSE" LogicalName="ComicEditor.LGPL" />
+    <EmbeddedResource Include="..\third_party\AvaloniaColorPicker\LICENSE.GPL" LogicalName="ComicEditor.GPL" />
     <InternalsVisibleTo Include="ComicEditor.Rendering.Tests" />
   </ItemGroup>
 
@@ -24,5 +26,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ComicEditor.Format\ComicEditor.Format.csproj" />
+    <ProjectReference Include="..\third_party\AvaloniaColorPicker\AvaloniaColorPicker.csproj" />
   </ItemGroup>
 </Project>

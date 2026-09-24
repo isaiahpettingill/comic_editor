@@ -45,6 +45,17 @@ def check(installer: Path, payload: Path, registered: bool) -> None:
             "Refusing to overwrite an existing user installation during this test"
         )
     prior = installed_path()
+
+    def association(extension):
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, rf"Software\Classes\{extension}"
+            ) as key:
+                return winreg.QueryValueEx(key, "")[0]
+        except FileNotFoundError:
+            return None
+
+    prior_associations = {ext: association(ext) for ext in [".ctsc", ".cutscene"]}
     expected = json.loads((payload / "update.json").read_text())
     with tempfile.TemporaryDirectory(prefix="comic NSIS 'spaces' $ ") as temporary:
         target = Path(temporary) / "application"
@@ -60,6 +71,22 @@ def check(installer: Path, payload: Path, registered: bool) -> None:
         )
         if registered:
             assert shortcut.is_file()
+            for ext in prior_associations:
+                assert association(ext) == (
+                    prior_associations[ext] or "ComicEditor.Cutscene"
+                )
+                with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER, rf"Software\Classes\{ext}\OpenWithProgids"
+                ) as key:
+                    assert winreg.QueryValueEx(key, "ComicEditor.Cutscene")[0] == ""
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Classes\ComicEditor.Cutscene\shell\open\command",
+            ) as key:
+                assert (
+                    winreg.QueryValueEx(key, "")[0]
+                    == f'"{target / "ComicEditor.Desktop.exe"}" "%1"'
+                )
         sentinel = target / "keep-my-project.cutscene"
         sentinel.write_text("user project")
         user_symbols = target / "my-game.pdb"
@@ -119,6 +146,9 @@ def check(installer: Path, payload: Path, registered: bool) -> None:
         assert installed_path() == prior
         if registered:
             assert not shortcut.exists()
+        assert {
+            ext: association(ext) for ext in prior_associations
+        } == prior_associations
     print("NSIS install, update, and uninstall passed; user files preserved.")
 
 

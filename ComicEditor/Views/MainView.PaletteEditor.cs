@@ -23,6 +23,7 @@ public partial class MainView
         var swatches = new WrapPanel { Name = "PaletteEditorSwatches", Orientation = Orientation.Horizontal };
         var caption = Label("");
         var hex = new TextBox { Name = "PaletteEditorHex", MaxLength = 7, Width = 105 };
+        var picker = PaletteColorPicker.Create(Color.Parse(draft[selected].Hex));
         var sample = new Border { Width = 38, Height = 32, BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1) };
         var channels = Enumerable.Range(0, 3).Select(i => new NumericUpDown { Name = "Palette" + new[] { "Red", "Green", "Blue" }[i], Minimum = 0, Maximum = 255, Increment = 1, ShowButtonSpinner = !touchLayout }).ToArray();
         var message = Label("Changes stay in this cutscene. Save preset writes a shared .gpl file."); message.Name = "PaletteEditorStatus"; message.FontSize = 12;
@@ -31,6 +32,7 @@ public partial class MainView
         {
             syncing = true; caption.Text = $"Color {selected:D3}"; hex.Text = draft[selected].Hex;
             sample.Background = Brush(draft[selected].Hex);
+            picker.Color = Color.Parse(draft[selected].Hex);
             var rgb = Convert.FromHexString(draft[selected].Hex[1..]);
             for (var i = 0; i < 3; i++) channels[i].Value = rgb[i];
             for (var i = 0; i < swatches.Children.Count; i++)
@@ -121,6 +123,7 @@ public partial class MainView
         body.Children.Add(actions); body.Children.Add(Row(Label("Colors"), count));
         body.Children.Add(new ScrollViewer { Name = "PaletteEditorViewport", Content = swatches, MaxHeight = touchLayout ? 84 : 175, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         body.Children.Add(Row(caption, hex, sample));
+        body.Children.Add(picker);
         var rgbGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,6,*,6,*") };
         for (var i = 0; i < 3; i++) AddAt(rgbGrid, new StackPanel { Children = { Label(new[] { "Red", "Green", "Blue" }[i]), channels[i] } }, i * 2);
         body.Children.Add(rgbGrid); body.Children.Add(message);
@@ -137,6 +140,12 @@ public partial class MainView
             if (syncing) return;
             if (!GplPalette.IsHex(hex.Text)) { Report("Enter a color as #RRGGBB.", true); return; }
             draft[selected] = draft[selected] with { Hex = hex.Text!.ToUpperInvariant() }; RefreshSelection();
+        };
+        picker.PropertyChanged += (_, e) =>
+        {
+            if (syncing || e.Property != AvaloniaColorPicker.CustomColorPicker.ColorProperty) return;
+            var color = picker.Color;
+            hex.Text = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
         };
         foreach (var channel in channels) channel.ValueChanged += (_, _) =>
         {

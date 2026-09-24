@@ -6,6 +6,38 @@ Unicode true
 
 !define PRODUCT "ComicEditor"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\ComicEditor"
+!define PROJECT_PROGID "ComicEditor.Cutscene"
+
+!macro RegisterProjectExtension EXT
+  WriteRegStr HKCU "Software\Classes\${EXT}\OpenWithProgids" "${PROJECT_PROGID}" ""
+  ReadRegStr $0 HKCU "Software\Classes\${EXT}" ""
+  ${If} $0 == ""
+    WriteRegStr HKCU "Software\Classes\${EXT}" "" "${PROJECT_PROGID}"
+  ${EndIf}
+  WriteRegStr HKCU "Software\ComicEditor\Capabilities\FileAssociations" "${EXT}" "${PROJECT_PROGID}"
+!macroend
+
+!macro RemoveProjectExtension EXT
+  ReadRegStr $0 HKCU "Software\Classes\${EXT}" ""
+  ${If} $0 == "${PROJECT_PROGID}"
+    DeleteRegValue HKCU "Software\Classes\${EXT}" ""
+  ${EndIf}
+  DeleteRegValue HKCU "Software\Classes\${EXT}\OpenWithProgids" "${PROJECT_PROGID}"
+  DeleteRegKey /ifempty HKCU "Software\Classes\${EXT}\OpenWithProgids"
+  DeleteRegKey /ifempty HKCU "Software\Classes\${EXT}"
+!macroend
+
+!macro RemoveProjectAssociations
+  ReadRegStr $0 HKCU "Software\Classes\${PROJECT_PROGID}\shell\open\command" ""
+  ${If} $0 == '$\"$INSTDIR\ComicEditor.Desktop.exe$\" $\"%1$\"'
+    !insertmacro RemoveProjectExtension ".ctsc"
+    !insertmacro RemoveProjectExtension ".cutscene"
+    DeleteRegKey HKCU "Software\Classes\${PROJECT_PROGID}"
+    DeleteRegValue HKCU "Software\RegisteredApplications" "ComicEditor"
+    DeleteRegKey HKCU "Software\ComicEditor\Capabilities"
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+  ${EndIf}
+!macroend
 Name "${PRODUCT}"
 OutFile "${OUTPUT}"
 InstallDir "$LOCALAPPDATA\Programs\ComicEditor"
@@ -88,6 +120,7 @@ Section "ComicEditor"
   ${If} $UnregisterOnly == 1
     ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "InstallLocation"
     ${If} $0 == $INSTDIR
+      !insertmacro RemoveProjectAssociations
       Delete "$SMPROGRAMS\ComicEditor.lnk"
       DeleteRegKey HKCU "${UNINSTALL_KEY}"
     ${EndIf}
@@ -138,6 +171,15 @@ Section "ComicEditor"
     WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
     SetOutPath "$INSTDIR"
     CreateShortcut "$SMPROGRAMS\ComicEditor.lnk" "$INSTDIR\ComicEditor.Desktop.exe" "" "$INSTDIR\comic-editor.ico"
+    WriteRegStr HKCU "Software\Classes\${PROJECT_PROGID}" "" "ComicEditor Cutscene"
+    WriteRegStr HKCU "Software\Classes\${PROJECT_PROGID}\DefaultIcon" "" '$\"$INSTDIR\comic-editor.ico$\"'
+    WriteRegStr HKCU "Software\Classes\${PROJECT_PROGID}\shell\open\command" "" '$\"$INSTDIR\ComicEditor.Desktop.exe$\" $\"%1$\"'
+    WriteRegStr HKCU "Software\ComicEditor\Capabilities" "ApplicationName" "ComicEditor"
+    WriteRegStr HKCU "Software\ComicEditor\Capabilities" "ApplicationDescription" "Draw and localize game cutscenes"
+    WriteRegStr HKCU "Software\RegisteredApplications" "ComicEditor" "Software\ComicEditor\Capabilities"
+    !insertmacro RegisterProjectExtension ".ctsc"
+    !insertmacro RegisterProjectExtension ".cutscene"
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
     ${If} ${Errors}
       SetErrorLevel 2
       Abort
@@ -156,6 +198,7 @@ Section "Uninstall"
   ; Remove shell integration only if it still belongs to this installation.
   ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "InstallLocation"
   ${If} $0 == $INSTDIR
+    !insertmacro RemoveProjectAssociations
     Delete "$SMPROGRAMS\ComicEditor.lnk"
     DeleteRegKey HKCU "${UNINSTALL_KEY}"
   ${EndIf}

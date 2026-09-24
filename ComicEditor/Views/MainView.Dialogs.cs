@@ -232,8 +232,10 @@ public partial class MainView
         var index = editor.Color; var initial = Color.Parse(editor.Scene.Palette[index]);
         var body = new StackPanel { Spacing = 10 };
         var preview = new Border { Height = 54, Background = new SolidColorBrush(initial) };
+        var picker = PaletteColorPicker.Create(initial);
         var hex = new TextBox { Text = editor.Scene.Palette[index], MaxLength = 7, Name = "PaletteHex" };
         body.Children.Add(preview); body.Children.Add(Row(Label("Hex RGB"), hex));
+        body.Children.Add(picker);
         var sliders = new List<Slider>(); var syncing = false;
         foreach (var (label, value) in new[] { ("Red", initial.R), ("Green", initial.G), ("Blue", initial.B) })
         {
@@ -246,12 +248,17 @@ public partial class MainView
             hex.Text = $"#{(int)sliders[0].Value:X2}{(int)sliders[1].Value:X2}{(int)sliders[2].Value:X2}";
         };
         var error = Label(""); error.Foreground = Brush("#AB3B13"); body.Children.Add(error);
+        picker.PropertyChanged += (_, e) =>
+        {
+            if (syncing || e.Property != AvaloniaColorPicker.CustomColorPicker.ColorProperty) return;
+            var color = picker.Color; hex.Text = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+        };
         hex.TextChanged += (_, _) =>
         {
             var text = hex.Text ?? "";
             if (text.Length != 7 || text[0] != '#' || !text[1..].All(Uri.IsHexDigit)) { error.Text = "Enter #RRGGBB."; return; }
             error.Text = ""; var c = Color.Parse(text); preview.Background = new SolidColorBrush(c);
-            syncing = true; sliders[0].Value = c.R; sliders[1].Value = c.G; sliders[2].Value = c.B; syncing = false;
+            syncing = true; picker.Color = c; sliders[0].Value = c.R; sliders[1].Value = c.G; sliders[2].Value = c.B; syncing = false;
         };
         ShowModal($"Palette color {index:D3}", body, () =>
         { if (error.Text?.Length > 0) return; SetPaletteColor(index, hex.Text ?? ""); CloseModal(); });

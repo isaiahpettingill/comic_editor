@@ -1,10 +1,10 @@
 namespace ComicEditor.Format;
 
-// Version 2 stores two hexadecimal digits per pixel in editor memory. FF is transparent.
+// Version 3 supports 2–255 colors. Hex rows still use FF for transparency.
 // Protobuf stores the same index as one byte per pixel on disk.
 public sealed class Cutscene
 {
-    public int Version { get; set; } = 2;
+    public int Version { get; set; } = 3;
     public int Width { get; set; } = 320;
     public int Height { get; set; } = 180;
     public string FallbackLanguage { get; set; } = "en";
@@ -29,9 +29,12 @@ public sealed class Cutscene
                 var m = value - chroma;
                 var (r, g, b) = h switch
                 {
-                    < 60 => (chroma, x, 0.0), < 120 => (x, chroma, 0.0),
-                    < 180 => (0.0, chroma, x), < 240 => (0.0, x, chroma),
-                    < 300 => (x, 0.0, chroma), _ => (chroma, 0.0, x)
+                    < 60 => (chroma, x, 0.0),
+                    < 120 => (x, chroma, 0.0),
+                    < 180 => (0.0, chroma, x),
+                    < 240 => (0.0, x, chroma),
+                    < 300 => (x, 0.0, chroma),
+                    _ => (chroma, 0.0, x)
                 };
                 colors.Add($"#{(int)Math.Round((r + m) * 255):X2}{(int)Math.Round((g + m) * 255):X2}{(int)Math.Round((b + m) * 255):X2}");
             }
@@ -40,7 +43,9 @@ public sealed class Cutscene
     public List<Frame> Frames { get; set; } = [];
     public Dictionary<string, Dictionary<string, string>> Translations { get; set; } = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["en"] = new(), ["es"] = new(), ["pt"] = new()
+        ["en"] = new(),
+        ["es"] = new(),
+        ["pt"] = new()
     };
 
     public static Cutscene Create(int width = 320, int height = 180)
@@ -90,7 +95,7 @@ public sealed class Cutscene
 
     public void Validate()
     {
-        if (Version != 2 || Width is < 1 or > 2048 || Height is < 1 or > 2048 || Palette.Count != 128 || Frames.Count == 0)
+        if (Version != 3 || Width is < 1 or > 2048 || Height is < 1 or > 2048 || Palette.Count is < 2 or > 255 || Frames.Count == 0)
             throw new InvalidDataException("Unsupported cutscene dimensions, version, palette, or empty storyboard.");
         if (Palette.Any(p => p.Length != 7 || p[0] != '#' || !p[1..].All(Uri.IsHexDigit)))
             throw new InvalidDataException("Palette entries must be #RRGGBB colors.");
@@ -135,7 +140,8 @@ public sealed class ArtworkLayer
 
     public static ArtworkLayer Create(string name, int width, int height) => new()
     {
-        Name = name, Rows = Enumerable.Repeat(string.Concat(Enumerable.Repeat("FF", width)), height).ToList()
+        Name = name,
+        Rows = Enumerable.Repeat(string.Concat(Enumerable.Repeat("FF", width)), height).ToList()
     };
 
     public int Pixel(int x, int y)

@@ -37,6 +37,7 @@ public sealed class TestApp : Application
     {
         PreferencesStorage.Read = () => null;
         SessionStorage.Enabled = false;
+        PaletteLibrary.List = () => Task.FromResult(Array.Empty<string>());
         PreferencesStorage.Write = _ => { };
 
         Styles.Add(new FluentTheme());

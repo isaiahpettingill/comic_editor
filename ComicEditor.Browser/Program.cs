@@ -5,6 +5,8 @@ using Avalonia.Browser;
 using ComicEditor;
 using ComicEditor.Editing;
 using System.Runtime.InteropServices.JavaScript;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 internal sealed partial class Program
 {
@@ -20,12 +22,21 @@ internal sealed partial class Program
     [JSImport("globalThis.comicEditorSession.onBackground")]
     private static partial void OnBackground([JSMarshalAs<JSType.Function>] Action callback);
 
+    [JSImport("globalThis.comicEditorPalettes.listJson")]
+    private static partial Task<string> ListPalettes();
+    [JSImport("globalThis.comicEditorPalettes.read")]
+    private static partial Task<string> ReadPalette(string name);
+    [JSImport("globalThis.comicEditorPalettes.write")]
+    private static partial Task WritePalette(string name, string text);
+
     private static Task Main(string[] args)
     {
         PreferencesStorage.Read = LoadPreferences;
         PreferencesStorage.Write = SavePreferences;
         SessionStorage.Read = LoadSession;
         SessionStorage.Write = SaveSession;
+        PaletteLibrary.List = async () => JsonSerializer.Deserialize(await ListPalettes(), PaletteListJson.Default.StringArray) ?? [];
+        PaletteLibrary.Read = ReadPalette; PaletteLibrary.Write = WritePalette;
         OnBackground(async () => { if (SessionStorage.Flush is { } flush) await flush(); });
         return BuildAvaloniaApp()
             .WithInterFont()
@@ -35,3 +46,6 @@ internal sealed partial class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>();
 }
+
+[JsonSerializable(typeof(string[]))]
+internal partial class PaletteListJson : JsonSerializerContext { }

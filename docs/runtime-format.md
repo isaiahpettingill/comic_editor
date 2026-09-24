@@ -2,7 +2,7 @@
 
 ## Editable: `.cutscene`
 
-`ComicEditor.Format/cutscene.proto` remains the editing schema (version 2). It stores all artwork layers, visibility, ordering, text objects, translations and palette entries. Font references are stored in `TextObject.font_id`:
+`ComicEditor.Format/cutscene.proto` remains the editing schema (version 3). It stores all artwork layers, visibility, ordering, text objects, translations and palette entries. Font references are stored in `TextObject.font_id`:
 
 | Reference | Meaning |
 | --- | --- |
@@ -16,13 +16,17 @@ The Google Fonts family name is the reference; CDN URLs and machine-specific cac
 
 The default and bundled font presets work offline. The editor's text properties accept Google Fonts specimen links or CSS family links. Downloads use the complete regular/variable font from the public Google Fonts repository, retaining its license in the local cache. Bold and italic are applied by the renderer, using the available face or synthesis. Noto provides bundled fallback glyphs for Latin, Greek, Cyrillic, Arabic, Hebrew, Devanagari, Thai and CJK. Additional scripts can use an appropriate Google Fonts family.
 
+Each project embeds its own RGB palette. It has 2–255 entries; every artwork pixel is still one byte, with 255 reserved for transparency. Version 1 (16 colors) and version 2 (128 colors) projects remain readable; saving writes version 3. A GPL preset is copied into the project and is never required to render it.
+
 ## Compiled: `.cutscene.runtime`
 
-`ComicEditor.Format/display.proto` is the independent game schema (version 1). Generate a reader in the game's language with `protoc`; no editor library is required.
+`ComicEditor.Format/display.proto` is the independent game schema (version 2). Generate a reader in the game's language with `protoc`; no editor library is required.
+
+Display version 2 allows variable palette sizes. Display version 1 used 128 colors; the byte layout and transparency sentinel are unchanged. Runtime readers should accept version 2 and use the palette array length rather than a hardcoded count.
 
 The file contains:
 
-- Canvas width/height and 128 palette colors.
+- Canvas width/height and 2–255 palette colors.
 - An ordered list of language tags and a fallback language index.
 - Ordered frames with a **single flattened indexed artwork buffer**.
 - One set of rasterized text runs per language per frame.
@@ -32,7 +36,7 @@ It contains no fonts, font references, source dialogue, localization keys, objec
 ### Rendering
 
 1. Clear to white (the editor's canvas background), or choose the game's desired background.
-2. Read `indexed_artwork` in row-major order. Its length is exactly `canvas_width * canvas_height`; indices `0..127` select palette colors, and `255` means transparent.
+2. Read `indexed_artwork` in row-major order. Its length is exactly `canvas_width * canvas_height`; indices `0..254` select palette colors, and `255` means transparent.
 3. Find the language's index in `languages`. Use `fallback_language_index` for an unknown language.
 4. Select `frame.text[language_index]`. For each run, draw a rectangle at `(x,y)` with `width * height` row-major alpha values. The source RGB is `palette_rgb[palette_index]`; source alpha is `alpha / 255`. Composite runs in stored order with ordinary source-over alpha blending.
 

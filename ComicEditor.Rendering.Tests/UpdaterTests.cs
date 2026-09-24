@@ -39,7 +39,6 @@ public class UpdaterTests
     [InlineData("linux-x64")]
     [InlineData("osx-x64")]
     [InlineData("osx-arm64")]
-    [InlineData("android-arm64")]
     public void SelectsNewStableAssetsForEachPlatform(string runtime)
     {
         var json = Release(runtime, [1, 2, 3]);

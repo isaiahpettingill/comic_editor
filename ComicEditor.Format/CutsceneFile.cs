@@ -13,7 +13,8 @@ public static class CutsceneFile
         {
             Version = (uint)scene.Version,
             CanvasWidth = (uint)scene.Width,
-            CanvasHeight = (uint)scene.Height, FallbackLanguage = scene.FallbackLanguage
+            CanvasHeight = (uint)scene.Height,
+            FallbackLanguage = scene.FallbackLanguage
         };
         document.PaletteRgb.Add(scene.Palette.Select(hex => Convert.ToUInt32(hex[1..], 16)));
         foreach (var frame in scene.Frames)
@@ -28,10 +29,17 @@ public static class CutsceneFile
             foreach (var obj in frame.TextObjects)
                 target.TextObjects.Add(new Wire.TextObject
                 {
-                    Id = obj.Id, Key = obj.Key, X = (float)obj.X, Y = (float)obj.Y,
-                    Width = (float)obj.Width, Height = (float)obj.Height,
-                    FontId = obj.FontId, FontSize = (float)obj.FontSize, PaletteIndex = (uint)obj.Color,
-                    Bold = obj.Bold, Italic = obj.Italic
+                    Id = obj.Id,
+                    Key = obj.Key,
+                    X = (float)obj.X,
+                    Y = (float)obj.Y,
+                    Width = (float)obj.Width,
+                    Height = (float)obj.Height,
+                    FontId = obj.FontId,
+                    FontSize = (float)obj.FontSize,
+                    PaletteIndex = (uint)obj.Color,
+                    Bold = obj.Bold,
+                    Italic = obj.Italic
                 });
             document.Frames.Add(target);
         }
@@ -49,27 +57,44 @@ public static class CutsceneFile
     {
         if (bytes.Length > 64 * 1024 * 1024) throw new InvalidDataException("Cutscene exceeds 64 MiB.");
         var document = Wire.CutsceneDocument.Parser.ParseFrom(bytes);
+        if (document.Version is < 1 or > 3 ||
+            (document.Version == 1 && document.PaletteRgb.Count != 16) ||
+            (document.Version == 2 && document.PaletteRgb.Count != 128) ||
+            document.PaletteRgb.Count is < 2 or > 255)
+            throw new InvalidDataException("Unsupported cutscene version or palette size.");
         if (document.CanvasWidth is < 1 or > 2048 || document.CanvasHeight is < 1 or > 2048)
             throw new InvalidDataException("Unsupported canvas dimensions.");
         var scene = new Cutscene
         {
-            Version = 2, Width = (int)document.CanvasWidth, Height = (int)document.CanvasHeight,
+            Version = 3,
+            Width = (int)document.CanvasWidth,
+            Height = (int)document.CanvasHeight,
             FallbackLanguage = document.FallbackLanguage,
             Palette = document.PaletteRgb.Select(color => $"#{color:X6}").ToList(),
             Frames = document.Frames.Select(frame => new Frame
             {
-                Id = frame.Id, TextVisible = !frame.TextHidden,
+                Id = frame.Id,
+                TextVisible = !frame.TextHidden,
                 Layers = frame.Layers.Select(layer => new ArtworkLayer
                 {
-                    Id = layer.Id, Name = layer.Name, Visible = layer.Visible,
-                    Rows = DecodeRows(layer.Pixels, (int)document.CanvasWidth, (int)document.CanvasHeight, document.Version == 1 ? 16 : 128)
+                    Id = layer.Id,
+                    Name = layer.Name,
+                    Visible = layer.Visible,
+                    Rows = DecodeRows(layer.Pixels, (int)document.CanvasWidth, (int)document.CanvasHeight, document.PaletteRgb.Count)
                 }).ToList(),
                 TextObjects = frame.TextObjects.Select(obj => new TextObject
                 {
-                    Id = obj.Id, Key = obj.Key, X = obj.X, Y = obj.Y,
-                    Width = obj.Width, Height = obj.Height, FontId = obj.FontId,
-                    FontSize = obj.FontSize, Color = (int)obj.PaletteIndex,
-                    Bold = obj.Bold, Italic = obj.Italic
+                    Id = obj.Id,
+                    Key = obj.Key,
+                    X = obj.X,
+                    Y = obj.Y,
+                    Width = obj.Width,
+                    Height = obj.Height,
+                    FontId = obj.FontId,
+                    FontSize = obj.FontSize,
+                    Color = (int)obj.PaletteIndex,
+                    Bold = obj.Bold,
+                    Italic = obj.Italic
                 }).ToList()
             }).ToList(),
             Translations = document.Languages.ToDictionary(language => language.Code,
@@ -77,8 +102,6 @@ public static class CutsceneFile
         };
         if (document.Version == 1 && scene.Palette.Count == 16)
             scene.Palette.AddRange(Cutscene.DefaultPalette().Skip(16));
-        else if (document.Version != 2)
-            throw new InvalidDataException("Unsupported cutscene version.");
         if (!scene.Translations.ContainsKey(scene.FallbackLanguage))
             scene.FallbackLanguage = scene.Translations.ContainsKey("en") ? "en" : scene.Translations.Keys.FirstOrDefault() ?? "";
         scene.Validate();

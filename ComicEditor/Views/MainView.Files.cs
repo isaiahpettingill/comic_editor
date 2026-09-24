@@ -40,6 +40,7 @@ public partial class MainView
             await using var stream = await files[0].OpenReadAsync(); using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer); var bytes = buffer.ToArray();
             editor.Load(bytes, files[0].Name); await BindFile(files[0], bytes); Build(compact);
+            selection = clipboardSelection = null;
             SetSaveMessage($"Opened {files[0].Name}. Crash recovery is active.");
             await SaveSessionSafely();
             await CutsceneFonts.EnsureAsync(editor.Scene); RefreshAll();

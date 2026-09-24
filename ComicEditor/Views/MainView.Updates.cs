@@ -22,6 +22,7 @@ public partial class MainView
 
     private void AddUpdateMenu(Menu menu)
     {
+        if (OperatingSystem.IsAndroid()) return;
         helpMenu = new MenuItem { Header = "_Help" };
         updateMenu = new MenuItem { Header = "Check for updates…", Name = "CheckForUpdates" };
         updateMenu.Click += (_, _) => ShowUpdates(); helpMenu.Items.Add(updateMenu); menu.Items.Add(helpMenu);
@@ -36,7 +37,7 @@ public partial class MainView
         if (updateAction is not null)
         {
             updateAction.IsEnabled = !updateBusy && UpdateHost.Installation is not null;
-            updateAction.Content = updateBusy ? "Please wait…" : updatePackage is not null ? OperatingSystem.IsAndroid() ? "Install update" : "Restart and install" : availableUpdate is not null ? "Download update" : "Check now";
+            updateAction.Content = updateBusy ? "Please wait…" : updatePackage is not null ? "Restart and install" : availableUpdate is not null ? "Download update" : "Check now";
         }
         if (updateCancel is not null) updateCancel.IsVisible = updateBusy && !updateInstalling;
         if (updateProgress is not null) updateProgress.IsVisible = updateBusy;
@@ -55,9 +56,7 @@ public partial class MainView
         else if (installation is null)
             body.Children.Add(Label("Automatic updates are enabled in release packages. Development builds stay under your control."));
         else
-            body.Children.Add(Label(OperatingSystem.IsAndroid()
-                ? "Download the signed APK, then confirm installation in Android. Your open cutscene will be restored when you reopen the app."
-                : "Downloads are verified before installation. Restart when ready; your open cutscene and unsaved edits will return. Undo history resets after restarting."));
+            body.Children.Add(Label("Downloads are verified before installation. Restart when ready; your open cutscene and unsaved edits will return. Undo history resets after restarting."));
         updateProgress = new ProgressBar { Name = "UpdateProgress", Minimum = 0, Maximum = 100, Height = 6, IsIndeterminate = true };
         body.Children.Add(updateProgress);
         updateAction = Button("Check now", () => _ = RunUpdateAction()); updateAction.Name = "UpdateAction";
@@ -80,7 +79,7 @@ public partial class MainView
         if (updateProgress is not null) updateProgress.IsIndeterminate = false;
         try
         {
-            var root = UpdateHost.AndroidDownloadDirectory ?? ReleaseClient.DataDirectory;
+            var root = ReleaseClient.DataDirectory;
             var folder = Path.Combine(root, "downloads", availableUpdate.Version.ToString());
             updatePackage = await ReleaseClient.Download(availableUpdate, folder, new Progress<double>(value =>
             {
@@ -123,21 +122,13 @@ public partial class MainView
         {
             await SaveSession();
             UpdateRecovery.Save(editor, availableUpdate.Version, ReleaseClient.DataDirectory);
-            if (OperatingSystem.IsAndroid())
-            {
-                var started = UpdateHost.InstallAndroid?.Invoke(updatePackage) == true;
-                updateMessage = started ? "Confirm the update in Android, then reopen ComicEditor." : "Allow ComicEditor to install updates in Android settings, then tap Install update again.";
-            }
-            else
-            {
-                if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
-                    throw new InvalidOperationException("Desktop restart is not available in this host.");
-                var directory = Path.Combine(ReleaseClient.DataDirectory, "install-" + Guid.NewGuid().ToString("N"));
-                var plan = await Task.Run(() => UpdateInstaller.Prepare(updatePackage, availableUpdate, AppContext.BaseDirectory, directory));
-                await UpdateInstaller.LaunchHelper(plan, directory);
-                File.WriteAllText(Path.Combine(directory, "apply.approved"), plan.Token);
-                desktop.Shutdown();
-            }
+            if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+                throw new InvalidOperationException("Desktop restart is not available in this host.");
+            var directory = Path.Combine(ReleaseClient.DataDirectory, "install-" + Guid.NewGuid().ToString("N"));
+            var plan = await Task.Run(() => UpdateInstaller.Prepare(updatePackage, availableUpdate, AppContext.BaseDirectory, directory));
+            await UpdateInstaller.LaunchHelper(plan, directory);
+            File.WriteAllText(Path.Combine(directory, "apply.approved"), plan.Token);
+            desktop.Shutdown();
         }
         catch (Exception ex)
         {
@@ -148,9 +139,9 @@ public partial class MainView
     }
     private async void StartUpdates()
     {
-        if (updateLifetime is not null) return;
+        if (OperatingSystem.IsAndroid() || updateLifetime is not null) return;
         updateLifetime = new CancellationTokenSource(); var cancellation = updateLifetime.Token;
-        if (!restoredUpdate && (UpdateHost.ResumePlan is not null || UpdateHost.AndroidInstallation is not null))
+        if (!restoredUpdate && UpdateHost.ResumePlan is not null)
         {
             restoredUpdate = true;
             try

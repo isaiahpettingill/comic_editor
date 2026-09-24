@@ -1,4 +1,4 @@
-param([int]$Port = 8098, [int]$DebugPort = 9234, [string]$WebRoot, [switch]$CheckPreferences, [switch]$CheckRecovery)
+param([int]$Port = 8098, [int]$DebugPort = 9234, [string]$WebRoot, [switch]$CheckPreferences, [switch]$CheckRecovery, [switch]$CheckPalettes)
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path -Parent $PSScriptRoot
 $artifactRoot = Join-Path $workspace 'artifacts'
@@ -77,6 +77,15 @@ try {
         }
         if ($snapshot.Frame -ne 0 -or $snapshot.FileName -ne 'browser-recovery.cutscene' -or !$snapshot.Dirty) { throw 'Browser project recovery did not survive reload through .NET.' }
         'Browser project recovery survived reload with unsaved work intact.'
+    }
+    if ($CheckPalettes) {
+        $null = Invoke-Cdp 'Runtime.evaluate' @{expression='comicEditorPalettes.write("Smoke.gpl", "GIMP Palette\nName: Smoke\n0 0 0 Black\n255 255 255 White\n")';awaitPromise=$true}
+        $null = Invoke-Cdp 'Page.reload'
+        Start-Sleep -Seconds 6
+        $palettes = Invoke-Cdp 'Runtime.evaluate' @{expression='(async()=>JSON.stringify({files:await comicEditorPalettes.list(),text:await comicEditorPalettes.read("Smoke.gpl")}))()';awaitPromise=$true;returnByValue=$true}
+        $saved = $palettes.result.result.value | ConvertFrom-Json
+        if ($saved.files -notcontains 'Smoke.gpl' -or $saved.text -notmatch '255 255 255 White') { throw 'Browser palette library did not survive reload.' }
+        'Browser GPL palette library survived reload.'
     }
     $capture = Invoke-Cdp 'Page.captureScreenshot' @{format='png'}
     [IO.File]::WriteAllBytes((Join-Path $artifactRoot 'browser-smoke.png'),[Convert]::FromBase64String($capture.result.data))

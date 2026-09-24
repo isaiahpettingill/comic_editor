@@ -17,7 +17,7 @@ public static class DisplayCompiler
         foreach (var obj in scene.Frames.Where(f => f.TextVisible).SelectMany(f => f.TextObjects))
             if (CutsceneFonts.IsCustom(obj.FontId) && !CutsceneFonts.IsInstalled(obj.FontId))
                 throw new InvalidDataException($"Required font is unavailable: {obj.FontId}. Install it before compiling.");
-        var result = new DisplayCutscene { Version = 1, CanvasWidth = (uint)scene.Width, CanvasHeight = (uint)scene.Height };
+        var result = new DisplayCutscene { Version = 2, CanvasWidth = (uint)scene.Width, CanvasHeight = (uint)scene.Height };
         result.PaletteRgb.Add(scene.Palette.Select(hex => Convert.ToUInt32(hex[1..], 16)));
         result.Languages.Add(scene.Translations.Keys.Order(StringComparer.Ordinal).ToArray());
         if (result.Languages.Count == 0) result.Languages.Add("und");

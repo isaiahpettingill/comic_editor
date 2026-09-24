@@ -2,14 +2,14 @@ syntax = "proto3";
 package comic_editor.cutscene.v1;
 option csharp_namespace = "ComicEditor.Wire";
 
-// Artwork pixels are row-major palette indexes 0..127. 255 means transparent.
-// Version 1 files had 16 palette entries; version 2 has 128 entries.
+// Artwork pixels are row-major palette indexes 0..254. 255 means transparent.
+// Version 1 had 16 palette entries; version 2 had 128; version 3 allows 2..255.
 // A layer has exactly canvas_width * canvas_height bytes.
 message CutsceneDocument {
   uint32 version = 1;
   uint32 canvas_width = 2;
   uint32 canvas_height = 3;
-  repeated uint32 palette_rgb = 4; // 128 entries in version 2, each 0xRRGGBB.
+  repeated uint32 palette_rgb = 4; // 2..255 project-owned entries in version 3; each 0xRRGGBB.
   repeated Frame frames = 5;
   repeated Language languages = 6;
   string fallback_language = 7; // Missing/blank translations use this language, then blank.

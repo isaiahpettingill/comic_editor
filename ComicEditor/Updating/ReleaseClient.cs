@@ -27,7 +27,6 @@ public static class ReleaseClient
         "linux-x64" => "ComicEditor-linux-x64.tar.gz",
         "osx-x64" => "ComicEditor-osx-x64.tar.gz",
         "osx-arm64" => "ComicEditor-osx-arm64.tar.gz",
-        "android-arm64" => "ComicEditor-android-arm64.apk",
         _ => null
     };
     public static UpdateInstallation? ReadInstallation(string directory)

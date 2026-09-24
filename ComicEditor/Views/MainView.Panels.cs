@@ -47,7 +47,7 @@ public partial class MainView
         if (palette is null) return;
         if (compactColor is not null) compactColor.Background = Brush(editor.Scene.Palette[editor.Color]);
         palette.Children.Clear();
-        var heading = Row(Label("Palette", true), Label($"{editor.Color:D3}  {editor.Scene.Palette[editor.Color]}"), Button("Edit color…", EditPaletteColor));
+        var heading = Row(Label("Palette", true), Label($"{editor.Color:D3}  {editor.Scene.Palette[editor.Color]}"), Button("Edit palette…", EditPalette));
         palette.Children.Add(heading);
         var colors = new WrapPanel { Name = "PaletteSwatches", Orientation = Orientation.Horizontal };
         for (var i = 0; i < editor.Scene.Palette.Count; i++)

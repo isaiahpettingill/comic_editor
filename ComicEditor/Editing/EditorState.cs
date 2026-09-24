@@ -48,7 +48,7 @@ public sealed class EditorState
     private int layerIndex;
     public int LayerIndex { get => layerIndex; set { if (layerIndex != value) FinishPendingEdit?.Invoke(); layerIndex = value; } }
     public Tool Tool { get => Preferences.Tool; set { if (Preferences.Tool != value) FinishPendingEdit?.Invoke(); Preferences.Tool = value; Preferences.Save(); } }
-    public int Color { get => Preferences.Color; set { Preferences.Color = value; Preferences.Save(); } }
+    public int Color { get => Math.Clamp(Preferences.Color, 0, Scene.Palette.Count - 1); set { Preferences.Color = Math.Clamp(value, 0, Scene.Palette.Count - 1); Preferences.Save(); } }
     public int BrushSize { get => Paint.Size; set { Paint.Size = value; Preferences.Save(); } }
     public string Language { get => Preferences.Language; set { Preferences.Language = value; Preferences.Save(); } }
     public bool OnionSkin { get => Preferences.OnionSkin; set { Preferences.OnionSkin = value; Preferences.Save(); } }
@@ -99,6 +99,45 @@ public sealed class EditorState
     }
 
     public void RememberPalette() { Preferences.Palette = Scene.Palette.ToArray(); Preferences.Save(); }
+
+    public void ApplyPalette(IReadOnlyList<string> colors)
+    {
+        if (colors.Count is < 2 or > GplPalette.Capacity || colors.Any(c => !GplPalette.IsHex(c))) throw new ArgumentException("Expected 2–255 RGB colors.");
+        var copy = colors.Select(c => c.ToUpperInvariant()).ToList();
+        if (Scene.Palette.SequenceEqual(copy)) return;
+        BeforeChange();
+        // Indices still present keep their identity. Removed slots map to the
+        // nearest remaining RGB color, across every layer and text object.
+        var map = Enumerable.Range(0, Scene.Palette.Count).Select(i => i < copy.Count ? i : Nearest(Scene.Palette[i], copy)).ToArray();
+        if (copy.Count < Scene.Palette.Count)
+            foreach (var frame in Scene.Frames)
+            {
+                foreach (var layer in frame.Layers)
+                    for (var y = 0; y < Scene.Height; y++)
+                    {
+                        var row = layer.Rows[y].ToCharArray();
+                        for (var x = 0; x < Scene.Width; x++)
+                        {
+                            var index = layer.Pixel(x, y);
+                            if (index < copy.Count) continue;
+                            var hex = map[index].ToString("X2"); row[x * 2] = hex[0]; row[x * 2 + 1] = hex[1];
+                        }
+                        layer.Rows[y] = new string(row);
+                    }
+                foreach (var obj in frame.TextObjects) obj.Color = map[obj.Color];
+            }
+        var selected = map[Color]; Scene.Palette = copy; Color = selected; RememberPalette();
+    }
+
+    private static int Nearest(string source, IReadOnlyList<string> colors)
+    {
+        var rgb = Convert.FromHexString(source[1..]);
+        return Enumerable.Range(0, colors.Count).MinBy(i =>
+        {
+            var other = Convert.FromHexString(colors[i][1..]);
+            return Enumerable.Range(0, 3).Sum(c => (rgb[c] - other[c]) * (rgb[c] - other[c]));
+        });
+    }
 
     public void EnsureLanguage()
     {

@@ -65,7 +65,7 @@ New text reuses the last applied font, size, bold, and italic style. New project
 
 **Canvas → Resize canvas…** changes every frame's dimensions. Choose Center or Top left anchoring. Enlarging adds transparent pixels; shrinking crops artwork. Text objects move with the chosen anchor. Resizing is undoable and does not resample artwork.
 
-The 128 editable swatches flow across the palette pane. Select a color and use **Edit color…**, or right-click a swatch, to edit hex RGB or channel sliders. Pressure uses normal pen/pointer pressure, falling back to full pressure for devices without it.
+Each cutscene has its own 2–255 color palette (128 by default); index 255 is reserved for transparency. Swatches flow across the palette pane. Open **Palette → Palette editor…** or **Edit palette…** to change its size and colors, load a preset, or import/export a GIMP `.gpl` file. Right-click a swatch to edit just that color. Pressure uses normal pen/pointer pressure, falling back to full pressure for devices without it.
 
 Layer rows show visibility, names, and stacking order (topmost first). Double-click an artwork layer to rename it. Text has its own visibility row above artwork. Layer controls add, delete, raise, and lower artwork layers.
 
@@ -78,6 +78,14 @@ Bundled fonts include Comic Shanns, Anton, Permanent Marker, and Noto Sans. Noto
 Undo/redo covers artwork, palette edits, frame and layer operations, translation edits, language management, text properties, and canvas resizing. The desktop title displays the filename and an asterisk for unsaved changes.
 
 **File → Export frame PNG… / Export all PNGs…** lets you choose any project language without changing the preview. Each PNG is indexed (color type 3) with exactly the distinct RGB colors visible in that image, merging duplicate colors and dropping unused palette entries. Exports use crisp text edges and a white background; no antialias shades or selection markers are added. Each frame gets its own minimal palette and the smallest supported PNG bit depth. The editable project palette stays unchanged.
+
+## Palette presets
+
+The palette editor works on a draft. **Apply** updates only the current cutscene; **Cancel** discards the draft. Artwork and text keep their slot numbers when the palette is recolored. Shrinking remaps removed slots to the nearest remaining RGB color across every frame/layer/text object; Undo restores the original indices and palette. Imported palettes must have 2–255 colors.
+
+**Save preset** writes a `.gpl` file to `ComicEditor/palettes` under the user's local application-data directory, using the palette name as its filename. Saving that name again updates the preset. The desktop **Open folder** button opens this directory, and `.gpl` files placed there appear in the preset selector when reopening the editor. **Import .gpl…** loads a file into the draft without changing the library; **Export .gpl…** saves a copy wherever you choose. Browser presets persist in IndexedDB and can be exported as `.gpl` files.
+
+A cutscene embeds its complete palette: modifying it never rewrites a saved preset, and it renders without access to the palette folder. The [.gpl specification](https://developer.gimp.org/core/standards/gpl/) defines the portable RGB text format. New editable files use format version 3 and compiled assets use version 2; see the [runtime format guide](docs/runtime-format.md).
 
 ## Autosave and crash recovery
 
@@ -116,11 +124,11 @@ The editor also exposes **File → Build game cutscene…**. The runtime format 
 
 ### In-app updates
 
-Release builds check GitHub 15 seconds after startup and every four hours. **Help → Check for updates…** checks immediately and lets you disable automatic checks. New versions are announced in the Help menu (the compact menu highlights blue). Downloads and installation start when you choose them.
+Desktop release builds check GitHub 15 seconds after startup and every four hours. **Help → Check for updates…** checks immediately and lets you disable automatic checks. New versions are announced in the Help menu (the compact menu highlights blue). Downloads and installation start when you choose them.
 
 On Windows, Linux, and macOS, choose **Download update**, then **Restart and install**. Downloads must match GitHub's published SHA-256 and size. The updater stages the matching platform package beside the application, waits for the editor to exit, replaces the installation, and reopens your cutscene with unsaved edits and the selected frame intact. Undo history resets. Files stored alongside the application are preserved; the previous installation is retained until the updated editor restores the workspace. Directory replacement failures roll back to the previous installation. System-owned/read-only installations need to be updated by their owner. Development builds have no `update.json` and never update themselves.
 
-Android release builds download the signed APK and hand it to Android's package installer. Android may first ask you to allow ComicEditor to install updates; then return and tap **Install update** again. Installation always uses Android's confirmation and signing checks. Reopen ComicEditor after updating to restore the active cutscene. The browser version updates when its web host deploys a newer build; save before reloading.
+Android has no in-app updater or package-install permission. Track `isaiahpettingill/comic_editor` in Obtainium to update the signed APK; autosave and crash recovery remain available. The browser version updates when its web host deploys a newer build; save before reloading.
 
 Update recovery and logs live in the application's local data folder under `ComicEditor/updates`. `resume.cutscene` is a normal editable project copy that can be opened manually if a restart fails. Updating keeps project files and editor preferences. Version 0.1.3 is the first release with the updater, so older versions require one manual installation.
 

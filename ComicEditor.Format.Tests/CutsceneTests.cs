@@ -74,7 +74,7 @@ public class CutsceneTests
         var frame = new ComicEditor.Wire.Frame();
         frame.Layers.Add(new ComicEditor.Wire.ArtworkLayer { Pixels = ByteString.CopyFrom([15, 255]), Visible = true }); document.Frames.Add(frame);
         var scene = CutsceneFile.Parse(document.ToByteArray());
-        Assert.Equal(2, scene.Version); Assert.Equal(128, scene.Palette.Count);
+        Assert.Equal(3, scene.Version); Assert.Equal(128, scene.Palette.Count);
         Assert.Equal(15, scene.Frames[0].Layers[0].Pixel(0, 0)); Assert.Equal(-1, scene.Frames[0].Layers[0].Pixel(1, 0));
         Assert.True(scene.Frames[0].TextVisible);
     }

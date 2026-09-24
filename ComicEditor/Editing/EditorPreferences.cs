@@ -40,12 +40,12 @@ public sealed class EditorPreferences
         value.CanvasHeight = Math.Clamp(value.CanvasHeight, 1, 2048);
         value.FontSize = double.IsFinite(value.FontSize) ? Math.Clamp(value.FontSize, 1, 2048) : 16;
         if (string.IsNullOrWhiteSpace(value.FontId)) value.FontId = "comic-shanns";
-        value.Color = Math.Clamp(value.Color, 0, 127);
         if (!Enum.IsDefined(value.Tool)) value.Tool = Tool.Pixel;
         value.Tools ??= new();
         value.Tools = value.Tools.Where(p => p.Value is not null).ToDictionary(p => p.Key, p => p.Value);
         foreach (var settings in value.Tools.Values) settings.Validate();
-        if (value.Palette is not { Length: 128 } || value.Palette.Any(c => c is null || c.Length != 7 || c[0] != '#' || !c[1..].All(Uri.IsHexDigit))) value.Palette = null;
+        if (value.Palette is not { Length: >= 2 and <= 255 } || value.Palette.Any(c => !GplPalette.IsHex(c))) value.Palette = null;
+        value.Color = Math.Clamp(value.Color, 0, (value.Palette?.Length ?? 128) - 1);
         value.OnionOpacity = double.IsFinite(value.OnionOpacity) ? Math.Clamp(value.OnionOpacity, 0, 1) : .35;
         value.Zoom = double.IsFinite(value.Zoom) ? Math.Clamp(value.Zoom, 0, 32) : 0;
         return value;

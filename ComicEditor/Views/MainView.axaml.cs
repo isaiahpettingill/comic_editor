@@ -187,7 +187,7 @@ public partial class MainView : UserControl
             if (!compact && !paletteResized)
             {
                 var columns = Math.Max(1, (int)((root.Bounds.Width - 16) / 28));
-                root.RowDefinitions[4].Height = new GridLength(48 + Math.Ceiling(128.0 / columns) * 28);
+                root.RowDefinitions[4].Height = new GridLength(48 + Math.Ceiling(editor.Scene.Palette.Count / (double)columns) * 28);
             }
         };
         var menu = new Menu { Height = small ? 44 : 30, HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -219,7 +219,7 @@ public partial class MainView : UserControl
             }
         )));
         menu.Items.Add(MenuGroup("_Canvas", ("Resize canvas…", ResizeCanvas)));
-        menu.Items.Add(MenuGroup("_Palette", ("Edit selected color…", EditPaletteColor)));
+        menu.Items.Add(MenuGroup("_Palette", ("Palette editor…", EditPalette), ("Edit selected color…", EditPaletteColor)));
         menu.Items.Add(MenuGroup("_Languages", ("Manage languages…", ManageLanguages)));
         AddUpdateMenu(menu);
         compactDrawer = null;
@@ -458,9 +458,14 @@ public partial class MainView : UserControl
     }
 
     private void SelectFrame(int index) { FinishPath(); selection = null; editor.SelectFrame(index); RefreshAll(); }
-    private void Undo() { if (pathBase is not null) { FinishPath(cancel: true); return; } if (editor.Undo()) { editor.RememberCanvas(); editor.RememberPalette(); RefreshAll(); RefreshTools(); } }
-    private void Redo() { FinishPath(); if (editor.Redo()) { editor.RememberCanvas(); editor.RememberPalette(); RefreshAll(); RefreshTools(); } }
-    private void New() { if (fileBusy) return; FinishPath(); selection = null; editor.New(); ClearFile(); Build(compact); _ = SaveSessionSafely(); }
+    private void Undo() { if (pathBase is not null) { FinishPath(cancel: true); return; } var palette = editor.Scene.Palette; if (editor.Undo()) { RefreshHistory(palette); } }
+    private void Redo() { FinishPath(); var palette = editor.Scene.Palette; if (editor.Redo()) { RefreshHistory(palette); } }
+    private void RefreshHistory(IReadOnlyList<string> previousPalette)
+    {
+        if (!previousPalette.SequenceEqual(editor.Scene.Palette)) selection = clipboardSelection = null;
+        editor.RememberCanvas(); editor.RememberPalette(); RefreshAll(); RefreshTools();
+    }
+    private void New() { if (fileBusy) return; FinishPath(); selection = clipboardSelection = null; editor.New(); ClearFile(); Build(compact); _ = SaveSessionSafely(); }
 
     private void ZoomWheel(object? sender, PointerWheelEventArgs e)
     {

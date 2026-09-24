@@ -76,6 +76,28 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: Compress-Archive -Path 'artifacts/${{ matrix.rid }}/*' -DestinationPath 'ComicEditor-${{ matrix.rid }}.zip'
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install nsis --version=3.12.0 -y --no-progress
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        run: python tools/package-windows-installer.py artifacts/win-x64 ComicEditor-win-x64-setup.exe
+      - name: Test Windows installer and update staging
+        if: runner.os == 'Windows'
+        run: python tools/test_windows_installer.py ComicEditor-win-x64-setup.exe artifacts/win-x64 --registered
+      - name: Test NSIS updater integration
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:COMIC_TEST_SETUP = (Resolve-Path ComicEditor-win-x64-setup.exe).Path
+          $env:COMIC_TEST_SETUP_PAYLOAD = (Resolve-Path artifacts/win-x64).Path
+          dotnet test ComicEditor.Rendering.Tests -c Release --filter RealNsisPackageStagesAndSwapsThroughTheUpdater
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: windows-installer
+          path: ComicEditor-win-x64-setup.exe
       - name: Archive Unix build
         if: runner.os != 'Windows'
         shell: bash

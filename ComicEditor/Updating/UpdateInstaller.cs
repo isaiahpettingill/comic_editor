@@ -14,6 +14,10 @@ public sealed class UpdatePlan
     public string Runtime { get; set; } = "";
     public string Version { get; set; } = "";
     public int ParentProcess { get; set; }
+    public string? InstallerPackage { get; set; }
+    public string? InstallerSha256 { get; set; }
+    public long InstallerSize { get; set; }
+    public string? PreviousVersion { get; set; }
     [JsonIgnore] public string Prepared => Target + ".update-" + Token;
     [JsonIgnore] public string Backup => Target + ".previous-" + Token;
     [JsonIgnore] public string Executable => Runtime.StartsWith("win-") ? "ComicEditor.Desktop.exe" : "ComicEditor.Desktop";
@@ -42,13 +46,24 @@ public static class UpdateInstaller
             using (var package = File.OpenRead(archive))
                 if (package.Length != release.Size || !Convert.ToHexString(SHA256.HashData(package)).Equals(release.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("The staged update no longer matches its verified download.");
-            var payload = Path.Combine(workDirectory, "payload"); Directory.CreateDirectory(payload);
-            Extract(archive, payload, cancellation);
-            var next = ReleaseClient.ReadInstallation(payload);
-            if (next is null || next.Runtime != release.Runtime || ReleaseClient.Normalize(next.Version) != ReleaseClient.Normalize(release.Version) || !File.Exists(Path.Combine(payload, plan.Executable)))
-                throw new InvalidDataException("The downloaded package has incorrect installation metadata or is missing its executable.");
             CopyTree(target, plan.Prepared, cancellation);
-            CopyTree(payload, plan.Prepared, cancellation, overwrite: true);
+            if (release.Runtime == "win-x64" && release.AssetName == ReleaseClient.AssetName("win-x64"))
+            {
+                Directory.CreateDirectory(workDirectory);
+                plan.InstallerPackage = Path.GetFullPath(Path.Combine(workDirectory, "setup.exe"));
+                File.Copy(archive, plan.InstallerPackage, overwrite: true);
+                plan.InstallerSha256 = release.Sha256; plan.InstallerSize = release.Size;
+                plan.PreviousVersion = installed.Version.ToString();
+            }
+            else
+            {
+                var payload = Path.Combine(workDirectory, "payload"); Directory.CreateDirectory(payload);
+                Extract(archive, payload, cancellation);
+                var next = ReleaseClient.ReadInstallation(payload);
+                if (next is null || next.Runtime != release.Runtime || ReleaseClient.Normalize(next.Version) != ReleaseClient.Normalize(release.Version) || !File.Exists(Path.Combine(payload, plan.Executable)))
+                    throw new InvalidDataException("The downloaded package has incorrect installation metadata or is missing its executable.");
+                CopyTree(payload, plan.Prepared, cancellation, overwrite: true);
+            }
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Path.Combine(plan.Prepared, plan.Executable), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
             File.WriteAllText(Path.Combine(plan.Prepared, ".update-token"), plan.Token);
             Directory.CreateDirectory(workDirectory);
@@ -138,6 +153,10 @@ public static class UpdateInstaller
             Path.TrimEndingDirectorySeparator(Path.GetPathRoot(plan.Target)!) == Path.TrimEndingDirectorySeparator(plan.Target) ||
             ReleaseClient.AssetName(plan.Runtime) is null || plan.Runtime == "android-arm64" || !Version.TryParse(plan.Version, out _))
             throw new InvalidDataException("Invalid update plan.");
+        if (plan.InstallerPackage is not null && (plan.Runtime != "win-x64" ||
+            plan.InstallerPackage != Path.GetFullPath(Path.Combine(Path.GetDirectoryName(file)!, "setup.exe")) ||
+            plan.InstallerSha256 is not { Length: 64 } || !plan.InstallerSha256.All(Uri.IsHexDigit) || plan.InstallerSize is <= 0 or > 1_073_741_824 ||
+            !Version.TryParse(plan.PreviousVersion, out _))) throw new InvalidDataException("Invalid Windows installer plan.");
         return plan;
     }
     public static void Apply(UpdatePlan plan, Action<string, string>? moveDirectory = null)
@@ -166,7 +185,10 @@ public static class UpdateInstaller
             catch (ArgumentException) { /* The editor already exited. */ }
             var approval = Path.Combine(workDirectory, "apply.approved");
             if (!File.Exists(approval) || File.ReadAllText(approval) != plan.Token) return 1;
-            Apply(plan); File.WriteAllText(log, "Update installed.\n");
+            if (plan.InstallerPackage is not null) WindowsSetup.Stage(plan);
+            Apply(plan);
+            if (plan.InstallerPackage is not null) WindowsSetup.Register(plan);
+            File.WriteAllText(log, "Update installed.\n");
             Restart(plan, planFile); return 0;
         }
         catch (Exception error)
@@ -178,6 +200,9 @@ public static class UpdateInstaller
                 {
                     if (Directory.Exists(plan.Target)) Directory.Move(plan.Target, plan.Prepared);
                     Directory.Move(plan.Backup, plan.Target);
+                    if (plan.InstallerPackage is not null && File.Exists(Path.Combine(plan.Target, "Uninstall.exe")))
+                        WindowsSetup.Register(plan, previous: true);
+                    else if (plan.InstallerPackage is not null) WindowsSetup.Unregister(plan);
                 }
                 catch (Exception rollback) { File.AppendAllText(log, "\nRollback: " + rollback.Message); return 1; }
             }

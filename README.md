@@ -122,11 +122,19 @@ The editor also exposes **File → Build game cutscene…**. The runtime format 
 
 ## Releases
 
+### Windows installation
+
+Download **ComicEditor-win-x64-setup.exe** from the release. The NSIS installer installs for the current user under `%LOCALAPPDATA%\Programs\ComicEditor` by default, adds a Start menu shortcut, and registers an uninstall entry in Windows Settings. You can choose another writable folder. Administrator access is not required. Uninstall removes packaged application files and its shortcut; projects, palette presets, preferences, and recovery data are kept.
+
+The portable ZIP remains available. Versions before 0.1.7 update through that ZIP once; from 0.1.7 onward, Windows updates select the NSIS installer by default. Updating a portable copy keeps its existing location and registers that copy as an installed application.
+
 ### In-app updates
 
 Desktop release builds check GitHub 15 seconds after startup and every four hours. **Help → Check for updates…** checks immediately and lets you disable automatic checks. New versions are announced in the Help menu (the compact menu highlights blue). Downloads and installation start when you choose them.
 
 On Windows, Linux, and macOS, choose **Download update**, then **Restart and install**. Downloads must match GitHub's published SHA-256 and size. The updater stages the matching platform package beside the application, waits for the editor to exit, replaces the installation, and reopens your cutscene with unsaved edits and the selected frame intact. Undo history resets. Files stored alongside the application are preserved; the previous installation is retained until the updated editor restores the workspace. Directory replacement failures roll back to the previous installation. System-owned/read-only installations need to be updated by their owner. Development builds have no `update.json` and never update themselves.
+
+On Windows the verified NSIS installer runs silently in the staging folder, then updates Windows registration and the Start menu after the folder swap. It does not install over the running executable. Failed staging leaves the existing installation in place.
 
 Android has no in-app updater or package-install permission. Track `isaiahpettingill/comic_editor` in Obtainium to update the signed APK; autosave and crash recovery remain available. The browser version updates when its web host deploys a newer build; save before reloading.
 
@@ -136,6 +144,6 @@ Update recovery and logs live in the application's local data folder under `Comi
 
 The [release workflow](.github/workflows/release.yml) runs format and rendering tests and builds Native AOT artifacts for Windows x64, Linux x64, macOS x64/arm64, and WebAssembly. Pushes to `main`, version tags, and manual runs also build the signed Android arm64 APK. Pull requests skip Android because signing secrets are unavailable to external contributors. Android Native AOT on .NET 11 is experimental; the workflow builds it explicitly with `PublishAot=true`.
 
-To publish a release, push a version tag such as `git tag v0.1.0` followed by `git push origin v0.1.0`. Once every platform build succeeds, the workflow creates the GitHub Release and attaches all builds, the Linux installer, and its checksum. Ordinary pushes to `main` produce Actions artifacts; the GitHub Release publishing step runs only for version tags.
+To publish a release, push a version tag such as `git tag v0.1.0` followed by `git push origin v0.1.0`. Once every platform build succeeds, the workflow creates the GitHub Release and attaches all builds, the Windows NSIS installer, the Linux installer, and its checksum. The Windows job compiles setup with NSIS 3.12 and tests silent installation, staged updates, shell registration, and uninstall. Ordinary pushes to `main` produce Actions artifacts; the GitHub Release publishing step runs only for version tags.
 
 Android releases require four repository secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Keep the same signing key for future releases so installed copies can update. The APK build requires these secrets and will fail clearly if they are absent.

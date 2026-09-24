@@ -23,7 +23,7 @@ public static class ReleaseClient
     }
     public static string? AssetName(string runtime) => runtime switch
     {
-        "win-x64" => "ComicEditor-win-x64.zip",
+        "win-x64" => "ComicEditor-win-x64-setup.exe",
         "linux-x64" => "ComicEditor-linux-x64.tar.gz",
         "osx-x64" => "ComicEditor-osx-x64.tar.gz",
         "osx-arm64" => "ComicEditor-osx-arm64.tar.gz",

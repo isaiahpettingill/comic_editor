@@ -12,6 +12,37 @@ namespace ComicEditor.Rendering.Tests;
 
 public class UpdaterTests
 {
+    private sealed class WindowsInstallerFactAttribute : FactAttribute
+    {
+        public WindowsInstallerFactAttribute()
+        {
+            if (!OperatingSystem.IsWindows() || Environment.GetEnvironmentVariable("COMIC_TEST_SETUP") is null)
+                Skip = "Requires the Windows job's compiled NSIS installer.";
+        }
+    }
+
+    [WindowsInstallerFact]
+    public void RealNsisPackageStagesAndSwapsThroughTheUpdater()
+    {
+        using var temp = new Temporary();
+        var package = Environment.GetEnvironmentVariable("COMIC_TEST_SETUP")!;
+        var payload = Environment.GetEnvironmentVariable("COMIC_TEST_SETUP_PAYLOAD")!;
+        var next = ReleaseClient.ReadInstallation(payload)!;
+        var bytes = File.ReadAllBytes(package);
+        var release = new UpdateRelease(next.Version, "win-x64", ReleaseClient.AssetName("win-x64")!, new Uri("https://example.test/setup"), Convert.ToHexString(SHA256.HashData(bytes)), bytes.Length);
+        var target = Path.Combine(temp.Root, "installed app"); Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "update.json"), Manifest("win-x64", "0.0.0"));
+        File.WriteAllText(Path.Combine(target, "ComicEditor.Desktop.exe"), "previous executable");
+        File.WriteAllText(Path.Combine(target, "my-project.cutscene"), "user file");
+        var work = Path.Combine(temp.Root, "work"); var plan = UpdateInstaller.Prepare(package, release, target, work);
+        WindowsSetup.Stage(plan); UpdateInstaller.Apply(plan);
+        Assert.Equal(next, ReleaseClient.ReadInstallation(target));
+        Assert.Equal("user file", File.ReadAllText(Path.Combine(target, "my-project.cutscene")));
+        Assert.Equal("previous executable", File.ReadAllText(Path.Combine(plan.Backup, plan.Executable)));
+        UpdateInstaller.Complete(Path.Combine(work, "plan.json"), target);
+        Assert.False(Directory.Exists(plan.Backup));
+    }
+
     private sealed class Temporary : IDisposable
     {
         public string Root { get; } = Directory.CreateTempSubdirectory("comic update 'quotes' $").FullName;
@@ -47,6 +78,33 @@ public class UpdaterTests
         Assert.Null(ReleaseClient.Select(json.ToJsonString(), new(new Version(2, 0, 0), runtime)));
         json["prerelease"] = true; Assert.Null(ReleaseClient.Select(json.ToJsonString(), new(new Version(1, 0), runtime)));
         json["prerelease"] = false; json["draft"] = true; Assert.Null(ReleaseClient.Select(json.ToJsonString(), new(new Version(1, 0), runtime)));
+    }
+    [Fact]
+    public void WindowsDefaultsToInstallerEvenWhenLegacyZipIsListedFirst()
+    {
+        var release = Release("win-x64", [1, 2, 3]);
+        var zip = (JsonObject)release["assets"]![0]!.DeepClone(); zip["name"] = "ComicEditor-win-x64.zip";
+        ((JsonArray)release["assets"]!).Insert(0, zip);
+        Assert.Equal("ComicEditor-win-x64-setup.exe", ReleaseClient.Select(release.ToJsonString(), new(new Version(1, 0), "win-x64"))!.AssetName);
+    }
+
+    [Fact]
+    public void WindowsInstallerStagingVerifiesBytesAndUsesUnquotedFinalDestination()
+    {
+        using var temp = new Temporary(); var target = Path.Combine(temp.Root, "installed app"); Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "update.json"), Manifest("win-x64", "1.0.0"));
+        File.WriteAllText(Path.Combine(target, "ComicEditor.Desktop.exe"), "old executable");
+        File.WriteAllText(Path.Combine(target, "my-project.cutscene"), "user file");
+        byte[] bytes = [77, 90, 1, 2, 3]; var archive = Path.Combine(temp.Root, "setup.exe"); File.WriteAllBytes(archive, bytes);
+        var release = ReleaseClient.Select(Release("win-x64", bytes).ToJsonString(), new(new Version(1, 0), "win-x64"))!;
+        var work = Path.Combine(temp.Root, "work"); var plan = UpdateInstaller.Prepare(archive, release, target, work);
+        Assert.Equal("user file", File.ReadAllText(Path.Combine(plan.Prepared, "my-project.cutscene")));
+        Assert.Equal("old executable", File.ReadAllText(Path.Combine(target, plan.Executable)));
+        plan = UpdateInstaller.ReadPlan(Path.Combine(work, "plan.json")); WindowsSetup.Verify(plan);
+        Assert.Equal("/S /STAGE /D=" + plan.Prepared, WindowsSetup.Command(plan, register: false).Arguments);
+        Assert.Equal("/S /REGISTER /VERSION=1.2.3 /D=" + plan.Target, WindowsSetup.Command(plan, register: true).Arguments);
+        Assert.False(WindowsSetup.Command(plan, false).UseShellExecute);
+        File.AppendAllText(plan.InstallerPackage!, "tampered"); Assert.Throws<InvalidDataException>(() => WindowsSetup.Verify(plan));
     }
     [Theory]
     [InlineData("digest", "sha256:broken")]
@@ -85,7 +143,7 @@ public class UpdaterTests
         File.WriteAllText(Path.Combine(target, "update.json"), Manifest(runtime, "1.0.0"));
         File.WriteAllText(Path.Combine(target, exe), "old executable");
         File.WriteAllText(Path.Combine(target, "my-project.cutscene"), "preserve this user file");
-        var archive = Path.Combine(temp.Root, ReleaseClient.AssetName(runtime)!);
+        var archive = Path.Combine(temp.Root, tar ? ReleaseClient.AssetName(runtime)! : "ComicEditor-win-x64.zip");
         var files = new Dictionary<string, string> { ["update.json"] = Manifest(runtime, "1.2.3"), ["compiler/tool.txt"] = "new compiler" };
         if (!missingExecutable) files[exe] = "new executable";
         using (var file = File.Create(archive))

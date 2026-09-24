@@ -12,7 +12,8 @@ public sealed class EditorState
     public bool CanUndo => undo.Count > 0;
     public bool CanRedo => redo.Count > 0;
     public bool IsDirty => saved is not null && !CutsceneFile.Write(Scene).AsSpan().SequenceEqual(saved);
-    public void MarkSaved() => saved = CutsceneFile.Write(Scene);
+    public void MarkSaved(byte[]? written = null) => saved = written ?? CutsceneFile.Write(Scene);
+    public void MarkUnsaved() => saved = [];
     public EditorState(EditorPreferences? preferences = null)
     {
         Preferences = preferences ?? new();

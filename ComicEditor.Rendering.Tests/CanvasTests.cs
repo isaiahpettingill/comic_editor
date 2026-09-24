@@ -36,6 +36,7 @@ public sealed class TestApp : Application
 
     {
         PreferencesStorage.Read = () => null;
+        SessionStorage.Enabled = false;
         PreferencesStorage.Write = _ => { };
 
         Styles.Add(new FluentTheme());

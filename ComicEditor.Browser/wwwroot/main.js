@@ -5,6 +5,40 @@ globalThis.comicEditorPreferences = {
     save(json) { try { localStorage.setItem('comic-editor.preferences', json); } catch { /* Private storage may be unavailable. */ } }
 };
 
+// IndexedDB accommodates project artwork without localStorage's small quota.
+let sessionDatabase;
+function openSessionDatabase() {
+    return sessionDatabase ??= new Promise((resolve, reject) => {
+        const request = indexedDB.open('comic-editor', 1);
+        request.onupgradeneeded = () => request.result.createObjectStore('session');
+        request.onerror = () => { sessionDatabase = null; reject(request.error); };
+        request.onsuccess = () => resolve(request.result);
+    });
+}
+globalThis.comicEditorSession = {
+    async load() {
+        const db = await openSessionDatabase();
+        return new Promise((resolve, reject) => {
+            const request = db.transaction('session').objectStore('session').get('last');
+            request.onsuccess = () => resolve(request.result ?? null);
+            request.onerror = () => reject(request.error);
+        });
+    },
+    async save(json) {
+        const db = await openSessionDatabase();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction('session', 'readwrite');
+            transaction.objectStore('session').put(json, 'last');
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(transaction.error ?? new Error('Recovery write was interrupted.'));
+        });
+    },
+    onBackground(callback) {
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') callback(); });
+    }
+};
+
 try {
     const runtime = await dotnet.withDiagnosticTracing(false).create();
     await runtime.runMain(runtime.getConfig().mainAssemblyName, [globalThis.location.href]);

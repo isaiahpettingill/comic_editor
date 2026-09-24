@@ -22,6 +22,9 @@ public sealed class EditorPreferences
     public double OnionOpacity { get; set; } = .35;
     public bool Compare { get; set; }
     public double Zoom { get; set; }
+    public bool CheckForUpdates { get; set; } = true;
+    public bool AutoSave { get; set; }
+    public int AutoSaveMinutes { get; set; } = 2;
 
     // Hosts provide storage; plain instances (including tests) remain in memory.
     [JsonIgnore] public Action<string>? Persist { get; set; }
@@ -33,6 +36,7 @@ public sealed class EditorPreferences
         try { value = json is null ? new() : JsonSerializer.Deserialize(json, PreferencesJson.Default.EditorPreferences) ?? new(); }
         catch (JsonException) { value = new(); }
         value.CanvasWidth = Math.Clamp(value.CanvasWidth, 1, 2048);
+        value.AutoSaveMinutes = Math.Clamp(value.AutoSaveMinutes, 1, 60);
         value.CanvasHeight = Math.Clamp(value.CanvasHeight, 1, 2048);
         value.FontSize = double.IsFinite(value.FontSize) ? Math.Clamp(value.FontSize, 1, 2048) : 16;
         if (string.IsNullOrWhiteSpace(value.FontId)) value.FontId = "comic-shanns";

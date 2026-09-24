@@ -66,6 +66,12 @@ jobs:
           cp ComicEditor/Assets/comic-editor.svg artifacts/${{ matrix.rid }}/
           cp ComicEditor/Assets/comic-editor.png artifacts/${{ matrix.rid }}/
           cp README.md artifacts/${{ matrix.rid }}/
+      - name: Stamp updater metadata
+        shell: bash
+        run: python tools/write-update-manifest.py artifacts/${{ matrix.rid }} ${{ matrix.rid }} '${{ github.ref_name }}'
+      - name: Test native updater helper
+        shell: bash
+        run: python tools/test_update_helper.py artifacts/${{ matrix.rid }}
       - name: Zip Windows build
         if: runner.os == 'Windows'
         shell: pwsh

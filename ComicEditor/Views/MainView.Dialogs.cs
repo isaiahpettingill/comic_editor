@@ -82,6 +82,7 @@ public partial class MainView
 
     private void CloseModal()
     {
+        if (updateInstalling) return;
         if (modal is not null) shell?.Children.Remove(modal);
         modal = null; if (rootGrid is not null) rootGrid.IsEnabled = true;
         returnFocus?.Focus(); returnFocus = null;

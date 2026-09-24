@@ -63,6 +63,9 @@ public partial class MainView : UserControl
             catch (Exception ex) { await ShowError("Could not load the remembered font: " + ex.Message); }
         };
         KeyDown += OnKeyDown;
+        AttachedToVisualTree += StartSession;
+        DetachedFromVisualTree += (_, _) => { sessionTimer?.Stop(); if (SessionStorage.Flush == SaveSessionSafely) SessionStorage.Flush = null; };
+        DetachedFromVisualTree += (_, _) => StopUpdates();
         DetachedFromVisualTree += (_, _) => StopSpray();
     }
 
@@ -188,7 +191,9 @@ public partial class MainView : UserControl
         };
         var menu = new Menu { Height = small ? 44 : 30, HorizontalAlignment = HorizontalAlignment.Stretch };
         menu.Items.Add(MenuGroup("_File", ("_New|Ctrl+N", New), ("_Open…|Ctrl+O", () => _ = Open()),
-            ("_Save…|Ctrl+S", () => _ = Save()), ("Build game cutscene…", () => _ = ExportDisplay()), ("Export frame PNG…", () => _ = Export(false)), ("Export all PNGs…", () => _ = Export(true))));
+            ("_Save|Ctrl+S", () => _ = Save()), ("Save _as…", () => _ = SaveAs()), ("Build game cutscene…", () => _ = ExportDisplay()), ("Export frame PNG…", () => _ = Export(false)), ("Export all PNGs…", () => _ = Export(true))));
+        autosaveMenu = new MenuItem { Header = "Autosave & recovery…" };
+        autosaveMenu.Click += (_, _) => ShowAutosave(); ((MenuItem)menu.Items[0]!).Items.Add(autosaveMenu);
         menu.Items.Add(MenuGroup("_Edit", ("_Undo|Ctrl+Z", Undo), ("_Redo|Ctrl+Y", Redo),
             ("Cut artwork|Ctrl+X", () => CopySelection(true)), ("Copy artwork|Ctrl+C", () => CopySelection(false)),
             ("Paste artwork|Ctrl+V", PasteSelection), ("Select all artwork|Ctrl+A", SelectAllArtwork),
@@ -215,10 +220,13 @@ public partial class MainView : UserControl
         menu.Items.Add(MenuGroup("_Canvas", ("Resize canvas…", ResizeCanvas)));
         menu.Items.Add(MenuGroup("_Palette", ("Edit selected color…", EditPaletteColor)));
         menu.Items.Add(MenuGroup("_Languages", ("Manage languages…", ManageLanguages)));
+        AddUpdateMenu(menu);
+        compactDrawer = null;
         if (small)
         {
             var groups = menu.Items.Cast<MenuItem>().ToArray(); menu.Items.Clear();
             var drawer = new MenuItem { Header = new PackIconMaterial { Kind = PackIconMaterialKind.Menu, Width = 22, Height = 22 }, Height = 44, Width = 44 };
+            compactDrawer = drawer; RefreshUpdateControls();
             Avalonia.Automation.AutomationProperties.SetName(drawer, "Menu");
             foreach (var group in groups) drawer.Items.Add(group);
             menu.Items.Add(drawer);
@@ -451,7 +459,7 @@ public partial class MainView : UserControl
     private void SelectFrame(int index) { FinishPath(); selection = null; editor.SelectFrame(index); RefreshAll(); }
     private void Undo() { if (pathBase is not null) { FinishPath(cancel: true); return; } if (editor.Undo()) { editor.RememberCanvas(); editor.RememberPalette(); RefreshAll(); RefreshTools(); } }
     private void Redo() { FinishPath(); if (editor.Redo()) { editor.RememberCanvas(); editor.RememberPalette(); RefreshAll(); RefreshTools(); } }
-    private void New() { FinishPath(); selection = null; editor.New(); Build(compact); }
+    private void New() { if (fileBusy) return; FinishPath(); selection = null; editor.New(); ClearFile(); Build(compact); _ = SaveSessionSafely(); }
 
     private void ZoomWheel(object? sender, PointerWheelEventArgs e)
     {

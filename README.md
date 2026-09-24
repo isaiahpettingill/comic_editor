@@ -79,6 +79,14 @@ Undo/redo covers artwork, palette edits, frame and layer operations, translation
 
 **File → Export frame PNG… / Export all PNGs…** lets you choose any project language without changing the preview. Each PNG is indexed (color type 3) with exactly the distinct RGB colors visible in that image, merging duplicate colors and dropping unused palette entries. Exports use crisp text edges and a white background; no antialias shades or selection markers are added. Each frame gets its own minimal palette and the smallest supported PNG bit depth. The editable project palette stays unchanged.
 
+## Autosave and crash recovery
+
+**File → Autosave & recovery…** enables autosave and sets its interval (1–60 minutes; default 2). Save a new cutscene once to choose its file. **Save / Ctrl+S** then updates that file; **Save as…** chooses another. Autosave is off by default and remembers your choice. It pauses if the file changes outside the editor or becomes inaccessible. Use Open to load external changes or Save as to preserve your edits separately.
+
+Independently of autosave, the editor writes a recovery snapshot every five seconds between drawing gestures, when opening/saving a project, and on desktop close or mobile backgrounding. Startup reopens the last cutscene, including untitled work and unsaved edits. A clean session reloads the latest original file; a dirty session restores the recovery copy. Missing files or revoked access restore a copy that you can save elsewhere. Undo history resets after reopening. A crash can lose changes since the last completed snapshot.
+
+Desktop/Android recovery lives in the local application data folder at `ComicEditor/last-session.json`, outside the application installation. Browser recovery uses IndexedDB for the current site; clearing site data removes it. Browser downloads remain manual, with automatic recovery available even though file autosave is disabled. Keep explicit `.cutscene` saves as your portable project files.
+
 ## Browser / WebAssembly
 
 The browser target shares the editor, protobuf files, and rendering code. It uses WebAssembly AOT in Release:
@@ -89,7 +97,7 @@ dotnet run --project ComicEditor.Browser
 dotnet publish ComicEditor.Browser -c Release -o artifacts/browser
 ```
 
-Serve `artifacts/browser/wwwroot` over HTTP(S), including all `_framework` files; it cannot run from a `file://` URL. The release workflow packages this directory as `ComicEditor-browser-wasm.zip`. All-frame PNG export downloads a ZIP in browsers. Open/save use the browser's file picker. Project data remains in memory until you save it; closing or reloading the tab discards unsaved changes. Browser access to installed system fonts depends on the runtime, so prefer bundled fonts for portable previews.
+Serve `artifacts/browser/wwwroot` over HTTP(S), including all `_framework` files; it cannot run from a `file://` URL. The release workflow packages this directory as `ComicEditor-browser-wasm.zip`. All-frame PNG export downloads a ZIP in browsers. Open/save use the browser's file picker. The last project and unsaved edits are recovered from IndexedDB after reload; file downloads still require Save. Browser access to installed system fonts depends on the runtime, so prefer bundled fonts for portable previews.
 
 ## File formats and CLI
 
@@ -105,6 +113,18 @@ comic-compile story.cutscene story.cutscene.runtime
 The editor also exposes **File → Build game cutscene…**. The runtime format removes layer metadata and stores rasterized text masks; Chinese and other translations render without client fonts. Keep the `.cutscene` file for further editing.
 
 ## Releases
+
+### In-app updates
+
+Release builds check GitHub 15 seconds after startup and every four hours. **Help → Check for updates…** checks immediately and lets you disable automatic checks. New versions are announced in the Help menu (the compact menu highlights blue). Downloads and installation start when you choose them.
+
+On Windows, Linux, and macOS, choose **Download update**, then **Restart and install**. Downloads must match GitHub's published SHA-256 and size. The updater stages the matching platform package beside the application, waits for the editor to exit, replaces the installation, and reopens your cutscene with unsaved edits and the selected frame intact. Undo history resets. Files stored alongside the application are preserved; the previous installation is retained until the updated editor restores the workspace. Directory replacement failures roll back to the previous installation. System-owned/read-only installations need to be updated by their owner. Development builds have no `update.json` and never update themselves.
+
+Android release builds download the signed APK and hand it to Android's package installer. Android may first ask you to allow ComicEditor to install updates; then return and tap **Install update** again. Installation always uses Android's confirmation and signing checks. Reopen ComicEditor after updating to restore the active cutscene. The browser version updates when its web host deploys a newer build; save before reloading.
+
+Update recovery and logs live in the application's local data folder under `ComicEditor/updates`. `resume.cutscene` is a normal editable project copy that can be opened manually if a restart fails. Updating keeps project files and editor preferences. Version 0.1.3 is the first release with the updater, so older versions require one manual installation.
+
+### Release builds
 
 The [release workflow](.github/workflows/release.yml) runs format and rendering tests and builds Native AOT artifacts for Windows x64, Linux x64, macOS x64/arm64, and WebAssembly. Pushes to `main`, version tags, and manual runs also build the signed Android arm64 APK. Pull requests skip Android because signing secrets are unavailable to external contributors. Android Native AOT on .NET 11 is experimental; the workflow builds it explicitly with `PublishAot=true`.
 

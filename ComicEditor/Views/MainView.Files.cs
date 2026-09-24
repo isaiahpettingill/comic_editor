@@ -8,6 +8,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using ComicEditor.Format;
 using ComicEditor.Rendering;
+using ComicEditor.Editing;
 
 namespace ComicEditor.Views;
 
@@ -23,6 +24,7 @@ public partial class MainView
 
     private async Task Open()
     {
+        if (fileBusy) return;
         var storage = TopLevel.GetTopLevel(this)?.StorageProvider; if (storage is null) return;
         var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
         {
@@ -31,17 +33,32 @@ public partial class MainView
             FileTypeFilter = [new FilePickerFileType("Cutscene") { Patterns = ["*.cutscene"] }]
         });
         if (files.Count == 0) return;
+        if (fileBusy) return;
+        fileBusy = true;
         try
         {
             await using var stream = await files[0].OpenReadAsync(); using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer); editor.Load(buffer.ToArray(), files[0].Name); Build(compact);
+            await stream.CopyToAsync(buffer); var bytes = buffer.ToArray();
+            editor.Load(bytes, files[0].Name); await BindFile(files[0], bytes); Build(compact);
+            SetSaveMessage($"Opened {files[0].Name}. Crash recovery is active.");
+            await SaveSessionSafely();
             await CutsceneFonts.EnsureAsync(editor.Scene); RefreshAll();
         }
         catch (Exception ex) { await ShowError(ex.Message); }
+        finally { fileBusy = false; }
     }
 
     private async Task Save()
     {
+        if (fileBusy) return;
+        FinishPath();
+        if (currentFile is not null && !OperatingSystem.IsBrowser()) { await SaveCurrent(automatic: false); return; }
+        await SaveAs();
+    }
+
+    private async Task SaveAs()
+    {
+        if (fileBusy) return;
         FinishPath();
         var storage = TopLevel.GetTopLevel(this)?.StorageProvider; if (storage is null) return;
         var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -52,14 +69,20 @@ public partial class MainView
             FileTypeChoices = [new FilePickerFileType("Cutscene") { Patterns = ["*.cutscene"] }]
         });
         if (file is null) return;
+        fileBusy = true;
         try
         {
-            await using var stream = await file.OpenWriteAsync();
-            if (stream.CanSeek) stream.SetLength(0);
-            await stream.WriteAsync(CutsceneFile.Write(editor.Scene));
-            editor.FileName = file.Name; editor.MarkSaved(); RefreshTitle();
+            var scene = editor.Scene; var bytes = CutsceneFile.Write(scene);
+            await SaveSessionSafely();
+            await new ProjectFile(file, null).Write(bytes, checkExternalChanges: false);
+            if (ReferenceEquals(editor.Scene, scene))
+            {
+                await BindFile(file, bytes); editor.FileName = file.Name; editor.MarkSaved(bytes);
+                SetSaveMessage($"Saved {file.Name} at {DateTime.Now:t}."); RefreshTitle(); await SaveSessionSafely();
+            }
         }
         catch (Exception ex) { await ShowError(ex.Message); }
+        finally { fileBusy = false; }
     }
 
     private async Task ExportDisplay()

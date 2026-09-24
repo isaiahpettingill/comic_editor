@@ -1,4 +1,4 @@
-param([int]$Port = 8098, [int]$DebugPort = 9234, [string]$WebRoot, [switch]$CheckPreferences)
+param([int]$Port = 8098, [int]$DebugPort = 9234, [string]$WebRoot, [switch]$CheckPreferences, [switch]$CheckRecovery)
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path -Parent $PSScriptRoot
 $artifactRoot = Join-Path $workspace 'artifacts'
@@ -43,6 +43,7 @@ try {
         if ($script:errors.Count -gt 0) { break }
     }
     if ($CheckPreferences) {
+        $null = Invoke-Cdp 'Runtime.evaluate' @{expression='globalThis.comicEditorSession?.save(null)';awaitPromise=$true}
         $null = Invoke-Cdp 'Runtime.evaluate' @{expression='localStorage.setItem("comic-editor.preferences", JSON.stringify({CanvasWidth:384,CanvasHeight:216,Tool:10,Color:999,Language:"unknown",FontSize:27,Tools:{Spray:{Size:25,SprayDensity:32}}}))'}
         $null = Invoke-Cdp 'Page.reload'
         $preferences = $null
@@ -56,6 +57,26 @@ try {
         if ($preferences.CanvasWidth -ne 384 -or $preferences.CanvasHeight -ne 216 -or $preferences.Tool -ne 10 -or $preferences.Color -ne 127 -or $preferences.Language -ne 'en' -or $preferences.Tools.Spray.Size -ne 25) { throw 'Browser preference read/write round trip failed.' }
         'Browser preferences survived reload and passed through the .NET storage bridge.'
         Start-Sleep -Seconds 2
+    }
+    if ($CheckRecovery) {
+        $snapshot = $null
+        for ($attempt=0; $attempt -lt 20; $attempt++) {
+            Start-Sleep -Seconds 1
+            $stored = Invoke-Cdp 'Runtime.evaluate' @{expression='globalThis.comicEditorSession.load()';awaitPromise=$true;returnByValue=$true}
+            if ($stored.result.result.value) { $snapshot = $stored.result.result.value | ConvertFrom-Json; break }
+        }
+        if (!$snapshot.Project) { throw 'The browser did not write a project recovery snapshot.' }
+        $null = Invoke-Cdp 'Runtime.evaluate' @{expression='(async()=>{const s=JSON.parse(await comicEditorSession.load());s.FileName="browser-recovery.cutscene";s.Dirty=true;s.Frame=999;await comicEditorSession.save(JSON.stringify(s))})()';awaitPromise=$true}
+        $null = Invoke-Cdp 'Page.reload'
+        for ($attempt=0; $attempt -lt 30; $attempt++) {
+            Start-Sleep -Seconds 1
+            $stored = Invoke-Cdp 'Runtime.evaluate' @{expression='globalThis.comicEditorSession?.load()';awaitPromise=$true;returnByValue=$true}
+            if ($stored.result.result.value) { $snapshot = $stored.result.result.value | ConvertFrom-Json }
+            # The .NET restore clamps the selected frame before its next recovery write.
+            if ($snapshot.Frame -eq 0 -and $snapshot.FileName -eq 'browser-recovery.cutscene' -and $snapshot.Dirty) { break }
+        }
+        if ($snapshot.Frame -ne 0 -or $snapshot.FileName -ne 'browser-recovery.cutscene' -or !$snapshot.Dirty) { throw 'Browser project recovery did not survive reload through .NET.' }
+        'Browser project recovery survived reload with unsaved work intact.'
     }
     $capture = Invoke-Cdp 'Page.captureScreenshot' @{format='png'}
     [IO.File]::WriteAllBytes((Join-Path $artifactRoot 'browser-smoke.png'),[Convert]::FromBase64String($capture.result.data))

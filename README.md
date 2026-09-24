@@ -128,11 +128,11 @@ For local deployment after publishing the browser target:
 pnpm install --frozen-lockfile
 node tools/prepare-pages.mjs artifacts/browser/wwwroot artifacts/pages
 pnpm exec wrangler login
-pnpm exec wrangler pages project create comic-editor --production-branch main
+pnpm exec wrangler pages project create comic-editor --production-branch main --force
 pnpm deploy --branch main
 ```
 
-Use a fresh output directory for preparation. The browser must support `DecompressionStream`, as current Chrome, Edge, Firefox, and Safari do.
+The project creation command is only needed once; `--force` keeps the project on Pages instead of Wrangler's Workers migration path. Use a fresh output directory for preparation. The browser must support `DecompressionStream`, as current Chrome, Edge, Firefox, and Safari do.
 
 ## File formats and CLI
 

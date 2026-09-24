@@ -43,6 +43,7 @@ public partial class MainView : UserControl
     public MainView(bool touchLayout)
     {
         this.touchLayout = touchLayout;
+        Styles.Add(new ComicEditor.Styles.EditorScrolling(touchLayout));
         editor.FinishPendingEdit = () => FinishPath();
         InitializeComponent();
         Resources["SliderPreContentMargin"] = new GridLength(6);

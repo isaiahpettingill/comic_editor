@@ -105,6 +105,8 @@ Undo/redo covers artwork, palette edits, frame and layer operations, translation
 
 **File → Export frame PNG… / Export all PNGs…** lets you choose any project language without changing the preview. Each PNG is indexed (color type 3) with exactly the distinct RGB colors visible in that image, merging duplicate colors and dropping unused palette entries. Exports use crisp text edges and a white background; no antialias shades or selection markers are added. Each frame gets its own minimal palette and the smallest supported PNG bit depth. The editable project palette stays unchanged.
 
+**File → Export PDF… / Export EPUB… / Export CBZ…** creates one page or image per frame in storyboard order, using the language selected in the export dialog. PDF embeds the indexed frame images; EPUB is a fixed-layout image book; CBZ contains numbered indexed PNGs. Text is baked into these reading copies, so export each desired language separately. Keep the `.ctsc` project for editable text and translations. EPUB pages use images, so their text is not selectable or searchable in a reader.
+
 ## Palette presets
 
 The palette editor works on a draft. **Apply** updates only the current cutscene; **Cancel** discards the draft. Artwork and text keep their slot numbers when the palette is recolored. Shrinking remaps removed slots to the nearest remaining RGB color across every frame/layer/text object; Undo restores the original indices and palette. Imported palettes must have 2–255 colors.

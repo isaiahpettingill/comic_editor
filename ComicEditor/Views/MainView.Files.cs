@@ -193,6 +193,46 @@ public partial class MainView
         }
     }
 
+    private void ExportBook(BookFormat format)
+    {
+        FinishPath();
+        var languages = editor.Scene.Translations.Keys.Order().ToArray();
+        var language = new ComboBox { Name = "ExportLanguage", ItemsSource = languages, SelectedItem = editor.Language, HorizontalAlignment = HorizontalAlignment.Stretch };
+        if (language.SelectedIndex < 0 && languages.Length > 0) language.SelectedIndex = 0;
+        ShowModal($"Export {format.ToString().ToUpperInvariant()}", new StackPanel
+        {
+            Spacing = 10,
+            Children = { Label("Language"), language, Label("One frame per page. Text is rendered in the selected language.") }
+        }, () =>
+        {
+            var chosen = language.SelectedItem as string ?? "und";
+            CloseModal(); _ = ExportBookFile(format, chosen);
+        }, "Export");
+    }
+
+    private async Task ExportBookFile(BookFormat format, string language)
+    {
+        var storage = TopLevel.GetTopLevel(this)?.StorageProvider; if (storage is null) return;
+        var extension = format.ToString().ToLowerInvariant();
+        try
+        {
+            await CutsceneFonts.EnsureAsync(editor.Scene);
+            CutsceneFonts.RequireAvailable(editor.Scene, language);
+            var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = $"Export {extension.ToUpperInvariant()}",
+                SuggestedFileName = $"cutscene-{language}.{extension}",
+                DefaultExtension = extension,
+                FileTypeChoices = [new FilePickerFileType($"{extension.ToUpperInvariant()} book") { Patterns = [$"*.{extension}"] }]
+            });
+            if (file is null) return;
+            await using var stream = await file.OpenWriteAsync(); if (stream.CanSeek) stream.SetLength(0);
+            BookExporter.Write(stream, editor.Scene, language, format);
+            SetSaveMessage($"Exported {file.Name}.");
+        }
+        catch (Exception ex) { await ShowError(ex.Message); }
+    }
+
     private void RenderPng(Stream stream, int frame, string language)
     {
         if (stream.CanSeek) stream.SetLength(0);

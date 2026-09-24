@@ -78,6 +78,7 @@ jobs:
       - name: Prepare Pages assets
         if: steps.build.outputs.deploy == 'true'
         run: |
+          mkdir -p artifacts/browser/wwwroot
           unzip -q artifacts/download/ComicEditor-browser-wasm.zip -d artifacts/browser/wwwroot
           node tools/prepare-pages.mjs artifacts/browser/wwwroot artifacts/pages
       - name: Deploy production website

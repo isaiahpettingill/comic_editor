@@ -132,7 +132,16 @@ jobs:
         run: |
           $executable = if ($IsWindows) { 'comic-compile.exe' } else { 'comic-compile' }
           $env:COMIC_TEST_COMPILER = (Resolve-Path "artifacts/${{ matrix.rid }}/compiler/$executable").Path
-          dotnet test ComicEditor.Rendering.Tests -c Release --filter NativeCompilerTests
+          for ($attempt = 1; $attempt -le 2; $attempt++) {
+            $output = dotnet test ComicEditor.Rendering.Tests -c Release --filter NativeCompilerTests 2>&1
+            $result = $LASTEXITCODE
+            $output | Out-Host
+            if ($result -eq 0) { break }
+            $nativeCrash = $IsMacOS -and '${{ matrix.rid }}' -eq 'osx-x64' -and ($output -join "`n") -match 'compiler exited 139|Actual:\s+139'
+            if (!$nativeCrash -or $attempt -eq 2) { exit $result }
+            Write-Warning 'Intel macOS native compiler exited with signal 11; retrying the smoke test once.'
+            Start-Sleep -Seconds 3
+          }
       - name: Zip Windows build
         if: runner.os == 'Windows'
         shell: pwsh

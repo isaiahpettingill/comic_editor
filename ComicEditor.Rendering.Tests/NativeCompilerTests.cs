@@ -47,17 +47,21 @@ public class NativeCompilerTests
                 var output = Path.Combine(folder.FullName, "compiled.cutscene.runtime");
                 File.WriteAllBytes(input, CutsceneFile.Write(scene));
                 var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("COMIC_TEST_COMPILER")!)
-                { UseShellExecute = false, CreateNoWindow = true };
+                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
                 start.Environment["COMIC_EDITOR_FONT_CACHE"] = cache;
                 start.ArgumentList.Add(input); start.ArgumentList.Add(output);
                 using var process = Process.Start(start)!;
+                var stderrTask = process.StandardError.ReadToEndAsync();
+                var stdoutTask = process.StandardOutput.ReadToEndAsync();
                 if (!process.WaitForExit(60_000))
                 {
                     process.Kill(entireProcessTree: true);
                     process.WaitForExit();
                     Assert.Fail("Native compiler timed out.");
                 }
-                Assert.Equal(0, process.ExitCode);
+                var stderr = stderrTask.GetAwaiter().GetResult();
+                var stdout = stdoutTask.GetAwaiter().GetResult();
+                Assert.True(process.ExitCode == 0, $"{font}: compiler exited {process.ExitCode}. stderr: {stderr} stdout: {stdout}");
                 var compiled = DisplayCutscene.Parser.ParseFrom(File.ReadAllBytes(output));
                 var frame = Assert.Single(compiled.Frames);
                 Assert.Equal(127, frame.IndexedArtwork[0]);

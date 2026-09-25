@@ -46,6 +46,11 @@ message TextObject {
   bool italic = 11;
   repeated TextPlacementOverride placements = 12; // Optional per-language layout; base fields remain fallback.
   repeated TextStyleSpan styles = 13; // UTF-16 character ranges within one language's translation.
+  float rotation_degrees = 14;
+  uint32 size_effect = 15; // 0 normal, 1 grow, 2 shrink, 3 grow then shrink.
+  float curve_degrees = 16; // Signed arc angle around the text area's center.
+  float curve_anchor_x = 17; // Horizontal arc origin offset, as a fraction of text area width.
+  float curve_anchor_y = 18; // Vertical arc origin offset, as a fraction of text area height.
 }
 
 message TextPlacementOverride {

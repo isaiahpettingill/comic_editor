@@ -37,6 +37,30 @@ public partial class CanvasTests
     }
 
     [Fact]
+    public async Task PenHoldOpensToolMenuAndReleaseLeavesItOpen()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(async () =>
+        {
+            var view = new MainView(); var window = new Window { Content = view, Width = 1200, Height = 800 };
+            window.Show(); _ = Capture(window);
+            var button = Named<Button>(window, "ToolGroupBrush");
+            var point = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window)!.Value;
+            using var pen = new Pointer(Pointer.GetNextFreeId(), PointerType.Pen, true);
+            var down = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed);
+            button.RaiseEvent(new PointerPressedEventArgs(button, pen, window, point, 1, down, KeyModifiers.None));
+            await Task.Delay(550);
+            Assert.True(button.ContextMenu!.IsOpen);
+            var up = new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased);
+            button.RaiseEvent(new PointerReleasedEventArgs(button, pen, window, point, 2, up, KeyModifiers.None, MouseButton.Left));
+            await Task.Delay(30);
+            Assert.True(button.ContextMenu.IsOpen);
+            Assert.Equal(Tool.Pixel, State(view).Tool);
+            window.Close();
+        }, CancellationToken.None);
+    }
+
+    [Fact]
     public async Task CtrlSSavesWhileTranslationTextBoxHasFocus()
     {
         using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));

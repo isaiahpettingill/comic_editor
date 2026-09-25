@@ -222,6 +222,8 @@ public partial class MainView : UserControl
         menu.Items.Add(MenuGroup("F_rame", ("Add frame", () => { editor.AddFrame(false); RefreshAll(); }
         ),
             ("Duplicate frame", () => { editor.AddFrame(true); RefreshAll(); }
+        ), ("Copy frame", () => CopyFrame()
+        ), ("Paste frame", () => PasteFrame()
         ), ("Delete frame", () => { editor.DeleteFrame(); RefreshAll(); }
         ),
             ("Move earlier", () => { editor.MoveFrame(-1); RefreshAll(); }
@@ -356,6 +358,7 @@ public partial class MainView : UserControl
         inlineTextLayer.Children.Add(canvas);
         previous = new CutsceneCanvas { IsHitTestVisible = false };
         canvas.PointerPressed += CanvasPressed; canvas.PointerMoved += CanvasMoved; canvas.PointerReleased += CanvasReleased;
+        AttachCanvasClipboardMenu();
         canvas.PointerCaptureLost += (_, e) => { if (e.Pointer != drawingPointer) return; drawingPointer = null; StopSpray(); dragging = false; shapeStart = null; creatingText = false; canvas.DraftTextBounds = null; canvas.InvalidateVisual(); };
         canvasPair = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), Margin = new Thickness(12) };
         canvasPair.Children.Add(previous);
@@ -500,7 +503,7 @@ public partial class MainView : UserControl
     private void Redo() { FinishPath(); var palette = editor.Scene.Palette; if (editor.Redo()) { RefreshHistory(palette); } }
     private void RefreshHistory(IReadOnlyList<string> previousPalette)
     {
-        if (!previousPalette.SequenceEqual(editor.Scene.Palette)) selection = clipboardSelection = null;
+        if (!previousPalette.SequenceEqual(editor.Scene.Palette)) selection = null;
         editor.RememberCanvas(); editor.RememberPalette(); RefreshAll(); RefreshTools();
     }
     private void New()
@@ -518,7 +521,7 @@ public partial class MainView : UserControl
         if (editor.Scene.IsRgba) return;
         FinishPath(); editor.BeforeChange(); editor.Scene.ConvertToRgba();
         editor.Preferences.RgbaCanvas = true; editor.Preferences.Palette = editor.Scene.Palette.ToArray(); editor.Preferences.Save();
-        selection = clipboardSelection = null; Build(compact);
+        selection = null; Build(compact);
     }
 
     private void ZoomWheel(object? sender, PointerWheelEventArgs e)
@@ -555,9 +558,9 @@ public partial class MainView : UserControl
             else if (e.Key == Key.N) { New(); e.Handled = true; }
             else if (!typing && e.Key == Key.Z) { if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) Redo(); else Undo(); e.Handled = true; }
             else if (!typing && e.Key == Key.Y) { Redo(); e.Handled = true; }
-            else if (!typing && e.Key == Key.C) { CopySelection(false); e.Handled = true; }
+            else if (!typing && e.Key == Key.C) { if (FocusedFrameIndex(e.Source) is int index) CopyFrame(index); else CopySelection(false); e.Handled = true; }
             else if (!typing && e.Key == Key.X) { CopySelection(true); e.Handled = true; }
-            else if (!typing && e.Key == Key.V) { PasteSelection(); e.Handled = true; }
+            else if (!typing && e.Key == Key.V) { PasteClipboard(); e.Handled = true; }
             else if (!typing && e.Key == Key.A) { SelectAllArtwork(); e.Handled = true; }
         }
         else if (!typing && (e.KeyModifiers.HasFlag(KeyModifiers.Alt) || e.Source == canvas))

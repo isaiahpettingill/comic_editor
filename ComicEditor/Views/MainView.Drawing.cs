@@ -23,6 +23,7 @@ public partial class MainView
         if (inlineTextBox is not null) EndInlineTextEdit();
         drawingPointer = e.Pointer;
         var properties = e.GetCurrentPoint(canvas).Properties;
+        if (properties.IsRightButtonPressed) PrepareCanvasClipboardMenu(canvas.CanvasPoint(e));
         if (editor.Tool == Tool.Zoom && (properties.IsLeftButtonPressed || properties.IsRightButtonPressed))
         {
             var current = zoom > 0 ? zoom : canvas.TranslatePoint(new Point(1, 0), this)!.Value.X - canvas.TranslatePoint(default, this)!.Value.X;

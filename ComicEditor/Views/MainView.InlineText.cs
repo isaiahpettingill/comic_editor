@@ -41,7 +41,7 @@ public partial class MainView
             FontWeight = obj.Bold ? FontWeight.Bold : FontWeight.Normal,
             FontStyle = obj.Italic ? FontStyle.Italic : FontStyle.Normal,
             Foreground = new SolidColorBrush(Color.FromRgb((byte)(color >> 24), (byte)(color >> 16), (byte)(color >> 8))),
-            Background = Brushes.White,
+            Background = Brushes.Transparent,
             BorderBrush = Brushes.DodgerBlue,
             BorderThickness = new Thickness(1),
             Padding = new Thickness(0),
@@ -73,6 +73,8 @@ public partial class MainView
             else if (FontStep(e, out var delta)) { ChangeInlineFontSize(delta); e.Handled = true; }
         };
         inlineTextLayer.Children.Add(box);
+        canvas!.HiddenTextId = obj.Id;
+        canvas.InvalidateVisual();
         if (compact) ShowCompactPage(CompactPage.Draw);
         RefreshInlineTextToolbar();
         box.Focus(); box.CaretIndex = box.Text?.Length ?? 0;
@@ -86,6 +88,7 @@ public partial class MainView
         inlineCommit = null;
         inlineTextBox = null; inlineTextObjectId = null; inlineLanguage = null; inlineTextCaptured = false;
         inlineTextLayer?.Children.Remove(box);
+        if (canvas is not null) canvas.HiddenTextId = null;
         RefreshInspector(); RefreshCanvas(); RefreshTools();
     }
 

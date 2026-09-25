@@ -23,6 +23,7 @@ public partial class MainView
         {
             if (listDragPointer is not null || e.Pointer.Type == PointerType.Touch ||
                 !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed) return;
+            row.Focus();
             listDragPointer = e.Pointer; listDragSource = row; listDragRows = rows;
             listDragIndex = index; listDragFrame = frame; listDragActive = false;
             listDragStart = e.GetPosition(rows);

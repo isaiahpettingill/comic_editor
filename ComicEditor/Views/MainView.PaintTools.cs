@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Threading;
 using ComicEditor.Editing;
 using ComicEditor.Format;
 using IconPacks.Avalonia.Material;
@@ -31,7 +33,12 @@ public partial class MainView
     private Button GroupButton(ToolGroup group)
     {
         var chosen = RememberedTool(group);
-        var button = Icon(ToolIcon(chosen), $"{ToolName(chosen)} — {ToolHelp(chosen)}" + (group.Tools.Length > 1 ? " Right-click to choose another tool." : ""), () => ChooseTool(RememberedTool(group)));
+        var suppressClick = false;
+        var button = Icon(ToolIcon(chosen), $"{ToolName(chosen)} — {ToolHelp(chosen)}" + (group.Tools.Length > 1 ? " Hold or right-click to choose another tool." : ""), () =>
+        {
+            if (suppressClick) { suppressClick = false; return; }
+            ChooseTool(RememberedTool(group));
+        });
         button.Name = "ToolGroup" + group.Id; button.Width = button.Height = compact ? 40 : 34;
         if (group.Tools.Length > 1)
         {
@@ -53,12 +60,45 @@ public partial class MainView
                 menu.Items.Add(item);
             }
             button.ContextMenu = menu;
+            var hold = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+            var held = false;
+            Point pressPoint = default;
+            hold.Tick += (_, _) =>
+            {
+                hold.Stop(); held = true; suppressClick = true;
+                menu.Open(button);
+            };
+            button.AddHandler(PointerPressedEvent, (_, e) =>
+            {
+                if (e.Pointer.Type is not (PointerType.Pen or PointerType.Touch) || !e.GetCurrentPoint(button).Properties.IsLeftButtonPressed) return;
+                e.PreventGestureRecognition();
+                held = false; suppressClick = false;
+                pressPoint = e.GetPosition(button);
+                hold.Start();
+            }, RoutingStrategies.Tunnel, handledEventsToo: true);
+            button.AddHandler(PointerMovedEvent, (_, e) =>
+            {
+                var point = e.GetPosition(button);
+                if (hold.IsEnabled && (Math.Abs(point.X - pressPoint.X) > 10 || Math.Abs(point.Y - pressPoint.Y) > 10)) hold.Stop();
+            }, RoutingStrategies.Tunnel, handledEventsToo: true);
+            button.AddHandler(PointerReleasedEvent, (_, _) =>
+            {
+                hold.Stop();
+                if (!held) return;
+                held = false;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!menu.IsOpen) menu.Open(button);
+                }, DispatcherPriority.Background);
+            }, RoutingStrategies.Tunnel, handledEventsToo: true);
         }
         if (group.Tools.Contains(editor.Tool)) { button.Background = Brush(UiTheme.Selection); button.BorderBrush = Brush(UiTheme.Accent); }
         return button;
     }
 
-    private ArtworkSelection? selection, clipboardSelection;
+    private ArtworkSelection? selection;
+    private ArtworkClipboard? clipboardArtwork;
+    private FrameClipboard? clipboardFrame;
     private List<string>? selectionBase;
     private bool movingSelection;
     private int selectionX, selectionY;
@@ -206,7 +246,7 @@ public partial class MainView
     {
         FinishPath();
         if (selection?.Owner != editor.Layer) return;
-        clipboardSelection = selection.Copy(editor.Layer);
+        clipboardArtwork = new ArtworkClipboard(selection, editor.Scene); clipboardFrame = null;
         if (cut) DeleteSelection();
     }
     private void DeleteSelection()
@@ -216,13 +256,18 @@ public partial class MainView
     }
     private void PasteSelection()
     {
-        if (clipboardSelection is null) return;
+        if (clipboardArtwork is null) return;
+        var x = Math.Clamp(clipboardArtwork.X + 4, 0, Math.Max(0, editor.Scene.Width - clipboardArtwork.Width));
+        var y = Math.Clamp(clipboardArtwork.Y + 4, 0, Math.Max(0, editor.Scene.Height - clipboardArtwork.Height));
+        PasteSelectionAt(x, y);
+    }
+    private void PasteSelectionAt(int x, int y)
+    {
+        if (clipboardArtwork is null) return;
         FinishPath(); editor.BeforeChange(); editor.Tool = Tool.Select;
-        selection = clipboardSelection.Copy(editor.Layer);
-        // A smaller destination canvas clips pasted artwork safely.
-        selection.X = Math.Clamp(selection.X + 4, 0, Math.Max(0, editor.Scene.Width - selection.Width));
-        selection.Y = Math.Clamp(selection.Y + 4, 0, Math.Max(0, editor.Scene.Height - selection.Height));
-        selection.Paste(); RefreshAll(); RefreshTools();
+        selection = clipboardArtwork.Paste(editor.Layer, editor.Scene, x, y, out var paletteChanged);
+        if (paletteChanged) editor.RememberPalette();
+        RefreshAll(); RefreshTools();
     }
     private void SelectAllArtwork()
     {

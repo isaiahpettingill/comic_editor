@@ -179,7 +179,12 @@ public sealed class Cutscene
             {
                 if (string.IsNullOrWhiteSpace(obj.Key) || obj.Width <= 0 || obj.Height <= 0 || obj.FontSize <= 0 ||
                     !double.IsFinite(obj.X) || !double.IsFinite(obj.Y) || !double.IsFinite(obj.Width) ||
-                    !double.IsFinite(obj.Height) || !double.IsFinite(obj.FontSize) || obj.Color < 0 || obj.Color >= Palette.Count)
+                    !double.IsFinite(obj.Height) || !double.IsFinite(obj.FontSize) || obj.Color < 0 || obj.Color >= Palette.Count ||
+                    !double.IsFinite(obj.RotationDegrees) || Math.Abs(obj.RotationDegrees) > 360 ||
+                    !double.IsFinite(obj.CurveDegrees) || Math.Abs(obj.CurveDegrees) > 180 ||
+                    !double.IsFinite(obj.CurveAnchorX) || Math.Abs(obj.CurveAnchorX) > 2 ||
+                    !double.IsFinite(obj.CurveAnchorY) || Math.Abs(obj.CurveAnchorY) > 2 ||
+                    !Enum.IsDefined(obj.SizeEffect))
                     throw new InvalidDataException("Invalid text object.");
                 if (obj.Placements.Count > 256 || obj.Placements.Any(p => string.IsNullOrWhiteSpace(p.Key) || p.Key.Length > 32 ||
                     !double.IsFinite(p.Value.X) || !double.IsFinite(p.Value.Y) || !double.IsFinite(p.Value.Width) ||
@@ -215,8 +220,11 @@ public sealed class Frame
         Id = Id,
         Layers = Layers.Select(layer => new ArtworkLayer
         {
-            Id = layer.Id, Name = layer.Name, Visible = layer.Visible,
-            IsRgba = layer.IsRgba, Rows = layer.Rows.ToList()
+            Id = layer.Id,
+            Name = layer.Name,
+            Visible = layer.Visible,
+            IsRgba = layer.IsRgba,
+            Rows = layer.Rows.ToList()
         }).ToList(),
         TextObjects = TextObjects.Select(text => text.Snapshot()).ToList()
     };
@@ -281,14 +289,33 @@ public sealed class TextObject
     public string FontId { get; set; } = "comic-shanns";
     public bool Bold { get; set; }
     public bool Italic { get; set; }
+    public double RotationDegrees { get; set; }
+    public TextSizeEffect SizeEffect { get; set; }
+    public double CurveDegrees { get; set; }
+    public double CurveAnchorX { get; set; }
+    public double CurveAnchorY { get; set; }
     public int Color { get; set; } = 0;
     public Dictionary<string, TextPlacement> Placements { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<TextStyleSpan> Styles { get; set; } = [];
 
     public TextObject Snapshot() => new()
     {
-        Id = Id, Key = Key, X = X, Y = Y, Width = Width, Height = Height,
-        FontSize = FontSize, FontId = FontId, Bold = Bold, Italic = Italic, Color = Color,
+        Id = Id,
+        Key = Key,
+        X = X,
+        Y = Y,
+        Width = Width,
+        Height = Height,
+        FontSize = FontSize,
+        FontId = FontId,
+        Bold = Bold,
+        Italic = Italic,
+        Color = Color,
+        RotationDegrees = RotationDegrees,
+        SizeEffect = SizeEffect,
+        CurveDegrees = CurveDegrees,
+        CurveAnchorX = CurveAnchorX,
+        CurveAnchorY = CurveAnchorY,
         Placements = new Dictionary<string, TextPlacement>(Placements.ToDictionary(p => p.Key,
             p => new TextPlacement { X = p.Value.X, Y = p.Value.Y, Width = p.Value.Width, Height = p.Value.Height }), Placements.Comparer),
         Styles = Styles.Select(s => new TextStyleSpan { Language = s.Language, Start = s.Start, Length = s.Length, FontId = s.FontId, FontSize = s.FontSize }).ToList()
@@ -358,6 +385,8 @@ public sealed class TextObject
         }
     }
 }
+
+public enum TextSizeEffect { Normal, Grow, Shrink, GrowThenShrink }
 
 public sealed class TextStyleSpan
 {

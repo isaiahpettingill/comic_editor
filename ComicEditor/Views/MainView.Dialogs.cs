@@ -169,18 +169,54 @@ public partial class MainView
         }
         font.SelectionChanged += (_, _) => UpdatePreview(); custom.TextChanged += (_, _) => UpdatePreview();
         size.ValueChanged += (_, _) => UpdatePreview(); bold.Click += (_, _) => UpdatePreview(); italic.Click += (_, _) => UpdatePreview(); UpdatePreview();
-        var color = new ComboBox { ItemsSource = editor.Scene.Palette.Select((hex, i) => $"{i:D3}  {hex}").ToArray(), SelectedIndex = obj.Color, HorizontalAlignment = HorizontalAlignment.Stretch };
-        body.Children.Add(Label("Palette color")); body.Children.Add(color);
+        var chosenColor = obj.Color;
+        var colorSwatch = new Border { Width = 28, Height = 24, BorderBrush = Brush(UiTheme.Border), BorderThickness = new Thickness(1) };
+        var colorLabel = Label("");
+        void UpdateColor()
+        {
+            colorSwatch.Background = Brush(editor.Scene.Palette[chosenColor]);
+            colorLabel.Text = $"{chosenColor:D3}  {editor.Scene.Palette[chosenColor]}";
+            sample.Foreground = Brush(editor.Scene.Palette[chosenColor]);
+        }
+        var colorPicker = Button("", () => { }); colorPicker.Name = "TextColorPicker";
+        colorPicker.Content = Row(colorSwatch, colorLabel);
+        var colorGrid = new WrapPanel { Width = compact ? 280 : 372, Orientation = Orientation.Horizontal };
+        var colorFlyout = new Flyout { Content = new ScrollViewer { Content = colorGrid, MaxHeight = 320, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled } };
+        foreach (var (hex, index) in editor.Scene.Palette.Select((hex, index) => (hex, index)))
+        {
+            var swatch = new Button { Width = 30, Height = 30, Margin = new Thickness(1), Padding = new Thickness(0), Background = Brush(hex), BorderBrush = Brush(index == chosenColor ? UiTheme.Accent : UiTheme.Border), BorderThickness = new Thickness(index == chosenColor ? 2 : 1) };
+            ToolTip.SetTip(swatch, $"{index:D3}  {hex}");
+            swatch.Click += (_, _) => { chosenColor = index; UpdateColor(); colorFlyout.Hide(); };
+            colorGrid.Children.Add(swatch);
+        }
+        colorPicker.Flyout = colorFlyout;
+        UpdateColor();
+        body.Children.Add(Label("Palette color")); body.Children.Add(colorPicker);
+        var rotation = new NumericUpDown { Name = "TextRotation", Value = (decimal)obj.RotationDegrees, Minimum = -360, Maximum = 360, Increment = 1, Width = 115, Height = 34 };
+        var sizeEffect = new ComboBox { Name = "TextSizeEffect", ItemsSource = new[] { "Uniform", "Small → large", "Large → small", "Small → large → small" }, SelectedIndex = (int)obj.SizeEffect, MinWidth = 200 };
+        var curve = new NumericUpDown { Name = "TextCurve", Value = (decimal)obj.CurveDegrees, Minimum = -180, Maximum = 180, Increment = 5, Width = 115, Height = 34 };
+        var anchorX = new NumericUpDown { Name = "TextCurveAnchorX", Value = (decimal)(obj.CurveAnchorX * 100), Minimum = -200, Maximum = 200, Increment = 5, Width = 115, Height = 34 };
+        var anchorY = new NumericUpDown { Name = "TextCurveAnchorY", Value = (decimal)(obj.CurveAnchorY * 100), Minimum = -200, Maximum = 200, Increment = 5, Width = 115, Height = 34 };
+        body.Children.Add(Label("Text effects"));
+        body.Children.Add(Row(Label("Rotation (°)"), rotation, Label("Curve (°)"), curve));
+        body.Children.Add(Row(Label("Curve point X (%)"), anchorX, Label("Y (%)"), anchorY));
+        body.Children.Add(Row(Label("Size across text"), sizeEffect));
+        body.Children.Add(Label("Curve point offsets are relative to the center of the text area. Negative curve values bend the other way."));
         ShowModal("Text layout & style", body, () =>
         {
-            if (new[] { x, y, width, height, size }.Any(n => n.Value is null) || color.SelectedIndex < 0) return;
+            if (new[] { x, y, width, height, size, rotation, curve, anchorX, anchorY }.Any(n => n.Value is null) || sizeEffect.SelectedIndex < 0) return;
             if (font.SelectedIndex == fontIds.Count && string.IsNullOrWhiteSpace(custom.Text)) { requirement.Text = "Enter the installed font family name."; return; }
             editor.BeforeChange(); obj.SetPlacement(language, editor.Scene.FallbackLanguage, new TextPlacement
             { X = (double)x.Value!.Value, Y = (double)y.Value!.Value, Width = (double)width.Value!.Value, Height = (double)height.Value!.Value });
             obj.FontSize = (double)size.Value!.Value;
-            obj.FontId = FontId(); obj.Color = color.SelectedIndex;
+            obj.FontId = FontId(); obj.Color = chosenColor;
             editor.Color = obj.Color;
             obj.Bold = bold.IsChecked == true; obj.Italic = italic.IsChecked == true;
+            obj.RotationDegrees = (double)rotation.Value!.Value;
+            obj.SizeEffect = (TextSizeEffect)sizeEffect.SelectedIndex;
+            obj.CurveDegrees = (double)curve.Value!.Value;
+            obj.CurveAnchorX = (double)anchorX.Value!.Value / 100;
+            obj.CurveAnchorY = (double)anchorY.Value!.Value / 100;
             editor.Preferences.Remember(obj);
             CloseModal(); RefreshAll();
         });

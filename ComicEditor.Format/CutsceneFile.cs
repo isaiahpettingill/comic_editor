@@ -51,7 +51,12 @@ public static class CutsceneFile
                     FontSize = (float)obj.FontSize,
                     PaletteIndex = (uint)obj.Color,
                     Bold = obj.Bold,
-                    Italic = obj.Italic
+                    Italic = obj.Italic,
+                    RotationDegrees = (float)obj.RotationDegrees,
+                    SizeEffect = (uint)obj.SizeEffect,
+                    CurveDegrees = (float)obj.CurveDegrees,
+                    CurveAnchorX = (float)obj.CurveAnchorX,
+                    CurveAnchorY = (float)obj.CurveAnchorY
                 };
                 foreach (var (language, placement) in obj.Placements.OrderBy(p => p.Key, StringComparer.Ordinal))
                     text.Placements.Add(new Wire.TextPlacementOverride
@@ -129,6 +134,11 @@ public static class CutsceneFile
                     Color = (int)obj.PaletteIndex,
                     Bold = obj.Bold,
                     Italic = obj.Italic,
+                    RotationDegrees = obj.RotationDegrees,
+                    SizeEffect = (TextSizeEffect)obj.SizeEffect,
+                    CurveDegrees = obj.CurveDegrees,
+                    CurveAnchorX = obj.CurveAnchorX,
+                    CurveAnchorY = obj.CurveAnchorY,
                     Placements = obj.Placements.ToDictionary(p => p.Language, p => new TextPlacement { X = p.X, Y = p.Y, Width = p.Width, Height = p.Height }, StringComparer.OrdinalIgnoreCase),
                     Styles = obj.Styles.Select(s => new TextStyleSpan { Language = s.Language, Start = (int)s.Start, Length = (int)s.Length, FontId = s.FontId, FontSize = s.FontSize }).ToList()
                 }).ToList()

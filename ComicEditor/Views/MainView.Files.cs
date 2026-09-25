@@ -51,7 +51,7 @@ public partial class MainView
             var opened = new EditorState(editor.Preferences);
             opened.Load(bytes, file.Name);
             AddTab(opened); await BindFile(file, bytes); Build(compact);
-            selection = clipboardSelection = null;
+            selection = null;
             SetSaveMessage($"Opened {file.Name}. Crash recovery is active.");
             await SaveSessionSafely();
             await CutsceneFonts.EnsureAsync(editor.Scene); RefreshAll();

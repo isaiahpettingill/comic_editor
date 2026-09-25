@@ -105,6 +105,7 @@ public partial class MainView
             };
             ToolTip.SetTip(card, "Click to open; drag to reorder");
             thumbnailCards.Add(card);
+            AttachFrameClipboardMenu(card, index);
             AttachReorder(card, storyboard, index, true, () => { SelectFrame(index); if (compact) ShowCompactPage(CompactPage.Draw); });
             storyboard.Children.Add(card);
         }
@@ -316,7 +317,6 @@ public partial class MainView
         var edit = Button("Layout & style…", () => EditTextProperties(obj)); edit.Name = "EditTextProperties";
         var textActions = new WrapPanel { Orientation = Orientation.Horizontal };
         edit.Margin = new Thickness(0, 0, 4, 4); textActions.Children.Add(edit);
-        textActions.Children.Add(Button("Edit on canvas", BeginInlineTextEdit));
         textActions.Children.Add(Button("Languages…", ManageLanguages)); inspector.Children.Add(textActions);
         var installFonts = Button("Install missing fonts…", () => _ = CheckFontsAsync(CancellationToken.None, explicitlyRequested: true));
         installFonts.Name = "InstallMissingFonts";

@@ -77,10 +77,13 @@ public static class DisplayCompiler
     internal static TextRaster? Rasterize(Cutscene scene, TextObject obj, string text, string language)
     {
         var placement = obj.Placement(language, scene.FallbackLanguage);
-        var left = Math.Clamp((int)Math.Floor(placement.X), 0, scene.Width);
-        var top = Math.Clamp((int)Math.Floor(placement.Y), 0, scene.Height);
-        var right = Math.Clamp((int)Math.Ceiling(placement.X + placement.Width), 0, scene.Width);
-        var bottom = Math.Clamp((int)Math.Ceiling(placement.Y + placement.Height), 0, scene.Height);
+        var transformed = TextEffectsRenderer.HasEffect(obj);
+        var bounds = transformed ? TextEffectsRenderer.Bounds(obj, placement) :
+            new Rect(placement.X, placement.Y, placement.Width, placement.Height);
+        var left = Math.Clamp((int)Math.Floor(bounds.X), 0, scene.Width);
+        var top = Math.Clamp((int)Math.Floor(bounds.Y), 0, scene.Height);
+        var right = Math.Clamp((int)Math.Ceiling(bounds.Right), 0, scene.Width);
+        var bottom = Math.Clamp((int)Math.Ceiling(bounds.Bottom), 0, scene.Height);
         var width = right - left; var height = bottom - top; if (width <= 0 || height <= 0) return null;
         // The render target produces hard-edged glyph masks at native canvas size.
         // Supersample small text areas, with a memory cap for large canvases.
@@ -128,15 +131,14 @@ public static class DisplayCompiler
     {
         public override void Render(DrawingContext context)
         {
-            var culture = CutsceneCanvas.Culture(language);
-            var formatted = new FormattedText(text, culture, culture.TextInfo.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight,
-                new Typeface(CutsceneFonts.Resolve(obj.FontId, language), obj.Italic ? FontStyle.Italic : FontStyle.Normal,
-                    obj.Bold ? FontWeight.Bold : FontWeight.Normal), obj.FontSize, Brushes.White)
-            { MaxTextWidth = placement.Width };
-            TextStyleFormatter.Apply(formatted, obj, styleLanguage, text.Length);
             using (context.PushTransform(Matrix.CreateScale(scale, scale)))
-            using (context.PushClip(new Rect(placement.X - left, placement.Y - top, placement.Width, placement.Height)))
-                context.DrawText(formatted, new Point(placement.X - left, placement.Y - top));
+                TextEffectsRenderer.Draw(context, obj, new TextPlacement
+                {
+                    X = placement.X - left,
+                    Y = placement.Y - top,
+                    Width = placement.Width,
+                    Height = placement.Height
+                }, text, language, styleLanguage, Brushes.White);
         }
     }
 }

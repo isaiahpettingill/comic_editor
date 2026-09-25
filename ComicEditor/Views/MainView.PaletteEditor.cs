@@ -164,7 +164,7 @@ public partial class MainView
             try
             {
                 var palette = Snapshot(); editor.ApplyPalette(palette.Colors.Select(c => c.Hex).ToArray());
-                selection = clipboardSelection = null; CloseModal(); RefreshAll();
+                selection = null; CloseModal(); RefreshAll();
             }
             catch (Exception ex) { Report(ex.Message, true); }
         });

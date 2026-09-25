@@ -45,7 +45,7 @@ public partial class MainView
         editor.FinishPendingEdit = () => FinishPath();
         currentFile = tab.File; currentBookmark = tab.Bookmark;
         autoSavePaused = tab.AutoSavePaused; lastAutoSave = tab.LastAutoSave;
-        selection = clipboardSelection = null;
+        selection = null;
         Build(compact); RefreshTabs(); _ = SaveSessionSafely();
     }
 
@@ -75,7 +75,7 @@ public partial class MainView
             editor.FinishPendingEdit = () => FinishPath();
             currentFile = activeTab.File; currentBookmark = activeTab.Bookmark;
             autoSavePaused = activeTab.AutoSavePaused; lastAutoSave = activeTab.LastAutoSave;
-            selection = clipboardSelection = null; Build(compact);
+            selection = null; Build(compact);
         }
         else tabs.Remove(tab);
         RefreshTabs(); _ = SaveSessionSafely();

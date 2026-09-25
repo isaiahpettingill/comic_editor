@@ -21,6 +21,7 @@ public sealed class CutsceneCanvas : Control
     public double OnionOpacity { get; set; } = 0.35;
     public bool ShowTextBounds { get; set; }
     public string? SelectedTextId { get; set; }
+    public string? HiddenTextId { get; set; }
     public bool TextVisible { get; set; } = true;
     public Rect? DraftTextBounds { get; set; }
     public Rect? SelectionBounds { get; set; }
@@ -40,7 +41,7 @@ public sealed class CutsceneCanvas : Control
             if (OnionSkin && FrameIndex > 0)
                 using (context.PushOpacity(Math.Clamp(OnionOpacity, 0, 1)))
                     RenderFrame(context, Scene, FrameIndex - 1, Language, false, false, null, false);
-            RenderFrame(context, Scene, FrameIndex, Language, TextVisible, ShowTextBounds, SelectedTextId, OnionSkin);
+            RenderFrame(context, Scene, FrameIndex, Language, TextVisible, ShowTextBounds, SelectedTextId, OnionSkin, HiddenTextId);
             if (DraftTextBounds is Rect draft)
                 context.DrawRectangle(null, new Pen(Brushes.DodgerBlue, 1), draft);
             var selectionPen = new Pen(Brushes.DodgerBlue, 1, DashStyle.Dash);
@@ -59,7 +60,7 @@ public sealed class CutsceneCanvas : Control
     }
 
     public static void RenderFrame(DrawingContext context, Cutscene scene, int frameIndex, string language,
-        bool textVisible = true, bool showBounds = false, string? selectedId = null, bool onionBackground = false)
+        bool textVisible = true, bool showBounds = false, string? selectedId = null, bool onionBackground = false, string? hiddenTextId = null)
     {
         var frame = scene.Frames[frameIndex];
         var brushes = scene.Palette.Select(hex => { var c = RgbaColor.Parse(hex); return new SolidColorBrush(Color.FromArgb((byte)c, (byte)(c >> 24), (byte)(c >> 16), (byte)(c >> 8))); }).ToArray();
@@ -111,6 +112,7 @@ public sealed class CutsceneCanvas : Control
         if (!textVisible || !frame.TextVisible) return;
         foreach (var obj in frame.TextObjects)
         {
+            if (obj.Id == hiddenTextId) continue;
             var placement = obj.Placement(language, scene.FallbackLanguage);
             var text = scene.Text(language, obj.Key);
             var missing = string.IsNullOrWhiteSpace(text);
@@ -126,8 +128,7 @@ public sealed class CutsceneCanvas : Control
             var styleLanguage = missing ? scene.FallbackLanguage : language;
             TextStyleFormatter.Apply(formatted, obj, styleLanguage, rendered.Length);
             var overflow = formatted.Height > placement.Height + 0.5 || formatted.Width > placement.Width + 0.5;
-            using (context.PushClip(new Rect(placement.X, placement.Y, placement.Width, placement.Height)))
-                context.DrawText(formatted, new Point(placement.X, placement.Y));
+            TextEffectsRenderer.Draw(context, obj, placement, rendered, language, styleLanguage, brushes[obj.Color]);
             if (showBounds)
             {
                 var outline = missing ? Brushes.OrangeRed : overflow ? Brushes.Red :

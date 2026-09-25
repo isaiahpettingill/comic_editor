@@ -8,7 +8,9 @@ from urllib.parse import quote
 
 
 def package(archive: Path, output: Path, repository: str, tag: str) -> None:
-    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repository) or not tag:
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repository) or not re.fullmatch(
+        r"v\d+\.\d+\.\d+", tag
+    ):
         raise ValueError("A GitHub owner/repository and release tag are required")
     with archive.open("rb") as source:
         checksum = hashlib.file_digest(source, "sha256").hexdigest()
@@ -31,5 +33,5 @@ if __name__ == "__main__":
         Path("ComicEditor-linux-x64.tar.gz"),
         Path("install-comic-editor.sh"),
         os.environ["GITHUB_REPOSITORY"],
-        os.environ["GITHUB_REF_NAME"],
+        "v" + os.environ["COMIC_RELEASE_VERSION"],
     )

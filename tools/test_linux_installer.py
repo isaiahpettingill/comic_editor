@@ -244,6 +244,23 @@ class LinuxInstallerTests(unittest.TestCase):
         self.run_installer(script=installer, success=False)
         self.assertEqual(self.command("comic-editor"), "one:\n")
 
+    def test_main_branch_packaging_uses_allocated_release_tag(self):
+        env = dict(
+            self.env,
+            GITHUB_REPOSITORY="example/comic_editor",
+            GITHUB_REF_NAME="main",
+            COMIC_RELEASE_VERSION="1.2.3",
+        )
+        subprocess.run(
+            ["python3", str(TOOLS / "package-linux-installer.py")],
+            cwd=self.base,
+            env=env,
+            check=True,
+        )
+        installer = (self.base / "install-comic-editor.sh").read_text()
+        self.assertIn("RELEASE_TAG='v1.2.3'", installer)
+        self.assertNotIn("RELEASE_TAG='main'", installer)
+
 
 if __name__ == "__main__":
     unittest.main()

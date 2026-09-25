@@ -7,18 +7,24 @@ namespace ComicEditor.Format;
 public sealed record GplColor(string Hex, string Name = "");
 public sealed record GplPalette(string Name, IReadOnlyList<GplColor> Colors, int Columns = 16)
 {
-    public const int Capacity = 255;
-    public static bool IsHex(string? text) => text is { Length: 7 } && text[0] == '#' && text[1..].All(Uri.IsHexDigit);
+    public const int Capacity = 65535;
+    public static bool IsHex(string? text) => RgbaColor.IsHex(text);
 
     public static GplPalette Parse(string text, string fallbackName = "Imported palette")
     {
-        if (text.Length > 1_048_576) throw new InvalidDataException("The palette file is too large.");
+        if (text.Length > 8 * 1024 * 1024) throw new InvalidDataException("The palette file is too large.");
         using var reader = new StringReader(text.TrimStart('\uFEFF'));
         if (reader.ReadLine()?.TrimEnd() != "GIMP Palette") throw new InvalidDataException("This is not a GIMP palette (.gpl) file.");
-        var name = fallbackName; var columns = 0; var colors = new List<GplColor>(); var number = 1;
+        var name = fallbackName; var columns = 0; var colors = new List<GplColor>(); var alpha = new Dictionary<int, byte>(); var number = 1;
         while (reader.ReadLine() is { } raw)
         {
             number++; var line = raw.Trim();
+            if (line.StartsWith("# ComicEditor-Alpha:", StringComparison.Ordinal))
+            {
+                var alphaParts = line[20..].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (alphaParts.Length == 2 && int.TryParse(alphaParts[0], out var slot) && slot >= 0 && byte.TryParse(alphaParts[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) alpha[slot] = value;
+                continue;
+            }
             if (line.Length == 0 || line.StartsWith('#')) continue;
             if (colors.Count == 0 && line.StartsWith("Name:", StringComparison.Ordinal)) { name = line[5..].Trim(); continue; }
             if (colors.Count == 0 && line.StartsWith("Columns:", StringComparison.Ordinal))
@@ -33,23 +39,27 @@ public sealed record GplPalette(string Name, IReadOnlyList<GplColor> Colors, int
                 !byte.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out var b))
                 throw new InvalidDataException($"Line {number}: expected red, green, and blue values from 0 to 255.");
             colors.Add(new($"#{r:X2}{g:X2}{b:X2}", parts.Length == 4 ? parts[3].Trim() : ""));
-            if (colors.Count > Capacity) throw new InvalidDataException("This palette has more than 255 colors. One index is reserved for transparency; no colors were imported.");
+            if (colors.Count > Capacity) throw new InvalidDataException("This palette has more than 65535 colors.");
         }
         if (colors.Count < 2) throw new InvalidDataException("A cutscene palette needs at least two colors.");
+        foreach (var (slot, value) in alpha)
+            if (slot < colors.Count) colors[slot] = colors[slot] with { Hex = colors[slot].Hex + value.ToString("X2") };
         return new(string.IsNullOrWhiteSpace(name) ? fallbackName : name, colors, columns);
     }
 
     public string Write()
     {
         if (Colors.Count is < 2 or > Capacity || Columns is < 0 or > 255 || Colors.Any(c => !IsHex(c.Hex)))
-            throw new InvalidDataException("A palette needs 2–255 valid RGB colors.");
+            throw new InvalidDataException("A palette needs 2–65535 valid RGB or RGBA colors.");
         static string SingleLine(string text) => text.Replace('\r', ' ').Replace('\n', ' ').Trim();
         var output = new StringBuilder("GIMP Palette\nName: ").Append(SingleLine(Name)).Append("\nColumns: ")
             .Append(Columns.ToString(CultureInfo.InvariantCulture)).Append("\n#\n");
-        foreach (var color in Colors)
+        for (var i = 0; i < Colors.Count; i++)
         {
-            var bytes = Convert.FromHexString(color.Hex[1..]);
+            var color = Colors[i];
+            var bytes = Convert.FromHexString(color.Hex[1..7]);
             output.Append(CultureInfo.InvariantCulture, $"{bytes[0],3} {bytes[1],3} {bytes[2],3}\t{SingleLine(color.Name)}\n");
+            if (color.Hex.Length == 9) output.Append(CultureInfo.InvariantCulture, $"# ComicEditor-Alpha: {i} {color.Hex[7..]}\n");
         }
         return output.ToString();
     }

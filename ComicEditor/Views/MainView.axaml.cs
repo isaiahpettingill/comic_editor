@@ -15,7 +15,7 @@ namespace ComicEditor.Views;
 public partial class MainView : UserControl
 {
     private enum Pane { Storyboard, Canvas, Inspector }
-    private readonly EditorState editor = new(PreferencesStorage.Load());
+    private EditorState editor = new(PreferencesStorage.Load());
     private CutsceneCanvas? canvas, previous;
     private StackPanel? storyboard, inspector, palette, toolRail, toolOptions;
     private TextBlock? status, frameCount;
@@ -43,6 +43,7 @@ public partial class MainView : UserControl
     public MainView(bool touchLayout)
     {
         this.touchLayout = touchLayout;
+        activeTab = new ProjectTab(editor); tabs.Add(activeTab);
         Styles.Add(new ComicEditor.Styles.EditorScrolling(touchLayout));
         editor.FinishPendingEdit = () => FinishPath();
         InitializeComponent();
@@ -170,10 +171,19 @@ public partial class MainView : UserControl
         return header;
     }
 
-    private static SolidColorBrush Brush(string hex) => new(Color.Parse(hex));
+    private static SolidColorBrush Brush(string hex)
+    {
+        if (hex.Length == 9 && RgbaColor.IsHex(hex))
+        {
+            var rgba = RgbaColor.Parse(hex);
+            return new(Color.FromArgb((byte)rgba, (byte)(rgba >> 24), (byte)(rgba >> 16), (byte)(rgba >> 8)));
+        }
+        return new(Color.Parse(hex));
+    }
 
     private void Build(bool small)
     {
+        EndInlineTextEdit();
         ResetCanvasNavigation();
         if (desktopWorkspace is not null && !compact)
             for (var i = 0; i < 3; i++) paneWidths[i] = desktopWorkspace.ColumnDefinitions[i * 2].Width;
@@ -192,11 +202,12 @@ public partial class MainView : UserControl
             if (!compact && !paletteResized)
             {
                 var columns = Math.Max(1, (int)((root.Bounds.Width - 16) / 28));
-                root.RowDefinitions[4].Height = new GridLength(48 + Math.Ceiling(editor.Scene.Palette.Count / (double)columns) * 28);
+                root.RowDefinitions[4].Height = new GridLength(Math.Min(240, 48 + Math.Ceiling(editor.Scene.Palette.Count / (double)columns) * 28));
             }
         };
         var menu = new Menu { Height = small ? 44 : 30, HorizontalAlignment = HorizontalAlignment.Stretch };
-        menu.Items.Add(MenuGroup("_File", ("_New|Ctrl+N", New), ("_Open…|Ctrl+O", () => _ = Open()),
+        var header = new StackPanel { Spacing = 0 }; AddAt(root, header);
+        menu.Items.Add(MenuGroup("_File", ("_New|Ctrl+N", New), ("New indexed cutscene", () => NewWithMode(false)), ("New RGBA cutscene", () => NewWithMode(true)), ("_Open…|Ctrl+O", () => _ = Open()),
             ("_Save|Ctrl+S", () => _ = Save()), ("Save _as…", () => _ = SaveAs()), ("Build game cutscene…", () => _ = ExportDisplay()),
             ("Export frame PNG…", () => _ = Export(false)), ("Export all PNGs…", () => _ = Export(true)),
             ("Export PDF…", () => ExportBook(BookFormat.Pdf)), ("Export EPUB…", () => ExportBook(BookFormat.Epub)),
@@ -227,7 +238,7 @@ public partial class MainView : UserControl
             }
         )));
         ((MenuItem)menu.Items[3]!).Items.Add(ThemeMenu());
-        menu.Items.Add(MenuGroup("_Canvas", ("Resize canvas…", ResizeCanvas)));
+        menu.Items.Add(MenuGroup("_Canvas", ("Resize canvas…", ResizeCanvas), ("Convert to RGBA color…", EnableRgbaMode)));
         menu.Items.Add(MenuGroup("_Palette", ("Palette editor…", EditPalette), ("Edit selected color…", EditPaletteColor)));
         menu.Items.Add(MenuGroup("_Languages", ("Manage languages…", ManageLanguages)));
         AddUpdateMenu(menu);
@@ -241,7 +252,7 @@ public partial class MainView : UserControl
             foreach (var group in groups) drawer.Items.Add(group);
             menu.Items.Add(drawer);
         }
-        if (!small) root.Children.Add(menu);
+        if (!small) header.Children.Add(menu);
 
         frameCount = Label(""); frameCount.MinWidth = 52; frameCount.TextAlignment = TextAlignment.Center;
         previewLanguage = new ComboBox
@@ -291,7 +302,7 @@ public partial class MainView : UserControl
             nav.Children.Remove(frameCount);
             var top = compactTopBar = new Grid { Name = "CompactTopBar", ColumnDefinitions = new ColumnDefinitions(compactSingleRow ? "44,44,44,Auto,*,80" : "44,44,44,*,80"), Margin = new Thickness(4, 2) };
             top.Children.Add(menu); AddAt(top, undoButton, 1); AddAt(top, redoButton, 2);
-            AddAt(top, frameCount, compactSingleRow ? 4 : 3); AddAt(top, previewLanguage, compactSingleRow ? 5 : 4); root.Children.Add(top);
+            AddAt(top, frameCount, compactSingleRow ? 4 : 3); AddAt(top, previewLanguage, compactSingleRow ? 5 : 4); header.Children.Add(top);
             // The original desktop comparison group is not used on compact screens.
             ((StackPanel)onion.Parent!).Children.Clear();
             var onionSettings = new StackPanel { Spacing = 8, Children = { onion, Row(opacity, percent) } };
@@ -302,6 +313,9 @@ public partial class MainView : UserControl
             opacity.Height = 44; opacity.Width = 140;
         }
         else AddAt(root, controls, row: 1);
+        tabStrip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness(4, 1, 4, 2) };
+        header.Children.Add(new ScrollViewer { Content = tabStrip, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        RefreshTabs();
 
         var workspace = new Grid();
         if (small) { desktopWorkspace = null; }
@@ -338,12 +352,14 @@ public partial class MainView : UserControl
         toolRail = new StackPanel { Name = "ToolRail", Margin = new Thickness(4), Spacing = 3 };
         if (!small) AddAt(drawing, new ScrollViewer { Content = toolRail, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         canvas = new CutsceneCanvas { Focusable = true };
+        inlineTextLayer = new Grid { Width = editor.Scene.Width, Height = editor.Scene.Height };
+        inlineTextLayer.Children.Add(canvas);
         previous = new CutsceneCanvas { IsHitTestVisible = false };
         canvas.PointerPressed += CanvasPressed; canvas.PointerMoved += CanvasMoved; canvas.PointerReleased += CanvasReleased;
         canvas.PointerCaptureLost += (_, e) => { if (e.Pointer != drawingPointer) return; drawingPointer = null; StopSpray(); dragging = false; shapeStart = null; creatingText = false; canvas.DraftTextBounds = null; canvas.InvalidateVisual(); };
         canvasPair = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), Margin = new Thickness(12) };
         canvasPair.Children.Add(previous);
-        AddAt(canvasPair, new Border { Child = canvas, BorderBrush = Brush(UiTheme.Border), BorderThickness = new Thickness(1) }, 1);
+        AddAt(canvasPair, new Border { Child = inlineTextLayer, BorderBrush = Brush(UiTheme.Border), BorderThickness = new Thickness(1) }, 1);
         canvasFit = new Viewbox { Child = canvasPair, Stretch = Stretch.Uniform };
         canvasScroll = new DrawingViewport
         {
@@ -401,6 +417,7 @@ public partial class MainView : UserControl
     {
         if (TopLevel.GetTopLevel(this) is Window window)
             window.Title = $"{editor.FileName ?? "Untitled"}{(editor.IsDirty ? " *" : "")} — ComicEditor";
+        RefreshTabs();
     }
 
     private void RefreshCanvas()
@@ -410,6 +427,8 @@ public partial class MainView : UserControl
         if (canvas is null || previous is null) return;
         canvas.Scene = editor.Scene; canvas.FrameIndex = editor.FrameIndex; canvas.Language = editor.Language;
         canvas.Width = previous.Width = editor.Scene.Width; canvas.Height = previous.Height = editor.Scene.Height;
+        if (inlineTextLayer is not null) { inlineTextLayer.Width = editor.Scene.Width; inlineTextLayer.Height = editor.Scene.Height; }
+        if (inlineTextBox is not null && (editor.SelectedTextId != inlineTextObjectId || editor.Language != inlineLanguage || editor.Frame.TextObjects.All(t => t.Id != inlineTextObjectId))) EndInlineTextEdit();
         canvas.OnionSkin = editor.OnionSkin; canvas.OnionOpacity = editor.OnionOpacity;
         canvas.SelectedTextId = editor.SelectedTextId; canvas.ShowTextBounds = true; canvas.InvalidateVisual();
         if (selection?.Owner != editor.Layer || editor.Tool is not (Tool.Select or Tool.Lasso)) selection = null;
@@ -430,6 +449,7 @@ public partial class MainView : UserControl
     private void RefreshTools()
     {
         if (toolRail is null || toolOptions is null) return;
+        if (inlineTextBox is not null) { RefreshInlineTextToolbar(); return; }
         toolRail.Children.Clear(); toolOptions.Children.Clear();
         if (compact) { RefreshCompactTools(); return; }
         var all = Enum.GetValues<Tool>();
@@ -467,7 +487,7 @@ public partial class MainView : UserControl
         status = Label($"{editor.Scene.Width} × {editor.Scene.Height}"); status.IsVisible = !compact; toolOptions.Children.Add(status);
     }
 
-    private void SelectFrame(int index) { FinishPath(); selection = null; editor.SelectFrame(index); RefreshAll(); }
+    private void SelectFrame(int index) { EndInlineTextEdit(); FinishPath(); selection = null; editor.SelectFrame(index); RefreshAll(); }
     private void Undo() { if (pathBase is not null) { FinishPath(cancel: true); return; } var palette = editor.Scene.Palette; if (editor.Undo()) { RefreshHistory(palette); } }
     private void Redo() { FinishPath(); var palette = editor.Scene.Palette; if (editor.Redo()) { RefreshHistory(palette); } }
     private void RefreshHistory(IReadOnlyList<string> previousPalette)
@@ -475,7 +495,23 @@ public partial class MainView : UserControl
         if (!previousPalette.SequenceEqual(editor.Scene.Palette)) selection = clipboardSelection = null;
         editor.RememberCanvas(); editor.RememberPalette(); RefreshAll(); RefreshTools();
     }
-    private void New() { if (fileBusy) return; FinishPath(); selection = clipboardSelection = null; editor.New(); ClearFile(); Build(compact); _ = SaveSessionSafely(); }
+    private void New()
+    {
+        if (fileBusy) return;
+        var next = new EditorState(editor.Preferences);
+        AddTab(next); ClearFile(); _ = SaveSessionSafely();
+    }
+    private void NewWithMode(bool rgba)
+    {
+        editor.Preferences.RgbaCanvas = rgba; editor.Preferences.Palette = null; editor.Preferences.Save(); New();
+    }
+    private void EnableRgbaMode()
+    {
+        if (editor.Scene.IsRgba) return;
+        FinishPath(); editor.BeforeChange(); editor.Scene.ConvertToRgba();
+        editor.Preferences.RgbaCanvas = true; editor.Preferences.Palette = editor.Scene.Palette.ToArray(); editor.Preferences.Save();
+        selection = clipboardSelection = null; Build(compact);
+    }
 
     private void ZoomWheel(object? sender, PointerWheelEventArgs e)
     {
@@ -493,6 +529,11 @@ public partial class MainView : UserControl
         var typing = e.Source is Visual visual && (visual is TextBox || visual.GetVisualAncestors().Any(v => v is TextBox or NumericUpDown));
         if (!typing && e.Key == Key.Escape) { FinishPath(cancel: true); selection = null; RefreshCanvas(); e.Handled = true; return; }
         if (!typing && e.Key == Key.Enter && pathBase is not null) { FinishPath(); e.Handled = true; return; }
+        if (!typing && e.Key == Key.F2 && editor.SelectedText is not null) { BeginInlineTextEdit(); e.Handled = true; return; }
+        if (!typing && editor.SelectedText is not null && FontStep(e, out var fontDelta))
+        {
+            BeginInlineTextEdit(); ChangeInlineFontSize(fontDelta); e.Handled = true; return;
+        }
         if (!typing && e.Key == Key.Delete && selection is not null) { DeleteSelection(); e.Handled = true; return; }
         if (!typing && e.Key == Key.Delete && editor.SelectedText is { } selected)
         {

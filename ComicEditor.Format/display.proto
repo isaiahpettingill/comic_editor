@@ -11,10 +11,12 @@ message DisplayCutscene {
   repeated string languages = 5; // Language index used by each frame below.
   repeated DisplayFrame frames = 6;
   uint32 fallback_language_index = 7;
+  repeated uint32 palette_rgba = 8; // Version 3 only: 0xRRGGBBAA.
 }
 message DisplayFrame {
   bytes indexed_artwork = 1; // Row-major, width*height bytes; 0..254, 255 transparent.
   repeated LocalizedFrameText text = 2; // Same order as DisplayCutscene.languages.
+  bytes rgba_artwork_png = 3; // Version 3 only: composited lossless RGBA PNG.
 }
 message LocalizedFrameText {
   repeated TextRaster runs = 1; // Composite in order after artwork.

@@ -12,7 +12,7 @@ public partial class CanvasTests
     [InlineData(".ctsc", false)]
     [InlineData(".cutscene", false)]
     [InlineData(".CTSC", true)]
-    public async Task AssociatedFileOpensAndProtectsUnsavedEdits(string extension, bool dirty)
+    public async Task AssociatedFileOpensInNewTabAndPreservesUnsavedEdits(string extension, bool dirty)
     {
         using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
         await session.Dispatch(async () =>
@@ -23,15 +23,15 @@ public partial class CanvasTests
             var view = new MainView(); var window = new Window { Content = view, Width = 1000, Height = 800 }; window.Show();
             try
             {
-                if (dirty) { State(view).BeforeChange(); State(view).Scene.Palette[0] = "#123456"; }
+                var original = State(view);
+                if (dirty) { original.BeforeChange(); original.Scene.Palette[0] = "#123456"; }
                 view.QueueOpenPath(new Uri(path).AbsoluteUri);
                 await (Task)Invoke(view, "OpenPendingFiles")!;
                 if (dirty)
                 {
-                    Assert.Equal("#123456", State(view).Scene.Palette[0]);
-                    Assert.Contains("Discard", Named<Button>(window, "ModalApply").Content!.ToString());
-                    Invoke(view, "CloseModal");
-                    Assert.True(State(view).IsDirty);
+                    Assert.Equal(64, State(view).Scene.Width);
+                    Assert.Equal("#123456", original.Scene.Palette[0]);
+                    Assert.True(original.IsDirty);
                 }
                 else
                 {

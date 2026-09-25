@@ -33,12 +33,7 @@ public partial class MainView
             var file = await pendingFiles.Dequeue()() ?? throw new IOException("The cutscene could not be opened. Check that the file still exists and is accessible.");
             if (!ProjectTypes.IsProject(file.Name)) throw new InvalidDataException("Choose a .ctsc or .cutscene project.");
             if (TopLevel.GetTopLevel(this) is Window window) { if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal; window.Activate(); }
-            if (editor.IsDirty)
-            {
-                ShowModal("Open another cutscene?", Label($"Your current cutscene has unsaved changes. Cancel to save it first, or discard those changes and open {file.Name}."),
-                    () => { CloseModal(); _ = OpenProjectFile(file); }, "Discard and open");
-            }
-            else await OpenProjectFile(file);
+            await OpenProjectFile(file);
         }
         catch (Exception ex) { await ShowError(ex.Message); }
         finally { activationBusy = false; }

@@ -9,6 +9,7 @@ public sealed class EditorPreferences
     public string Theme { get; set; } = Styles.EditorThemes.Default;
     public int CanvasWidth { get; set; } = 320;
     public int CanvasHeight { get; set; } = 180;
+    public bool RgbaCanvas { get; set; }
     public string FontId { get; set; } = "comic-shanns";
     public double FontSize { get; set; } = 16;
     public bool Bold { get; set; }
@@ -46,7 +47,7 @@ public sealed class EditorPreferences
         value.Tools ??= new();
         value.Tools = value.Tools.Where(p => p.Value is not null).ToDictionary(p => p.Key, p => p.Value);
         foreach (var settings in value.Tools.Values) settings.Validate();
-        if (value.Palette is not { Length: >= 2 and <= 255 } || value.Palette.Any(c => !GplPalette.IsHex(c))) value.Palette = null;
+        if (value.Palette is not { Length: >= 2 and <= 65535 } || value.Palette.Any(c => !RgbaColor.IsHex(c))) value.Palette = null;
         value.Color = Math.Clamp(value.Color, 0, (value.Palette?.Length ?? 128) - 1);
         value.OnionOpacity = double.IsFinite(value.OnionOpacity) ? Math.Clamp(value.OnionOpacity, 0, 1) : .35;
         value.Zoom = double.IsFinite(value.Zoom) ? Math.Clamp(value.Zoom, 0, 32) : 0;
@@ -65,9 +66,12 @@ public sealed class PaintSettings
     public BrushTip Tip { get; set; }
     public ShapeFill Fill { get; set; }
     public int SprayDensity { get; set; } = 12;
+    public int Opacity { get; set; } = 255;
+    public int DitherDensity { get; set; } = 8;
     public void Validate()
     {
         Size = Math.Clamp(Size, 1, 64); SprayDensity = Math.Clamp(SprayDensity, 1, 100);
+        Opacity = Math.Clamp(Opacity, 0, 255); DitherDensity = Math.Clamp(DitherDensity, 1, 16);
         if (!Enum.IsDefined(Tip)) Tip = BrushTip.Round;
         if (!Enum.IsDefined(Fill)) Fill = ShapeFill.Outline;
     }

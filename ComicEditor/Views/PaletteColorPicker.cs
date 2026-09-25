@@ -8,7 +8,7 @@ namespace ComicEditor.Views;
 internal static class PaletteColorPicker
 {
     // Compose the upstream spectrum without its separate, global palette library.
-    public static CustomColorPicker Create(Color color)
+    public static CustomColorPicker Create(Color color, bool alpha = false)
     {
         ColorPicker.TransitionsDisabled = true;
         return new CustomColorPicker
@@ -21,7 +21,7 @@ internal static class PaletteColorPicker
                 Stretch = Stretch.Uniform,
                 StretchDirection = StretchDirection.DownOnly,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Child = new ColorCanvasControls { IsAlphaVisible = false }
+                Child = new ColorCanvasControls { IsAlphaVisible = alpha }
             }
         };
     }

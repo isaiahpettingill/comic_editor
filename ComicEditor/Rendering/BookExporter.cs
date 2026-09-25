@@ -118,17 +118,17 @@ public static class BookExporter
         for (var i = 0; i < scene.Frames.Count; i++)
         {
             using var png = new MemoryStream(); PngExporter.Write(png, scene, i, language);
-            var image = PdfImage.FromPng(png.ToArray());
+            var image = PdfImage.FromPng(png.ToArray(), scene.Width, scene.Height);
             var page = 3 + 3 * i; var imageId = page + 1; var contentId = page + 2;
             var width = scene.Width * 2; var height = scene.Height * 2;
             Begin(page);
             Ascii($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] " +
                 $"/Resources << /XObject << /Im0 {imageId} 0 R >> >> /Contents {contentId} 0 R >>\n"); End();
             Begin(imageId);
+            var colorSpace = image.Palette is null ? "/DeviceRGB" : $"[/Indexed /DeviceRGB {image.Palette.Length / 3 - 1} <{Convert.ToHexString(image.Palette)}>]";
+            var predictor = image.Palette is null ? "" : $"/DecodeParms << /Predictor 15 /Colors 1 /BitsPerComponent {image.Depth} /Columns {scene.Width} >> ";
             Ascii($"<< /Type /XObject /Subtype /Image /Width {scene.Width} /Height {scene.Height} " +
-                $"/ColorSpace [/Indexed /DeviceRGB {image.Palette.Length / 3 - 1} <{Convert.ToHexString(image.Palette)}>] " +
-                $"/BitsPerComponent {image.Depth} /Filter /FlateDecode " +
-                $"/DecodeParms << /Predictor 15 /Colors 1 /BitsPerComponent {image.Depth} /Columns {scene.Width} >> " +
+                $"/ColorSpace {colorSpace} /BitsPerComponent {image.Depth} /Filter /FlateDecode {predictor}" +
                 $"/Length {image.Compressed.Length} >>\nstream\n");
             Bytes(image.Compressed); Ascii("\nendstream\n"); End();
             var commands = Encoding.ASCII.GetBytes($"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n");
@@ -141,25 +141,37 @@ public static class BookExporter
         Ascii($"trailer\n<< /Size {offsets.Count} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
     }
 
-    private sealed record PdfImage(byte Depth, byte[] Palette, byte[] Compressed)
+    private sealed record PdfImage(byte Depth, byte[]? Palette, byte[] Compressed)
     {
-        public static PdfImage FromPng(byte[] png)
+        public static PdfImage FromPng(byte[] png, int width, int height)
         {
             if (!png.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
                 throw new InvalidDataException("Expected a PNG frame.");
-            byte depth = 0; byte[]? palette = null;
+            byte depth = 0; byte kind = 0; byte[]? palette = null;
             using var compressed = new MemoryStream();
             for (var offset = 8; offset + 12 <= png.Length;)
             {
                 var length = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(offset, 4));
                 if (length < 0 || length > png.Length - offset - 12) throw new InvalidDataException("Invalid PNG chunk.");
                 var type = png.AsSpan(offset + 4, 4); var data = png.AsSpan(offset + 8, length);
-                if (type.SequenceEqual("IHDR"u8)) depth = data[8];
+                if (type.SequenceEqual("IHDR"u8)) { depth = data[8]; kind = data[9]; }
                 else if (type.SequenceEqual("PLTE"u8)) palette = data.ToArray();
                 else if (type.SequenceEqual("IDAT"u8)) compressed.Write(data);
                 offset += 12 + length;
             }
-            if (palette is null || depth is not (1 or 2 or 4 or 8) || compressed.Length == 0)
+            if (kind == 6 && depth == 8)
+            {
+                var rgba = RgbaPng.Decode(png, width, height);
+                using var rgb = new MemoryStream();
+                using (var zip = new ZLibStream(rgb, CompressionLevel.Optimal, true))
+                    foreach (var pixel in rgba)
+                    {
+                        var color = RgbaColor.Blend(pixel, 0xffffffff);
+                        zip.WriteByte((byte)(color >> 24)); zip.WriteByte((byte)(color >> 16)); zip.WriteByte((byte)(color >> 8));
+                    }
+                return new PdfImage(8, null, rgb.ToArray());
+            }
+            if (palette is null || kind != 3 || depth is not (1 or 2 or 4 or 8) || compressed.Length == 0)
                 throw new InvalidDataException("Expected an indexed PNG frame.");
             return new PdfImage(depth, palette, compressed.ToArray());
         }

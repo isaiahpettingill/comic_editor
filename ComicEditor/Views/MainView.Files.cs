@@ -17,7 +17,7 @@ public partial class MainView
     private void SetPaletteColor(int index, string hex)
     {
         hex = hex.Trim().ToUpperInvariant();
-        if (hex.Length != 7 || hex[0] != '#' || !hex[1..].All(Uri.IsHexDigit) ||
+        if (!RgbaColor.IsHex(hex) || hex.Length != (editor.Scene.IsRgba ? 9 : 7) ||
             hex == editor.Scene.Palette[index]) return;
         editor.BeforeChange(); editor.Scene.Palette[index] = hex; editor.RememberPalette(); RefreshAll();
     }
@@ -45,7 +45,12 @@ public partial class MainView
         {
             await using var stream = await file.OpenReadAsync(); using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer); var bytes = buffer.ToArray();
-            editor.Load(bytes, file.Name); await BindFile(file, bytes); Build(compact);
+            var existing = tabs.FirstOrDefault(tab => string.Equals((tab == activeTab ? currentFile : tab.File)?.File.TryGetLocalPath(), file.TryGetLocalPath(),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) && file.TryGetLocalPath() is not null);
+            if (existing is not null) { SwitchTab(existing, force: true); return; }
+            var opened = new EditorState(editor.Preferences);
+            opened.Load(bytes, file.Name);
+            AddTab(opened); await BindFile(file, bytes); Build(compact);
             selection = clipboardSelection = null;
             SetSaveMessage($"Opened {file.Name}. Crash recovery is active.");
             await SaveSessionSafely();

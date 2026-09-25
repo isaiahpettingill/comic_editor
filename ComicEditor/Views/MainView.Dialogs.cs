@@ -100,6 +100,8 @@ public partial class MainView
 
     private void EditTextProperties(TextObject obj)
     {
+        EndInlineTextEdit();
+        var language = editor.Language; var placement = obj.Placement(language, editor.Scene.FallbackLanguage);
         var body = new StackPanel { Spacing = 10 };
         var geometry = new Grid { ColumnDefinitions = new ColumnDefinitions("*,12,*"), RowDefinitions = new RowDefinitions("Auto,Auto") };
         NumericUpDown Number(string title, double value, double min, int col, int row)
@@ -108,9 +110,10 @@ public partial class MainView
             var field = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 8), Children = { Label(title), input } };
             AddAt(geometry, field, col, row); return input;
         }
-        var x = Number("X", obj.X, -2048, 0, 0); var y = Number("Y", obj.Y, -2048, 2, 0);
-        var width = Number("Width", obj.Width, 1, 0, 1); var height = Number("Height", obj.Height, 1, 2, 1);
+        var x = Number("X", placement.X, -2048, 0, 0); var y = Number("Y", placement.Y, -2048, 2, 0);
+        var width = Number("Width", placement.Width, 1, 0, 1); var height = Number("Height", placement.Height, 1, 2, 1);
         body.Children.Add(geometry);
+        body.Children.Add(Label($"Position and area for {language}; font and style apply to this text object."));
         var fontIds = CutsceneFonts.Ids.Concat(editor.Scene.Frames.SelectMany(f => f.TextObjects).Select(t => CutsceneFonts.Normalize(t.FontId))
             .Where(id => id.StartsWith("google:"))).Concat(CutsceneFonts.ImportedIds).Distinct().ToList();
         var bundled = fontIds.IndexOf(CutsceneFonts.Normalize(obj.FontId));
@@ -172,8 +175,9 @@ public partial class MainView
         {
             if (new[] { x, y, width, height, size }.Any(n => n.Value is null) || color.SelectedIndex < 0) return;
             if (font.SelectedIndex == fontIds.Count && string.IsNullOrWhiteSpace(custom.Text)) { requirement.Text = "Enter the installed font family name."; return; }
-            editor.BeforeChange(); obj.X = (double)x.Value!.Value; obj.Y = (double)y.Value!.Value;
-            obj.Width = (double)width.Value!.Value; obj.Height = (double)height.Value!.Value; obj.FontSize = (double)size.Value!.Value;
+            editor.BeforeChange(); obj.SetPlacement(language, editor.Scene.FallbackLanguage, new TextPlacement
+            { X = (double)x.Value!.Value, Y = (double)y.Value!.Value, Width = (double)width.Value!.Value, Height = (double)height.Value!.Value });
+            obj.FontSize = (double)size.Value!.Value;
             obj.FontId = FontId(); obj.Color = color.SelectedIndex;
             editor.Color = obj.Color;
             obj.Bold = bold.IsChecked == true; obj.Italic = italic.IsChecked == true;
@@ -229,15 +233,15 @@ public partial class MainView
 
     private void EditPaletteColor()
     {
-        var index = editor.Color; var initial = Color.Parse(editor.Scene.Palette[index]);
+        var index = editor.Color; var rgbaMode = editor.Scene.IsRgba; var initial = Brush(editor.Scene.Palette[index]).Color;
         var body = new StackPanel { Spacing = 10 };
         var preview = new Border { Height = 54, Background = new SolidColorBrush(initial) };
-        var picker = PaletteColorPicker.Create(initial);
-        var hex = new TextBox { Text = editor.Scene.Palette[index], MaxLength = 7, Name = "PaletteHex" };
-        body.Children.Add(preview); body.Children.Add(Row(Label("Hex RGB"), hex));
+        var picker = PaletteColorPicker.Create(initial, rgbaMode);
+        var hex = new TextBox { Text = editor.Scene.Palette[index], MaxLength = rgbaMode ? 9 : 7, Name = "PaletteHex" };
+        body.Children.Add(preview); body.Children.Add(Row(Label(rgbaMode ? "Hex RGBA" : "Hex RGB"), hex));
         body.Children.Add(picker);
         var sliders = new List<Slider>(); var syncing = false;
-        foreach (var (label, value) in new[] { ("Red", initial.R), ("Green", initial.G), ("Blue", initial.B) })
+        foreach (var (label, value) in (rgbaMode ? new[] { ("Red", initial.R), ("Green", initial.G), ("Blue", initial.B), ("Alpha", initial.A) } : new[] { ("Red", initial.R), ("Green", initial.G), ("Blue", initial.B) }))
         {
             var slider = new Slider { Minimum = 0, Maximum = 255, Value = value, TickFrequency = 1, IsSnapToTickEnabled = true };
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("60,*") }; row.Children.Add(Label(label)); AddAt(row, slider, 1); body.Children.Add(row); sliders.Add(slider);
@@ -245,20 +249,20 @@ public partial class MainView
         foreach (var slider in sliders) slider.PropertyChanged += (_, e) =>
         {
             if (e.Property != Slider.ValueProperty || syncing) return;
-            hex.Text = $"#{(int)sliders[0].Value:X2}{(int)sliders[1].Value:X2}{(int)sliders[2].Value:X2}";
+            hex.Text = $"#{(int)sliders[0].Value:X2}{(int)sliders[1].Value:X2}{(int)sliders[2].Value:X2}" + (rgbaMode ? $"{(int)sliders[3].Value:X2}" : "");
         };
         var error = Label(""); error.Foreground = Brush(UiTheme.Error); body.Children.Add(error);
         picker.PropertyChanged += (_, e) =>
         {
             if (syncing || e.Property != AvaloniaColorPicker.CustomColorPicker.ColorProperty) return;
-            var color = picker.Color; hex.Text = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+            var color = picker.Color; hex.Text = $"#{color.R:X2}{color.G:X2}{color.B:X2}" + (rgbaMode ? $"{color.A:X2}" : "");
         };
         hex.TextChanged += (_, _) =>
         {
             var text = hex.Text ?? "";
-            if (text.Length != 7 || text[0] != '#' || !text[1..].All(Uri.IsHexDigit)) { error.Text = "Enter #RRGGBB."; return; }
-            error.Text = ""; var c = Color.Parse(text); preview.Background = new SolidColorBrush(c);
-            syncing = true; picker.Color = c; sliders[0].Value = c.R; sliders[1].Value = c.G; sliders[2].Value = c.B; syncing = false;
+            if (!RgbaColor.IsHex(text) || text.Length != (rgbaMode ? 9 : 7)) { error.Text = rgbaMode ? "Enter #RRGGBBAA." : "Enter #RRGGBB."; return; }
+            error.Text = ""; var c = Brush(text).Color; preview.Background = new SolidColorBrush(c);
+            syncing = true; picker.Color = c; sliders[0].Value = c.R; sliders[1].Value = c.G; sliders[2].Value = c.B; if (rgbaMode) sliders[3].Value = c.A; syncing = false;
         };
         ShowModal($"Palette color {index:D3}", body, () =>
         { if (error.Text?.Length > 0) return; SetPaletteColor(index, hex.Text ?? ""); CloseModal(); });

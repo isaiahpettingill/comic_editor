@@ -62,11 +62,12 @@ public sealed class CutsceneCanvas : Control
         bool textVisible = true, bool showBounds = false, string? selectedId = null, bool onionBackground = false)
     {
         var frame = scene.Frames[frameIndex];
-        var brushes = scene.Palette.Select(hex => new SolidColorBrush(Color.Parse(hex))).ToArray();
+        var brushes = scene.Palette.Select(hex => { var c = RgbaColor.Parse(hex); return new SolidColorBrush(Color.FromArgb((byte)c, (byte)(c >> 24), (byte)(c >> 16), (byte)(c >> 8))); }).ToArray();
         // Composite indices before scaling. Adjacent antialiased rectangles leave seams
         // at fractional zoom; a single nearest-neighbor bitmap preserves solid pixels.
         var pixels = new byte[scene.Width * scene.Height * 4];
-        var colors = scene.Palette.Select(Color.Parse).ToArray();
+        var colors = scene.Palette.Select(RgbaColor.Parse).ToArray();
+        var composite = scene.IsRgba ? new uint[scene.Width * scene.Height] : null;
         foreach (var layer in frame.Layers.Where(l => l.Visible))
         {
             for (var y = 0; y < scene.Height; y++)
@@ -74,14 +75,30 @@ public sealed class CutsceneCanvas : Control
                 var row = layer.Rows[y];
                 for (var x = 0; x < scene.Width; x++)
                 {
-                    var color = Convert.ToInt32(row.Substring(x * 2, 2), 16);
-                    if (color == 255) continue;
+                    var color = scene.IsRgba ? 0 : Convert.ToInt32(row.Substring(x * 2, 2), 16);
+                    if (!scene.IsRgba && color == 255) continue;
                     var offset = (y * scene.Width + x) * 4;
-                    pixels[offset] = colors[color].B; pixels[offset + 1] = colors[color].G;
-                    pixels[offset + 2] = colors[color].R; pixels[offset + 3] = 255;
+                    var rgba = scene.IsRgba ? layer.RgbaPixel(x, y) : colors[color];
+                    if (scene.IsRgba)
+                    {
+                        var pixelIndex = y * scene.Width + x;
+                        composite![pixelIndex] = RgbaColor.Blend(rgba, composite[pixelIndex]);
+                    }
+                    else
+                    {
+                        pixels[offset] = (byte)(rgba >> 8); pixels[offset + 1] = (byte)(rgba >> 16);
+                        pixels[offset + 2] = (byte)(rgba >> 24); pixels[offset + 3] = 255;
+                    }
                 }
             }
         }
+        if (scene.IsRgba)
+            for (var i = 0; i < composite!.Length; i++)
+            {
+                var rgba = RgbaColor.Blend(composite[i], 0xffffffff);
+                pixels[i * 4] = (byte)(rgba >> 8); pixels[i * 4 + 1] = (byte)(rgba >> 16);
+                pixels[i * 4 + 2] = (byte)(rgba >> 24); pixels[i * 4 + 3] = 255;
+            }
         using (var bitmap = new WriteableBitmap(new PixelSize(scene.Width, scene.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul))
         {
             using (var buffer = bitmap.Lock())
@@ -92,6 +109,7 @@ public sealed class CutsceneCanvas : Control
         if (!textVisible || !frame.TextVisible) return;
         foreach (var obj in frame.TextObjects)
         {
+            var placement = obj.Placement(language, scene.FallbackLanguage);
             var text = scene.Text(language, obj.Key);
             var missing = string.IsNullOrWhiteSpace(text);
             var font = CutsceneFonts.Resolve(obj.FontId, language);
@@ -101,32 +119,35 @@ public sealed class CutsceneCanvas : Control
                 new Typeface(font, obj.Italic ? FontStyle.Italic : FontStyle.Normal,
                     obj.Bold ? FontWeight.Bold : FontWeight.Normal), obj.FontSize, brushes[obj.Color])
             {
-                MaxTextWidth = obj.Width
+                MaxTextWidth = placement.Width
             };
-            var overflow = formatted.Height > obj.Height + 0.5 || formatted.Width > obj.Width + 0.5;
-            using (context.PushClip(new Rect(obj.X, obj.Y, obj.Width, obj.Height)))
-                context.DrawText(formatted, new Point(obj.X, obj.Y));
+            var styleLanguage = missing ? scene.FallbackLanguage : language;
+            TextStyleFormatter.Apply(formatted, obj, styleLanguage, rendered.Length);
+            var overflow = formatted.Height > placement.Height + 0.5 || formatted.Width > placement.Width + 0.5;
+            using (context.PushClip(new Rect(placement.X, placement.Y, placement.Width, placement.Height)))
+                context.DrawText(formatted, new Point(placement.X, placement.Y));
             if (showBounds)
             {
                 var outline = missing ? Brushes.OrangeRed : overflow ? Brushes.Red :
                     selectedId == obj.Id ? Brushes.DodgerBlue : Brushes.Transparent;
                 if (outline != Brushes.Transparent)
-                    context.DrawRectangle(null, new Pen(outline, 1), new Rect(obj.X, obj.Y, obj.Width, obj.Height));
+                    context.DrawRectangle(null, new Pen(outline, 1), new Rect(placement.X, placement.Y, placement.Width, placement.Height));
                 if (selectedId == obj.Id)
-                    foreach (var handle in TextHandles(obj))
+                    foreach (var handle in TextHandles(placement))
                         context.DrawRectangle(Brushes.White, new Pen(Brushes.DodgerBlue, .7), new Rect(handle.X - 2, handle.Y - 2, 4, 4));
                 if (missing && string.IsNullOrWhiteSpace(rendered))
                 {
                     var marker = new FormattedText("Missing translation", Culture(language), Culture(language).TextInfo.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight,
                         new Typeface(FontFamily.Default), Math.Min(10, obj.FontSize), Brushes.OrangeRed);
-                    using (context.PushClip(new Rect(obj.X, obj.Y, obj.Width, obj.Height)))
-                        context.DrawText(marker, new Point(obj.X + 3, obj.Y + 3));
+                    using (context.PushClip(new Rect(placement.X, placement.Y, placement.Width, placement.Height)))
+                        context.DrawText(marker, new Point(placement.X + 3, placement.Y + 3));
                 }
             }
         }
     }
 
-    public static Point[] TextHandles(TextObject obj) =>
+    public static Point[] TextHandles(TextObject obj) => TextHandles(new TextPlacement { X = obj.X, Y = obj.Y, Width = obj.Width, Height = obj.Height });
+    public static Point[] TextHandles(TextPlacement obj) =>
     [
         new(obj.X, obj.Y), new(obj.X + obj.Width / 2, obj.Y), new(obj.X + obj.Width, obj.Y),
         new(obj.X + obj.Width, obj.Y + obj.Height / 2), new(obj.X + obj.Width, obj.Y + obj.Height),

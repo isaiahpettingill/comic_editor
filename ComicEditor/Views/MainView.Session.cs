@@ -76,10 +76,47 @@ public partial class MainView
             catch (Exception) { currentFile = null; editor.MarkUnsaved(); }
         }
         if (currentFile is null && snapshot.FileName is not null) editor.MarkUnsaved();
+        activeTab.File = currentFile; activeTab.Bookmark = currentBookmark;
+        foreach (var other in snapshot.OtherTabs)
+        {
+            var state = new EditorState(editor.Preferences); other.Restore(state);
+            IStorageFile? otherFile = null;
+            if (storage is not null)
+            {
+                try { if (other.Bookmark is not null) otherFile = await storage.OpenFileBookmarkAsync(other.Bookmark); }
+                catch (Exception) { }
+                try { if (otherFile is null && other.LocalPath is not null) otherFile = await storage.TryGetFileFromPathAsync(other.LocalPath); }
+                catch (Exception) { }
+            }
+            var tab = new ProjectTab(state)
+            {
+                Bookmark = other.Bookmark,
+                File = otherFile is null ? null : new ProjectFile(otherFile, other.DiskHash),
+                Dirty = other.Dirty
+            };
+            if (!other.Dirty && tab.File is not null)
+                try
+                {
+                    var latest = await tab.File.Read(); state.Load(latest, otherFile!.Name);
+                    state.SelectFrame(Math.Clamp(other.Frame, 0, state.Scene.Frames.Count - 1));
+                    tab.File = new ProjectFile(otherFile!, ProjectFile.Hash(latest));
+                }
+                catch (Exception) { tab.File = null; state.MarkUnsaved(); tab.Dirty = true; }
+            if (tab.File is null && other.FileName is not null) { state.MarkUnsaved(); tab.Dirty = true; }
+            tabs.Add(tab);
+        }
+        if (tabs.Count > 1)
+        {
+            tabs.Remove(activeTab);
+            tabs.Insert(Math.Clamp(snapshot.ActiveTab, 0, tabs.Count), activeTab);
+        }
         SetSaveMessage(snapshot.Dirty ? "Recovered unsaved edits from your last session." : "Reopened your last cutscene.");
         Build(compact);
         try { await CutsceneFonts.EnsureAsync(editor.Scene); RefreshCanvas(); QueueFontCheck(); }
         catch (Exception ex) { SetSaveMessage("Cutscene recovered; font loading failed: " + ex.Message, true); }
+        foreach (var tab in tabs.Where(tab => tab != activeTab))
+            try { await CutsceneFonts.EnsureAsync(tab.Editor.Scene); }
+            catch (Exception) { tab.Dirty = true; }
     }
 
     private async Task BindFile(IStorageFile file, byte[] bytes)
@@ -89,6 +126,8 @@ public partial class MainView
         try { if (file.CanBookmark) currentBookmark = await file.SaveBookmarkAsync(); }
         catch (Exception) { /* Local paths and the recovery copy remain available. */ }
         autoSavePaused = false; lastAutoSave = DateTimeOffset.UtcNow;
+        activeTab.File = currentFile; activeTab.Bookmark = currentBookmark;
+        activeTab.AutoSavePaused = false; activeTab.LastAutoSave = lastAutoSave;
     }
 
     private void ClearFile()
@@ -96,6 +135,7 @@ public partial class MainView
         currentFile = null; currentBookmark = null; autoSavePaused = false;
         recoveryBlocked = false;
         lastAutoSave = DateTimeOffset.UtcNow;
+        activeTab.File = null; activeTab.Bookmark = null; activeTab.AutoSavePaused = false;
         SetSaveMessage("Choose Save to give this cutscene a file. Crash recovery is active.");
     }
 
@@ -107,6 +147,13 @@ public partial class MainView
         {
             var snapshot = SessionSnapshot.Capture(editor, project);
             snapshot.Bookmark = currentBookmark; snapshot.LocalPath = currentFile?.File.TryGetLocalPath(); snapshot.DiskHash = currentFile?.DiskHash;
+            snapshot.ActiveTab = tabs.IndexOf(activeTab);
+            foreach (var tab in tabs.Where(tab => tab != activeTab))
+            {
+                var other = SessionSnapshot.Capture(tab.Editor);
+                other.Bookmark = tab.Bookmark; other.LocalPath = tab.File?.File.TryGetLocalPath(); other.DiskHash = tab.File?.DiskHash;
+                snapshot.OtherTabs.Add(other);
+            }
             var json = await Task.Run(snapshot.Serialize); if (json == lastSessionJson) return;
             await SessionStorage.Write(json); lastSessionJson = json;
         }
@@ -126,10 +173,29 @@ public partial class MainView
         await OpenPendingFiles();
         if (fileBusy || updateInstalling || dragging || pathBase is not null || cancelTouchEdit is not null) return;
         // Browser save handles may represent downloads, requiring a user gesture each time.
-        if (editor.Preferences.AutoSave && !autoSavePaused && currentFile is not null && !OperatingSystem.IsBrowser() &&
-            DateTimeOffset.UtcNow - lastAutoSave >= TimeSpan.FromMinutes(editor.Preferences.AutoSaveMinutes))
-            await SaveCurrent(automatic: true);
-        else await SaveSessionSafely();
+        if (editor.Preferences.AutoSave && !OperatingSystem.IsBrowser())
+        {
+            if (!autoSavePaused && currentFile is not null && DateTimeOffset.UtcNow - lastAutoSave >= TimeSpan.FromMinutes(editor.Preferences.AutoSaveMinutes))
+                await SaveCurrent(automatic: true);
+            foreach (var tab in tabs.Where(tab => tab != activeTab)) await AutoSaveTab(tab);
+            RefreshTabs();
+        }
+        await SaveSessionSafely();
+    }
+
+    private async Task AutoSaveTab(ProjectTab tab)
+    {
+        if (tab.File is null || tab.AutoSavePaused || DateTimeOffset.UtcNow - tab.LastAutoSave < TimeSpan.FromMinutes(editor.Preferences.AutoSaveMinutes)) return;
+        var bytes = CutsceneFile.Write(tab.Editor.Scene);
+        if (!tab.Editor.DiffersFromSaved(bytes)) { tab.LastAutoSave = DateTimeOffset.UtcNow; return; }
+        fileBusy = true;
+        try
+        {
+            await tab.File.Write(bytes, checkExternalChanges: true);
+            tab.Editor.MarkSaved(bytes); tab.Dirty = false; tab.LastAutoSave = DateTimeOffset.UtcNow;
+        }
+        catch (Exception ex) { tab.AutoSavePaused = true; tab.Dirty = true; SetSaveMessage($"Autosave paused for {tab.Editor.FileName}: {ex.Message}", true); }
+        finally { fileBusy = false; }
     }
 
     private async Task SaveCurrent(bool automatic)
@@ -146,6 +212,7 @@ public partial class MainView
             finally { await recovery; }
             if (ReferenceEquals(editor.Scene, scene) && ReferenceEquals(currentFile, file)) editor.MarkSaved(bytes);
             lastAutoSave = DateTimeOffset.UtcNow; autoSavePaused = false;
+            activeTab.LastAutoSave = lastAutoSave; activeTab.AutoSavePaused = false; activeTab.Dirty = editor.IsDirty;
             SetSaveMessage($"{(automatic ? "Autosaved" : "Saved")} {file.File.Name} at {DateTime.Now:t}.");
             RefreshTitle(); // The periodic recovery tick will mark this snapshot clean.
         }

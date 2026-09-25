@@ -15,39 +15,40 @@ public partial class MainView
     {
         FinishPath();
         var draft = editor.Scene.Palette.Select((hex, i) => new GplColor(hex, $"Color {i:D3}")).ToList();
-        var selected = editor.Color; var syncing = false; var busy = false;
+        var selected = editor.Color; var displayStart = 0; var syncing = false; var busy = false;
         var body = new StackPanel { Spacing = 8 };
         var presets = new ComboBox { Name = "PalettePresets", HorizontalAlignment = HorizontalAlignment.Stretch, PlaceholderText = "Saved palettes" };
         var name = new TextBox { Name = "PaletteName", Text = "Cutscene palette", PlaceholderText = "Palette name", MaxLength = 80 };
-        var count = new NumericUpDown { Name = "PaletteSize", Minimum = 2, Maximum = 255, Value = draft.Count, Width = 110, Increment = 1 };
+        var count = new NumericUpDown { Name = "PaletteSize", Minimum = 2, Maximum = editor.Scene.IsRgba ? 65535 : 255, Value = draft.Count, Width = 110, Increment = 1 };
+        var slot = new NumericUpDown { Name = "PaletteSelectedSlot", Minimum = 0, Maximum = draft.Count - 1, Value = selected, Width = 110, Increment = 1 };
         var swatches = new WrapPanel { Name = "PaletteEditorSwatches", Orientation = Orientation.Horizontal };
         var caption = Label("");
-        var hex = new TextBox { Name = "PaletteEditorHex", MaxLength = 7, Width = 105 };
-        var picker = PaletteColorPicker.Create(Color.Parse(draft[selected].Hex));
+        var hex = new TextBox { Name = "PaletteEditorHex", MaxLength = editor.Scene.IsRgba ? 9 : 7, Width = 115 };
+        var picker = PaletteColorPicker.Create(Brush(draft[selected].Hex).Color, editor.Scene.IsRgba);
         var sample = new Border { Width = 38, Height = 32, BorderBrush = Brush(UiTheme.Border), BorderThickness = new Thickness(1) };
-        var channels = Enumerable.Range(0, 3).Select(i => new NumericUpDown { Name = "Palette" + new[] { "Red", "Green", "Blue" }[i], Minimum = 0, Maximum = 255, Increment = 1, ShowButtonSpinner = !touchLayout }).ToArray();
+        var channels = Enumerable.Range(0, editor.Scene.IsRgba ? 4 : 3).Select(i => new NumericUpDown { Name = "Palette" + new[] { "Red", "Green", "Blue", "Alpha" }[i], Minimum = 0, Maximum = 255, Increment = 1, ShowButtonSpinner = !touchLayout }).ToArray();
         var message = Label("Changes stay in this cutscene. Save preset writes a shared .gpl file."); message.Name = "PaletteEditorStatus"; message.FontSize = 12;
         void Report(string text, bool error = false) { message.Text = text; message.Foreground = error ? Brush(UiTheme.Error) : Brush(UiTheme.Text); }
         void RefreshSelection()
         {
-            syncing = true; caption.Text = $"Color {selected:D3}"; hex.Text = draft[selected].Hex;
+            syncing = true; caption.Text = $"Color {selected:D3}"; hex.Text = draft[selected].Hex; slot.Value = selected;
             sample.Background = Brush(draft[selected].Hex);
-            picker.Color = Color.Parse(draft[selected].Hex);
+            picker.Color = Brush(draft[selected].Hex).Color;
             var rgb = Convert.FromHexString(draft[selected].Hex[1..]);
-            for (var i = 0; i < 3; i++) channels[i].Value = rgb[i];
+            for (var i = 0; i < channels.Length; i++) channels[i].Value = rgb[i];
             for (var i = 0; i < swatches.Children.Count; i++)
             {
-                var button = (Button)swatches.Children[i]; button.Background = Brush(draft[i].Hex);
-                button.BorderBrush = i == selected ? Brush(UiTheme.Accent) : Brush(UiTheme.Border);
-                button.BorderThickness = new Thickness(i == selected ? 3 : 1);
-                ToolTip.SetTip(button, $"{i:D3}  {draft[i].Hex}  {draft[i].Name}");
+                var index = displayStart + i; var button = (Button)swatches.Children[i]; button.Background = Brush(draft[index].Hex);
+                button.BorderBrush = index == selected ? Brush(UiTheme.Accent) : Brush(UiTheme.Border);
+                button.BorderThickness = new Thickness(index == selected ? 3 : 1);
+                ToolTip.SetTip(button, $"{index:D3}  {draft[index].Hex}  {draft[index].Name}");
             }
             syncing = false;
         }
         void Rebuild()
         {
-            syncing = true; count.Value = draft.Count; selected = Math.Min(selected, draft.Count - 1); swatches.Children.Clear();
-            for (var i = 0; i < draft.Count; i++)
+            syncing = true; count.Value = draft.Count; slot.Maximum = draft.Count - 1; selected = Math.Min(selected, draft.Count - 1); displayStart = selected / 256 * 256; swatches.Children.Clear();
+            for (var i = displayStart; i < Math.Min(draft.Count, displayStart + 256); i++)
             {
                 var index = i; var button = new Button { Name = "PaletteEditSwatch" + i, Width = touchLayout ? 40 : 27, Height = touchLayout ? 40 : 27, Margin = new Thickness(1), Padding = default };
                 Avalonia.Automation.AutomationProperties.SetName(button, $"Palette color {i:D3}");
@@ -70,13 +71,15 @@ public partial class MainView
         }
         GplPalette Snapshot()
         {
-            if (!GplPalette.IsHex(hex.Text)) throw new InvalidDataException("Enter a color as #RRGGBB.");
+            if (!GplPalette.IsHex(hex.Text) || hex.Text!.Length != (editor.Scene.IsRgba ? 9 : 7)) throw new InvalidDataException(editor.Scene.IsRgba ? "Enter #RRGGBBAA." : "Enter #RRGGBB.");
             if (string.IsNullOrWhiteSpace(name.Text)) throw new InvalidDataException("Enter a palette name.");
             return new(name.Text.Trim(), draft.ToArray());
         }
         void Load(string text, string fallback)
         {
-            var palette = GplPalette.Parse(text, fallback); draft = palette.Colors.ToList(); name.Text = palette.Name; Rebuild();
+            var palette = GplPalette.Parse(text, fallback);
+            draft = palette.Colors.Select(c => c with { Hex = editor.Scene.IsRgba ? c.Hex.Length == 7 ? c.Hex + "FF" : c.Hex : c.Hex.Length == 9 && !c.Hex.EndsWith("FF", StringComparison.OrdinalIgnoreCase) ? throw new InvalidDataException("This palette uses alpha. Convert the cutscene to RGBA first.") : c.Hex[..7] }).ToList();
+            name.Text = palette.Name; Rebuild();
             Report(draft.Count < editor.Scene.Palette.Count ? $"Loaded {draft.Count} colors. Apply maps removed slots to their nearest remaining color. Saved presets stay unchanged." : $"Loaded {draft.Count} colors. Apply changes this cutscene; saved presets remain unchanged.");
         }
         var load = Button("Load", () => _ = Run(async () =>
@@ -94,7 +97,7 @@ public partial class MainView
             var chosen = await provider.OpenFilePickerAsync(new FilePickerOpenOptions { Title = "Import palette", AllowMultiple = false, FileTypeFilter = files });
             if (chosen.Count == 0) return;
             var info = await chosen[0].GetBasicPropertiesAsync();
-            if (info.Size > 1_048_576) throw new InvalidDataException("The palette file is too large.");
+            if (info.Size > 8 * 1024 * 1024) throw new InvalidDataException("The palette file is too large.");
             await using var stream = await chosen[0].OpenReadAsync(); using var reader = new StreamReader(stream);
             Load(await reader.ReadToEndAsync(), Path.GetFileNameWithoutExtension(chosen[0].Name));
         })); import.Name = "ImportPalette"; actions.Children.Add(import);
@@ -121,36 +124,38 @@ public partial class MainView
             })));
         foreach (var action in actions.Children) action.Margin = new Thickness(0, 0, 4, 4);
         body.Children.Add(actions); body.Children.Add(Row(Label("Colors"), count));
+        body.Children.Add(Row(Label("Selected swatch"), slot));
         body.Children.Add(new ScrollViewer { Name = "PaletteEditorViewport", Content = swatches, MaxHeight = touchLayout ? 84 : 285, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         body.Children.Add(Row(caption, hex, sample));
         body.Children.Add(picker);
-        var rgbGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,6,*,6,*") };
-        for (var i = 0; i < 3; i++) AddAt(rgbGrid, new StackPanel { Children = { Label(new[] { "Red", "Green", "Blue" }[i]), channels[i] } }, i * 2);
+        var rgbGrid = new Grid { ColumnDefinitions = new ColumnDefinitions(editor.Scene.IsRgba ? "*,6,*,6,*,6,*" : "*,6,*,6,*") };
+        for (var i = 0; i < channels.Length; i++) AddAt(rgbGrid, new StackPanel { Children = { Label(new[] { "Red", "Green", "Blue", "Alpha" }[i]), channels[i] } }, i * 2);
         body.Children.Add(rgbGrid); body.Children.Add(message);
         count.ValueChanged += (_, _) =>
         {
             if (syncing || count.Value is not decimal size) return;
-            var next = Math.Clamp((int)size, 2, 255);
-            while (draft.Count < next) draft.Add(new("#FFFFFF", $"Color {draft.Count:D3}"));
+            var next = Math.Clamp((int)size, 2, editor.Scene.IsRgba ? 65535 : 255);
+            while (draft.Count < next) draft.Add(new(editor.Scene.IsRgba ? "#FFFFFFFF" : "#FFFFFF", $"Color {draft.Count:D3}"));
             if (draft.Count > next) draft.RemoveRange(next, draft.Count - next);
             Rebuild(); Report(next < editor.Scene.Palette.Count ? "Removed color slots will map to their nearest remaining color in artwork and text. You can undo Apply." : "New slots are white. Changes apply to this cutscene only.");
         };
+        slot.ValueChanged += (_, _) => { if (syncing || slot.Value is null) return; selected = Math.Clamp((int)slot.Value, 0, draft.Count - 1); Rebuild(); };
         hex.TextChanged += (_, _) =>
         {
             if (syncing) return;
-            if (!GplPalette.IsHex(hex.Text)) { Report("Enter a color as #RRGGBB.", true); return; }
+            if (!GplPalette.IsHex(hex.Text) || hex.Text!.Length != (editor.Scene.IsRgba ? 9 : 7)) { Report(editor.Scene.IsRgba ? "Enter #RRGGBBAA." : "Enter #RRGGBB.", true); return; }
             draft[selected] = draft[selected] with { Hex = hex.Text!.ToUpperInvariant() }; RefreshSelection();
         };
         picker.PropertyChanged += (_, e) =>
         {
             if (syncing || e.Property != AvaloniaColorPicker.CustomColorPicker.ColorProperty) return;
             var color = picker.Color;
-            hex.Text = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+            hex.Text = $"#{color.R:X2}{color.G:X2}{color.B:X2}" + (editor.Scene.IsRgba ? $"{color.A:X2}" : "");
         };
         foreach (var channel in channels) channel.ValueChanged += (_, _) =>
         {
             if (syncing || channels.Any(c => c.Value is null)) return;
-            hex.Text = $"#{(int)channels[0].Value!:X2}{(int)channels[1].Value!:X2}{(int)channels[2].Value!:X2}";
+            hex.Text = $"#{(int)channels[0].Value!:X2}{(int)channels[1].Value!:X2}{(int)channels[2].Value!:X2}" + (editor.Scene.IsRgba ? $"{(int)channels[3].Value!:X2}" : "");
         };
         Rebuild();
         ShowModal("Palette editor", body, () =>

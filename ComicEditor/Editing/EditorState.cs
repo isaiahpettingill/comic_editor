@@ -2,7 +2,7 @@ using ComicEditor.Format;
 
 namespace ComicEditor.Editing;
 
-public enum Tool { Pixel, Smooth, Pressure, Eraser, Fill, Line, Rectangle, Ellipse, Eyedropper, Text, Spray, Select, Lasso, Curve, Polygon, RoundedRectangle, Zoom }
+public enum Tool { Pixel, Smooth, Pressure, Eraser, Fill, Line, Rectangle, Ellipse, Eyedropper, Text, Spray, Select, Lasso, Curve, Polygon, RoundedRectangle, Zoom, Marker, Dither, Scramble }
 
 public sealed class EditorState
 {
@@ -34,17 +34,17 @@ public sealed class EditorState
     };
     public void RememberCanvas()
     {
-        Preferences.CanvasWidth = Scene.Width; Preferences.CanvasHeight = Scene.Height; Preferences.Save();
+        Preferences.CanvasWidth = Scene.Width; Preferences.CanvasHeight = Scene.Height; Preferences.RgbaCanvas = Scene.IsRgba; Preferences.Save();
     }
     private Cutscene CreateScene()
     {
-        var scene = Cutscene.Create(Preferences.CanvasWidth, Preferences.CanvasHeight);
-        if (Preferences.Palette is not null) scene.Palette = Preferences.Palette.ToList();
+        var scene = Cutscene.Create(Preferences.CanvasWidth, Preferences.CanvasHeight, Preferences.RgbaCanvas);
+        if (Preferences.Palette is not null && (scene.IsRgba || Preferences.Palette.Length <= 255) && Preferences.Palette.All(c => c.Length == (scene.IsRgba ? 9 : 7))) scene.Palette = Preferences.Palette.ToList();
         return scene;
     }
     public void New() => Load(CutsceneFile.Write(CreateScene()));
     public PaintSettings Paint => Preferences.Tools.TryGetValue(Tool.ToString(), out var settings) ? settings :
-        Preferences.Tools[Tool.ToString()] = new PaintSettings { Size = Tool == Tool.Spray ? 16 : 1 };
+        Preferences.Tools[Tool.ToString()] = new PaintSettings { Size = Tool == Tool.Spray ? 16 : Tool == Tool.Marker ? 12 : Tool is Tool.Dither or Tool.Scramble ? 8 : 1, Opacity = Tool == Tool.Marker ? 96 : 255 };
     public int FrameIndex { get; private set; }
     private int layerIndex;
     public int LayerIndex { get => layerIndex; set { if (layerIndex != value) FinishPendingEdit?.Invoke(); layerIndex = value; } }
@@ -120,7 +120,7 @@ public sealed class EditorState
 
     public void ApplyPalette(IReadOnlyList<string> colors)
     {
-        if (colors.Count is < 2 or > GplPalette.Capacity || colors.Any(c => !GplPalette.IsHex(c))) throw new ArgumentException("Expected 2–255 RGB colors.");
+        if (colors.Count < 2 || colors.Count > (Scene.IsRgba ? 65535 : 255) || colors.Any(c => !RgbaColor.IsHex(c) || c.Length != (Scene.IsRgba ? 9 : 7))) throw new ArgumentException(Scene.IsRgba ? "Expected 2–65535 RGBA colors." : "Expected 2–255 RGB colors.");
         var copy = colors.Select(c => c.ToUpperInvariant()).ToList();
         if (Scene.Palette.SequenceEqual(copy)) return;
         BeforeChange();
@@ -130,7 +130,7 @@ public sealed class EditorState
         if (copy.Count < Scene.Palette.Count)
             foreach (var frame in Scene.Frames)
             {
-                foreach (var layer in frame.Layers)
+                foreach (var layer in frame.Layers.Where(_ => !Scene.IsRgba))
                     for (var y = 0; y < Scene.Height; y++)
                     {
                         var row = layer.Rows[y].ToCharArray();
@@ -149,10 +149,10 @@ public sealed class EditorState
 
     private static int Nearest(string source, IReadOnlyList<string> colors)
     {
-        var rgb = Convert.FromHexString(source[1..]);
+        var rgb = Convert.FromHexString(source[1..7]);
         return Enumerable.Range(0, colors.Count).MinBy(i =>
         {
-            var other = Convert.FromHexString(colors[i][1..]);
+            var other = Convert.FromHexString(colors[i][1..7]);
             return Enumerable.Range(0, 3).Sum(c => (rgb[c] - other[c]) * (rgb[c] - other[c]));
         });
     }
@@ -160,6 +160,16 @@ public sealed class EditorState
     public void EnsureLanguage()
     {
         if (!Scene.Translations.ContainsKey(Language)) Language = Scene.Translations.Keys.FirstOrDefault() ?? "";
+    }
+
+    public void SetTranslation(string language, string key, string value)
+    {
+        if (!Scene.Translations.TryGetValue(language, out var entries)) return;
+        var previous = entries.TryGetValue(key, out var existing) ? existing : "";
+        if (previous == value) return;
+        foreach (var obj in Scene.Frames.SelectMany(frame => frame.TextObjects).Where(obj => obj.Key == key))
+            obj.RetargetStyles(language, previous, value);
+        entries[key] = value;
     }
 
     public string NewTextKey()
@@ -181,7 +191,7 @@ public sealed class EditorState
     public void AddFrame(bool duplicate)
     {
         BeforeChange();
-        var next = duplicate ? CutsceneFile.Parse(CutsceneFile.Write(Scene)).Frames[FrameIndex] : Frame.Create(Scene.Width, Scene.Height);
+        var next = duplicate ? CutsceneFile.Parse(CutsceneFile.Write(Scene)).Frames[FrameIndex] : Frame.Create(Scene.Width, Scene.Height, Scene.IsRgba);
         next.Id = Guid.NewGuid().ToString("N");
         foreach (var layer in next.Layers) layer.Id = Guid.NewGuid().ToString("N");
         foreach (var text in next.TextObjects) text.Id = Guid.NewGuid().ToString("N");

@@ -85,6 +85,31 @@ public partial class CanvasTests
     }
 
     [Fact]
+    public async Task TwoFingerDragPansWithoutChangingZoomOrArtwork()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(true); var window = new Window { Content = view, Width = 400, Height = 800 };
+            window.Show(); _ = Capture(window);
+            var editor = State(view); editor.Preferences.Zoom = 4; Invoke(view, "RefreshCanvas"); _ = Capture(window);
+            var viewport = Named<ScrollViewer>(window, "CanvasViewport"); viewport.Offset = new Vector(200, 100); _ = Capture(window);
+            var before = CutsceneFile.Write(editor.Scene); var offset = viewport.Offset;
+            var p = viewport.TranslatePoint(new Point(100, 120), window)!.Value;
+            using var first = window.TouchBegin(p);
+            using var second = window.TouchBegin(p + new Vector(80, 0));
+            window.TouchMove(first, p + new Vector(-30, -20));
+            window.TouchMove(second, p + new Vector(50, -20)); _ = Capture(window);
+            Assert.InRange(editor.Preferences.Zoom, 3.99, 4.01);
+            Assert.InRange(viewport.Offset.X - offset.X, 27, 33);
+            Assert.InRange(viewport.Offset.Y - offset.Y, 17, 23);
+            Assert.Equal(before, CutsceneFile.Write(editor.Scene));
+            window.TouchEnd(second, p + new Vector(50, -20)); window.TouchEnd(first, p + new Vector(-30, -20));
+            window.Close();
+        }, CancellationToken.None);
+    }
+
+    [Fact]
     public async Task WheelZoomAnchorsPointerAndMiddleButtonPansWithoutDrawing()
     {
         using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));

@@ -41,7 +41,7 @@ public partial class MainView
     {
         if (canvasScroll is null || canvas is null) return;
         // Keep scrollbar controls usable on desktop.
-        if (e.Source is Visual source && (source is ScrollBar || source.GetVisualAncestors().Any(v => v is ScrollBar))) return;
+        if (e.Source is Visual source && (source is ScrollBar or TextBox || source.GetVisualAncestors().Any(v => v is ScrollBar or TextBox))) return;
         var buttons = e.GetCurrentPoint(canvasScroll).Properties;
         if (e.Pointer.Type == PointerType.Mouse && buttons.IsMiddleButtonPressed && !buttons.IsLeftButtonPressed)
         {
@@ -96,9 +96,10 @@ public partial class MainView
         if (!touchNavigation || dragging && drawingPointer?.Type != PointerType.Touch || panPointer is not null) return;
         if (canvasTouches.Count == 2)
         {
-            var points = canvasTouches.Values.ToArray(); var distance = ((Vector)(points[1] - points[0])).Length;
-            if (pinchDistance >= 4) ZoomAt(pinchZoom * distance / pinchDistance, pinchAnchor);
+            var points = canvasTouches.Values.ToArray(); var distance = ((Vector)(points[1] - points[0])).Length; var center = TouchCenter();
+            if (pinchDistance >= 4) ZoomAt(pinchZoom * distance / pinchDistance, center);
             else RebaseTouchNavigation();
+            canvasScroll.Offset += touchPanPoint - center; touchPanPoint = center;
         }
         else if (canvasTouches.Count >= 3)
         {

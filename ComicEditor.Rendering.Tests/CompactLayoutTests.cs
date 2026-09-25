@@ -33,7 +33,7 @@ public partial class CanvasTests
                 AssertInside(window, control);
             }
             var viewport = Named<ScrollViewer>(window, "CanvasViewport");
-            Assert.True(viewport.Bounds.Height >= height - 160, $"Canvas viewport was only {viewport.Bounds.Height} high");
+            Assert.True(viewport.Bounds.Height >= height - 200, $"Canvas viewport was only {viewport.Bounds.Height} high");
             AssertInside(window, viewport);
             Assert.Empty(view.GetVisualDescendants().OfType<Avalonia.Controls.GridSplitter>());
             Assert.DoesNotContain(view.GetVisualDescendants().OfType<WrapPanel>(), c => c.Name == "PaletteSwatches" && c.IsEffectivelyVisible);

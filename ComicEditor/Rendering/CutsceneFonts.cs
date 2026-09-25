@@ -29,14 +29,14 @@ public static class CutsceneFonts
     }
 
     private static string PrimaryName(string id) => Normalize(id) switch
-        {
-            "comic-shanns" => Root + "Comic Shanns",
-            "anton" or "google:Anton" => Root + "Anton",
-            "permanent-marker" or "google:Permanent Marker" => Root + "Permanent Marker",
-            "noto-sans" or "google:Noto Sans" => Root + "Noto Sans",
-            "google:Noto Color Emoji" => Root + "Noto Color Emoji",
-            _ => id.StartsWith("google:", StringComparison.Ordinal) ? (Imported.TryGetValue(id, out var imported) ? imported : Root + "Noto Sans") : id.StartsWith("system:", StringComparison.Ordinal) ? id[7..] : id
-        };
+    {
+        "comic-shanns" => Root + "Comic Shanns",
+        "anton" or "google:Anton" => Root + "Anton",
+        "permanent-marker" or "google:Permanent Marker" => Root + "Permanent Marker",
+        "noto-sans" or "google:Noto Sans" => Root + "Noto Sans",
+        "google:Noto Color Emoji" => Root + "Noto Color Emoji",
+        _ => id.StartsWith("google:", StringComparison.Ordinal) ? (Imported.TryGetValue(id, out var imported) ? imported : Root + "Noto Sans") : id.StartsWith("system:", StringComparison.Ordinal) ? id[7..] : id
+    };
 
     public static string Normalize(string id) => string.IsNullOrWhiteSpace(id) ? "comic-shanns" : id switch { "anton" => "google:Anton", "permanent-marker" => "google:Permanent Marker", "noto-sans" => "google:Noto Sans", _ => id };
     public static bool IsCustom(string id) => Normalize(id) != "comic-shanns" && !id.StartsWith("google:") && id is not ("anton" or "permanent-marker" or "noto-sans");
@@ -71,7 +71,9 @@ public static class CutsceneFonts
     public static async Task EnsureAsync(Cutscene scene)
     {
         EnsureManager();
-        foreach (var id in scene.Frames.SelectMany(f => f.TextObjects).Select(t => Normalize(t.FontId)).Distinct())
+        foreach (var id in scene.Frames.SelectMany(f => f.TextObjects)
+            .SelectMany(t => new[] { t.FontId }.Concat(t.Styles.Select(s => s.FontId)))
+            .Select(Normalize).Distinct())
         {
             if (!id.StartsWith("google:") || Ids.Contains(id) || Imported.ContainsKey(id)) continue;
             await LoadGoogleAsync("https://fonts.google.com/specimen/" + Uri.EscapeDataString(id[7..]));
@@ -104,14 +106,31 @@ public static class CutsceneFonts
 
     public static IReadOnlyList<MissingFont> Missing(Cutscene scene, string? onlyLanguage = null) =>
         scene.Frames.Where(f => f.TextVisible).SelectMany(f => f.TextObjects)
-            .SelectMany(t => scene.Translations.Keys.Where(l => onlyLanguage is null || l == onlyLanguage)
-                .Select(l => (Text: scene.RenderText(l, t.Key), t.FontId, Language: l))).Distinct()
-            .SelectMany(t => Missing(t.Text, t.FontId, t.Language))
+            .SelectMany(obj => scene.Translations.Keys.Where(l => onlyLanguage is null || l == onlyLanguage)
+                .SelectMany(language => MissingObject(scene, obj, language)))
             .DistinctBy(f => f.Family).ToArray();
+
+    private static IEnumerable<MissingFont> MissingObject(Cutscene scene, TextObject obj, string language)
+    {
+        var text = scene.RenderText(language, obj.Key);
+        var styleLanguage = string.IsNullOrWhiteSpace(scene.Text(language, obj.Key)) ? scene.FallbackLanguage : language;
+        var runs = new Dictionary<string, StringBuilder>(StringComparer.Ordinal);
+        var index = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            var font = obj.Styles.LastOrDefault(s => string.Equals(s.Language, styleLanguage, StringComparison.OrdinalIgnoreCase)
+                && index >= s.Start && index < (long)s.Start + s.Length)?.FontId ?? obj.FontId;
+            if (!runs.TryGetValue(font, out var characters)) runs[font] = characters = new StringBuilder();
+            characters.Append(rune.ToString()); index += rune.Utf16SequenceLength;
+        }
+        return runs.SelectMany(run => Missing(run.Value.ToString(), run.Key, language));
+    }
 
     public static async Task LoadCachedFallbacksAsync(Cutscene scene)
     {
-        var ids = scene.FallbackFontIds.Concat(Missing(scene).Where(f => f.Family.Length > 0).Select(f => f.Id)).Distinct().ToArray();
+        var ids = scene.FallbackFontIds
+            .Concat(scene.Frames.SelectMany(f => f.TextObjects).SelectMany(t => new[] { t.FontId }.Concat(t.Styles.Select(s => s.FontId))).Select(Normalize).Where(id => id.StartsWith("google:") && !Ids.Contains(id)))
+            .Concat(Missing(scene).Where(f => f.Family.Length > 0).Select(f => f.Id)).Distinct().ToArray();
         foreach (var id in ids)
             if (!Imported.ContainsKey(id) && await FontStorage.Read(id[7..]) is { } font) Register(font);
     }
@@ -123,6 +142,14 @@ public static class CutsceneFonts
 
     public static void RequireAvailable(Cutscene scene, string? language = null)
     {
+        if (!scene.Frames.Any(f => f.TextVisible && f.TextObjects.Count > 0)) return;
+        EnsureManager();
+        var unavailable = scene.Frames.Where(f => f.TextVisible).SelectMany(f => f.TextObjects)
+            .SelectMany(t => new[] { t.FontId }.Concat(t.Styles.Select(s => s.FontId)))
+            .Select(Normalize).Where(id => id.StartsWith("google:") && !Ids.Contains(id) && !Imported.ContainsKey(id))
+            .Distinct().ToArray();
+        if (unavailable.Length > 0)
+            throw new InvalidDataException("Required Google Fonts are unavailable: " + string.Join(", ", unavailable) + ". Install them in the editor before exporting.");
         var missing = Missing(scene, language);
         if (missing.Count > 0)
             throw new InvalidDataException("Missing fonts: " + string.Join(", ", missing.Select(f => f.Family.Length > 0 ? f.Family : $"U+{char.ConvertToUtf32(f.Sample, 0):X}")) +

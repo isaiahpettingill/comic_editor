@@ -406,7 +406,7 @@ public partial class CanvasTests
 
             SaveCapture(window, "COMIC_EDITOR_MODAL_SCREENSHOT");
 
-            Click(window, Named<Button>(window, "ModalApply")); Assert.Equal(42, obj.X);
+            Click(window, Named<Button>(window, "ModalApply")); Assert.Equal(16, obj.X); Assert.Equal(42, obj.Placement("fr", "en").X);
 
             SaveCapture(window, "COMIC_EDITOR_TEXT_SCREENSHOT");
 
@@ -422,7 +422,7 @@ public partial class CanvasTests
 
             Assert.True(state.Undo()); Assert.False(state.Scene.Translations.ContainsKey("pt-BR"));
 
-            Assert.True(state.Undo()); Assert.Equal(16, state.Frame.TextObjects[0].X);
+            Assert.True(state.Undo()); Assert.Equal(16, state.Frame.TextObjects[0].Placement("fr", "en").X);
 
             window.Close();
 

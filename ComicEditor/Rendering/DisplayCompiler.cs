@@ -16,51 +16,79 @@ public static class DisplayCompiler
         scene.Validate();
         CutsceneFonts.RequireAvailable(scene);
         foreach (var obj in scene.Frames.Where(f => f.TextVisible).SelectMany(f => f.TextObjects))
+        {
             if (CutsceneFonts.IsCustom(obj.FontId) && !CutsceneFonts.IsInstalled(obj.FontId))
                 throw new InvalidDataException($"Required font is unavailable: {obj.FontId}. Install it before compiling.");
-        var result = new DisplayCutscene { Version = 2, CanvasWidth = (uint)scene.Width, CanvasHeight = (uint)scene.Height };
-        result.PaletteRgb.Add(scene.Palette.Select(hex => Convert.ToUInt32(hex[1..], 16)));
+            foreach (var style in obj.Styles)
+                if (CutsceneFonts.IsCustom(style.FontId) && !CutsceneFonts.IsInstalled(style.FontId))
+                    throw new InvalidDataException($"Required font is unavailable: {style.FontId}. Install it before compiling.");
+        }
+        var result = new DisplayCutscene { Version = scene.IsRgba ? 3u : 2u, CanvasWidth = (uint)scene.Width, CanvasHeight = (uint)scene.Height };
+        if (scene.IsRgba) result.PaletteRgba.Add(scene.Palette.Select(RgbaColor.Parse));
+        else result.PaletteRgb.Add(scene.Palette.Select(hex => Convert.ToUInt32(hex[1..], 16)));
         result.Languages.Add(scene.Translations.Keys.Order(StringComparer.Ordinal).ToArray());
         if (result.Languages.Count == 0) result.Languages.Add("und");
         result.FallbackLanguageIndex = (uint)Math.Max(0, result.Languages.IndexOf(scene.FallbackLanguage));
         foreach (var frame in scene.Frames)
         {
+            if (scene.IsRgba)
+            {
+                var pixels = new uint[scene.Width * scene.Height];
+                foreach (var layer in frame.Layers.Where(l => l.Visible))
+                    for (var y = 0; y < scene.Height; y++)
+                        for (var x = 0; x < scene.Width; x++)
+                        {
+                            var offset = y * scene.Width + x;
+                            pixels[offset] = RgbaColor.Blend(layer.RgbaPixel(x, y), pixels[offset]);
+                        }
+                var rgbaFrame = new DisplayFrame { RgbaArtworkPng = ByteString.CopyFrom(RgbaPng.Encode(scene.Width, scene.Height, pixels)) };
+                AddText(rgbaFrame, frame, scene, result.Languages);
+                result.Frames.Add(rgbaFrame);
+                continue;
+            }
             var art = Enumerable.Repeat((byte)255, scene.Width * scene.Height).ToArray();
             foreach (var layer in frame.Layers.Where(l => l.Visible))
                 for (var y = 0; y < scene.Height; y++)
                     for (var x = 0; x < scene.Width; x++)
                     { var index = layer.Pixel(x, y); if (index >= 0) art[y * scene.Width + x] = (byte)index; }
             var output = new DisplayFrame { IndexedArtwork = ByteString.CopyFrom(art) };
-            foreach (var language in result.Languages)
-            {
-                var localized = new LocalizedFrameText();
-                if (frame.TextVisible)
-                    foreach (var obj in frame.TextObjects)
-                    {
-                        var text = scene.RenderText(language, obj.Key); if (string.IsNullOrWhiteSpace(text)) continue;
-                        var raster = Rasterize(scene, obj, text, language);
-                        if (raster is not null) localized.Runs.Add(raster);
-                    }
-                output.Text.Add(localized);
-            }
+            AddText(output, frame, scene, result.Languages);
             result.Frames.Add(output);
         }
         return result;
     }
 
+    private static void AddText(DisplayFrame output, Frame frame, Cutscene scene, IEnumerable<string> languages)
+    {
+        foreach (var language in languages)
+        {
+            var localized = new LocalizedFrameText();
+            if (frame.TextVisible)
+                foreach (var obj in frame.TextObjects)
+                {
+                    var text = scene.RenderText(language, obj.Key); if (string.IsNullOrWhiteSpace(text)) continue;
+                    var raster = Rasterize(scene, obj, text, language);
+                    if (raster is not null) localized.Runs.Add(raster);
+                }
+            output.Text.Add(localized);
+        }
+    }
+
     internal static TextRaster? Rasterize(Cutscene scene, TextObject obj, string text, string language)
     {
-        var left = Math.Clamp((int)Math.Floor(obj.X), 0, scene.Width);
-        var top = Math.Clamp((int)Math.Floor(obj.Y), 0, scene.Height);
-        var right = Math.Clamp((int)Math.Ceiling(obj.X + obj.Width), 0, scene.Width);
-        var bottom = Math.Clamp((int)Math.Ceiling(obj.Y + obj.Height), 0, scene.Height);
+        var placement = obj.Placement(language, scene.FallbackLanguage);
+        var left = Math.Clamp((int)Math.Floor(placement.X), 0, scene.Width);
+        var top = Math.Clamp((int)Math.Floor(placement.Y), 0, scene.Height);
+        var right = Math.Clamp((int)Math.Ceiling(placement.X + placement.Width), 0, scene.Width);
+        var bottom = Math.Clamp((int)Math.Ceiling(placement.Y + placement.Height), 0, scene.Height);
         var width = right - left; var height = bottom - top; if (width <= 0 || height <= 0) return null;
         // The render target produces hard-edged glyph masks at native canvas size.
         // Supersample small text areas, with a memory cap for large canvases.
         var scale = 4;
         while (scale > 1 && (long)width * height * scale * scale * 4 > 32 * 1024 * 1024) scale /= 2;
         var pixelWidth = width * scale; var pixelHeight = height * scale;
-        var view = new TextMask(obj, text, language, left, top, scale) { Width = pixelWidth, Height = pixelHeight };
+        var styleLanguage = string.IsNullOrWhiteSpace(scene.Text(language, obj.Key)) ? scene.FallbackLanguage : language;
+        var view = new TextMask(obj, placement, text, language, styleLanguage, left, top, scale) { Width = pixelWidth, Height = pixelHeight };
         view.Measure(new Size(pixelWidth, pixelHeight)); view.Arrange(new Rect(0, 0, pixelWidth, pixelHeight));
         using var bitmap = new RenderTargetBitmap(new PixelSize(pixelWidth, pixelHeight), new Vector(96, 96)); bitmap.Render(view);
         var rgba = new byte[pixelWidth * pixelHeight * 4]; var handle = GCHandle.Alloc(rgba, GCHandleType.Pinned);
@@ -96,7 +124,7 @@ public static class DisplayCompiler
         };
     }
 
-    private sealed class TextMask(TextObject obj, string text, string language, int left, int top, int scale) : Control
+    private sealed class TextMask(TextObject obj, TextPlacement placement, string text, string language, string styleLanguage, int left, int top, int scale) : Control
     {
         public override void Render(DrawingContext context)
         {
@@ -104,10 +132,11 @@ public static class DisplayCompiler
             var formatted = new FormattedText(text, culture, culture.TextInfo.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight,
                 new Typeface(CutsceneFonts.Resolve(obj.FontId, language), obj.Italic ? FontStyle.Italic : FontStyle.Normal,
                     obj.Bold ? FontWeight.Bold : FontWeight.Normal), obj.FontSize, Brushes.White)
-            { MaxTextWidth = obj.Width };
+            { MaxTextWidth = placement.Width };
+            TextStyleFormatter.Apply(formatted, obj, styleLanguage, text.Length);
             using (context.PushTransform(Matrix.CreateScale(scale, scale)))
-            using (context.PushClip(new Rect(obj.X - left, obj.Y - top, obj.Width, obj.Height)))
-                context.DrawText(formatted, new Point(obj.X - left, obj.Y - top));
+            using (context.PushClip(new Rect(placement.X - left, placement.Y - top, placement.Width, placement.Height)))
+                context.DrawText(formatted, new Point(placement.X - left, placement.Y - top));
         }
     }
 }

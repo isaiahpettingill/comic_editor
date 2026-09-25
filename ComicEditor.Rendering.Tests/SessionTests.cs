@@ -96,6 +96,20 @@ public partial class CanvasTests
 public sealed class SessionTests
 {
     [Fact]
+    public void RecoverySnapshotPreservesOtherOpenTabs()
+    {
+        var first = new EditorState(); var second = new EditorState();
+        second.Scene.Palette[0] = "#123456";
+        var snapshot = SessionSnapshot.Capture(first);
+        snapshot.OtherTabs.Add(SessionSnapshot.Capture(second)); snapshot.ActiveTab = 1;
+        var restored = SessionSnapshot.Parse(snapshot.Serialize())!;
+        Assert.Equal(1, restored.ActiveTab);
+        Assert.Single(restored.OtherTabs);
+        Assert.True(restored.OtherTabs[0].Dirty);
+        Assert.Equal("#123456", CutsceneFile.Parse(restored.OtherTabs[0].Project).Palette[0]);
+    }
+
+    [Fact]
     public void RecoveryCaptureReusesProjectBytesFromSave()
     {
         var editor = new EditorState();

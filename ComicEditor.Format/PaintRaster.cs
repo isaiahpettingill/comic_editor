@@ -6,21 +6,30 @@ public enum ShapeFill { Outline, Solid }
 public static class PaintRaster
 {
     // Batch edits by row: storing hex rows should not allocate a whole row for every pixel.
-    private sealed class Surface(ArtworkLayer layer) : IDisposable
+    private sealed class Surface(ArtworkLayer layer, IReadOnlyList<string>? palette = null, int opacity = 255) : IDisposable
     {
         private readonly Dictionary<int, char[]> rows = new();
         public void Pixel(int x, int y, int color)
         {
-            if (y < 0 || y >= layer.Rows.Count || x < 0 || x >= layer.Rows[y].Length / 2) return;
+            if (y < 0 || y >= layer.Rows.Count || x < 0 || x >= layer.Width) return;
             if (!rows.TryGetValue(y, out var row)) rows[y] = row = layer.Rows[y].ToCharArray();
+            if (layer.IsRgba)
+            {
+                var source = color < 0 ? 0u : RgbaColor.Parse(palette?[color] ?? throw new ArgumentException("RGBA painting requires the palette."));
+                var offset = x * 8;
+                var destination = Convert.ToUInt32(new string(row, offset, 8), 16);
+                var result = color < 0 ? 0u : RgbaColor.Blend(source, destination, opacity);
+                RgbaColor.Hex(result).AsSpan(1).CopyTo(row.AsSpan(offset, 8));
+                return;
+            }
             const string digits = "0123456789ABCDEF"; var index = color < 0 ? 255 : color;
             row[x * 2] = digits[index >> 4]; row[x * 2 + 1] = digits[index & 15];
         }
         public void Dispose() { foreach (var (y, row) in rows) layer.Rows[y] = new string(row); }
     }
-    public static void Stamp(ArtworkLayer layer, int x, int y, int color, int size, BrushTip tip)
+    public static void Stamp(ArtworkLayer layer, int x, int y, int color, int size, BrushTip tip, IReadOnlyList<string>? palette = null, int opacity = 255)
     {
-        using var surface = new Surface(layer); Stamp(surface, x, y, color, size, tip);
+        using var surface = new Surface(layer, palette, opacity); Stamp(surface, x, y, color, size, tip);
     }
     private static void Stamp(Surface surface, int x, int y, int color, int size, BrushTip tip)
     {
@@ -42,9 +51,9 @@ public static class PaintRaster
             }
     }
 
-    public static void Stroke(ArtworkLayer layer, int x0, int y0, int x1, int y1, int color, int size, BrushTip tip)
+    public static void Stroke(ArtworkLayer layer, int x0, int y0, int x1, int y1, int color, int size, BrushTip tip, IReadOnlyList<string>? palette = null, int opacity = 255)
     {
-        using var surface = new Surface(layer); Stroke(surface, x0, y0, x1, y1, color, size, tip);
+        using var surface = new Surface(layer, palette, opacity); Stroke(surface, x0, y0, x1, y1, color, size, tip);
     }
     private static void Stroke(Surface surface, int x0, int y0, int x1, int y1, int color, int size, BrushTip tip)
     {
@@ -56,9 +65,9 @@ public static class PaintRaster
         }
     }
 
-    public static void Spray(ArtworkLayer layer, int x, int y, int color, int size, int density, Random random)
+    public static void Spray(ArtworkLayer layer, int x, int y, int color, int size, int density, Random random, IReadOnlyList<string>? palette = null, int opacity = 255)
     {
-        using var surface = new Surface(layer);
+        using var surface = new Surface(layer, palette, opacity);
         var radius = Math.Max(1, size / 2.0);
         for (var i = 0; i < density; i++)
         {
@@ -78,15 +87,15 @@ public static class PaintRaster
         return inside;
     }
 
-    public static void Polygon(ArtworkLayer layer, IReadOnlyList<(double X, double Y)> points, int color, int size, ShapeFill fill, bool closed = true)
+    public static void Polygon(ArtworkLayer layer, IReadOnlyList<(double X, double Y)> points, int color, int size, ShapeFill fill, bool closed = true, IReadOnlyList<string>? palette = null, int opacity = 255)
     {
         if (points.Count < 2) return;
-        using var surface = new Surface(layer);
+        using var surface = new Surface(layer, palette, opacity);
         if (fill == ShapeFill.Solid && closed && points.Count >= 3)
         {
             var top = Math.Max(0, (int)Math.Floor(points.Min(p => p.Y)));
             var bottom = Math.Min(layer.Rows.Count - 1, (int)Math.Ceiling(points.Max(p => p.Y)));
-            var width = layer.Rows[0].Length / 2;
+            var width = layer.Width;
             // Scanline fill: intersections are computed once per row, not per pixel.
             for (var y = top; y <= bottom; y++)
             {
@@ -130,9 +139,9 @@ public static class PaintRaster
     }
 
     public static void Curve(ArtworkLayer layer, (double X, double Y) start, (double X, double Y) end,
-        (double X, double Y) c1, (double X, double Y) c2, int color, int size)
+        (double X, double Y) c1, (double X, double Y) c2, int color, int size, IReadOnlyList<string>? palette = null, int opacity = 255)
     {
-        using var surface = new Surface(layer);
+        using var surface = new Surface(layer, palette, opacity);
         var length = Math.Abs(c1.X - start.X) + Math.Abs(c1.Y - start.Y) + Math.Abs(c2.X - c1.X) + Math.Abs(c2.Y - c1.Y) + Math.Abs(end.X - c2.X) + Math.Abs(end.Y - c2.Y);
         var steps = Math.Max(1, (int)Math.Ceiling(length * 2)); var previous = start;
         for (var i = 1; i <= steps; i++)
@@ -141,6 +150,49 @@ public static class PaintRaster
             var x = u * u * u * start.X + 3 * u * u * t * c1.X + 3 * u * t * t * c2.X + t * t * t * end.X;
             var y = u * u * u * start.Y + 3 * u * u * t * c1.Y + 3 * u * t * t * c2.Y + t * t * t * end.Y;
             Stroke(surface, (int)Math.Round(previous.X), (int)Math.Round(previous.Y), (int)Math.Round(x), (int)Math.Round(y), color, size, BrushTip.Round); previous = (x, y);
+        }
+    }
+
+    public static void Dither(ArtworkLayer layer, int x0, int y0, int x1, int y1, int color, int size, int density, IReadOnlyList<string>? palette = null, int opacity = 255)
+    {
+        int[] bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+        using var surface = new Surface(layer, palette, opacity);
+        var steps = Math.Max(Math.Abs(x1 - x0), Math.Abs(y1 - y0));
+        var radius = Math.Clamp(size, 1, 64) / 2;
+        for (var i = 0; i <= steps; i++)
+        {
+            var x = steps == 0 ? x0 : x0 + (x1 - x0) * i / steps;
+            var y = steps == 0 ? y0 : y0 + (y1 - y0) * i / steps;
+            for (var dy = -radius; dy <= radius; dy++)
+                for (var dx = -radius; dx <= radius; dx++)
+                    if (dx * dx + dy * dy <= radius * radius && bayer[((y + dy) & 3) * 4 + ((x + dx) & 3)] < density)
+                        surface.Pixel(x + dx, y + dy, color);
+        }
+    }
+
+    public static void Scramble(ArtworkLayer layer, int x0, int y0, int x1, int y1, int size, Random random)
+    {
+        var steps = Math.Max(Math.Abs(x1 - x0), Math.Abs(y1 - y0)); var radius = Math.Max(1, size / 2);
+        for (var i = 0; i <= steps; i++)
+        {
+            var x = steps == 0 ? x0 : x0 + (x1 - x0) * i / steps;
+            var y = steps == 0 ? y0 : y0 + (y1 - y0) * i / steps;
+            for (var n = 0; n < size; n++)
+            {
+                var ax = x + random.Next(-radius, radius + 1); var ay = y + random.Next(-radius, radius + 1);
+                var bx = x + random.Next(-radius, radius + 1); var by = y + random.Next(-radius, radius + 1);
+                if (ax < 0 || ay < 0 || bx < 0 || by < 0 || ax >= layer.Width || bx >= layer.Width || ay >= layer.Rows.Count || by >= layer.Rows.Count) continue;
+                if (layer.IsRgba)
+                {
+                    var first = layer.RgbaPixel(ax, ay); var second = layer.RgbaPixel(bx, by);
+                    layer.SetRgbaPixel(ax, ay, second); layer.SetRgbaPixel(bx, by, first);
+                }
+                else
+                {
+                    var first = layer.Pixel(ax, ay); var second = layer.Pixel(bx, by);
+                    layer.SetPixel(ax, ay, second); layer.SetPixel(bx, by, first);
+                }
+            }
         }
     }
 }

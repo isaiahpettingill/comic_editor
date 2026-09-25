@@ -44,15 +44,24 @@ public sealed class PaletteTests
     }
 
     [Fact]
-    public void Rejects256ColorsAndStillReadsVersionTwo()
+    public void IndexedModeRejects256ColorsAndStillReadsVersionTwo()
     {
         var tooMany = "GIMP Palette\n" + string.Join('\n', Enumerable.Repeat("0 0 0", 256));
-        Assert.Throws<InvalidDataException>(() => GplPalette.Parse(tooMany));
+        Assert.Equal(256, GplPalette.Parse(tooMany).Colors.Count);
         var scene = Cutscene.Create(1, 1); scene.Palette = Enumerable.Repeat("#000000", 256).ToList();
         Assert.Throws<InvalidDataException>(() => CutsceneFile.Write(scene));
         var old = ComicEditor.Wire.CutsceneDocument.Parser.ParseFrom(CutsceneFile.Write(Cutscene.Create(2, 1))); old.Version = 2;
         old.Frames[0].Layers[0].Pixels = ByteString.CopyFrom([127, 255]);
         var restored = CutsceneFile.Parse(old.ToByteArray()); Assert.Equal(3, restored.Version);
         Assert.Equal(127, restored.Frames[0].Layers[0].Pixel(0, 0)); Assert.Equal(-1, restored.Frames[0].Layers[0].Pixel(1, 0));
+    }
+
+    [Fact]
+    public void GplPreservesAlphaInPortableComments()
+    {
+        var source = new GplPalette("RGBA", [new("#FF000080", "red"), new("#0000FFFF", "blue")]);
+        var text = source.Write();
+        Assert.Contains("255   0   0", text);
+        Assert.Equal(source.Colors, GplPalette.Parse(text).Colors);
     }
 }

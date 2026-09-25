@@ -13,6 +13,8 @@ public sealed class SessionSnapshot
     public string? DiskHash { get; set; }
     public int Frame { get; set; }
     public bool Dirty { get; set; }
+    public List<SessionSnapshot> OtherTabs { get; set; } = [];
+    public int ActiveTab { get; set; }
 
     public static SessionSnapshot Capture(EditorState editor, byte[]? project = null)
     {

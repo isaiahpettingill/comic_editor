@@ -56,10 +56,13 @@ public partial class MainView
         if (palette is null) return;
         if (compactColor is not null) compactColor.Background = Brush(editor.Scene.Palette[editor.Color]);
         palette.Children.Clear();
-        var heading = Row(Label("Palette", true), Label($"{editor.Color:D3}  {editor.Scene.Palette[editor.Color]}"), Button("Edit palette…", EditPalette));
+        var slot = new NumericUpDown { Name = "CurrentPaletteSlot", Minimum = 0, Maximum = editor.Scene.Palette.Count - 1, Value = editor.Color, Width = 100 };
+        slot.ValueChanged += (_, _) => { if (slot.Value is null || (int)slot.Value == editor.Color) return; editor.Color = (int)slot.Value; RefreshPalette(); };
+        var heading = Row(Label("Palette", true), slot, Label(editor.Scene.Palette[editor.Color]), Button("Edit palette…", EditPalette));
         palette.Children.Add(heading);
         var colors = new WrapPanel { Name = "PaletteSwatches", Orientation = Orientation.Horizontal };
-        for (var i = 0; i < editor.Scene.Palette.Count; i++)
+        var first = editor.Color / 256 * 256;
+        for (var i = first; i < Math.Min(editor.Scene.Palette.Count, first + 256); i++)
         {
             var index = i;
             var button = new Button
@@ -131,7 +134,7 @@ public partial class MainView
         inspector.Children.Add(new ScrollViewer { Content = rows, MaxHeight = compact ? 180 : 140 });
         var layerActions = Row(Icon(PackIconMaterialKind.Plus, "Add artwork layer", () =>
             {
-                editor.BeforeChange(); editor.Frame.Layers.Add(ArtworkLayer.Create($"Layer {editor.Frame.Layers.Count + 1}", editor.Scene.Width, editor.Scene.Height));
+                editor.BeforeChange(); editor.Frame.Layers.Add(ArtworkLayer.Create($"Layer {editor.Frame.Layers.Count + 1}", editor.Scene.Width, editor.Scene.Height, editor.Scene.IsRgba));
                 editor.LayerIndex = editor.Frame.Layers.Count - 1; editor.Tool = Tool.Pixel; RefreshTools(); RefreshAll();
             }),
             Icon(PackIconMaterialKind.DeleteOutline, "Delete selected artwork layer", () =>
@@ -221,13 +224,15 @@ public partial class MainView
         translation.GotFocus += (_, _) => captured = false;
         void UpdateWarning()
         {
+            var placement = obj.Placement(lang, editor.Scene.FallbackLanguage);
             var text = translation.Text ?? "";
             var missing = string.IsNullOrWhiteSpace(text);
             var font = CutsceneFonts.Resolve(obj.FontId, lang);
             var measure = new FormattedText(text, CutsceneCanvas.Culture(lang), CutsceneCanvas.Culture(lang).TextInfo.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight,
                 new Typeface(font, obj.Italic ? FontStyle.Italic : FontStyle.Normal, obj.Bold ? FontWeight.Bold : FontWeight.Normal), obj.FontSize, Brushes.Black)
-            { MaxTextWidth = obj.Width };
-            var overflow = measure.Height > obj.Height + .5 || measure.Width > obj.Width + .5;
+            { MaxTextWidth = placement.Width };
+            TextStyleFormatter.Apply(measure, obj, lang, text.Length);
+            var overflow = measure.Height > placement.Height + .5 || measure.Width > placement.Width + .5;
             warning.Text = missing ? $"Missing — fallback: {editor.Scene.FallbackLanguage}" : overflow ? "Text overflows its area" : "Translation fits";
             if (CutsceneFonts.IsCustom(obj.FontId) && !CutsceneFonts.IsInstalled(obj.FontId)) warning.Text += " · Custom font unavailable; using Noto";
             var missingFonts = CutsceneFonts.Missing(text, obj.FontId, lang);
@@ -240,13 +245,14 @@ public partial class MainView
             var next = translation.Text ?? "";
             if (editor.Scene.Text(lang, obj.Key) == next) return;
             if (!captured) { editor.BeforeChange(); captured = true; }
-            entries[obj.Key] = next; UpdateWarning(); RefreshCanvas(); RefreshTitle(); QueueFontCheck();
+            editor.SetTranslation(lang, obj.Key, next); UpdateWarning(); RefreshCanvas(); RefreshTitle(); QueueFontCheck();
         };
         refreshFontWarning = UpdateWarning;
         UpdateWarning(); inspector.Children.Add(warning); inspector.Children.Add(translation);
         var edit = Button("Layout & style…", () => EditTextProperties(obj)); edit.Name = "EditTextProperties";
         var textActions = new WrapPanel { Orientation = Orientation.Horizontal };
         edit.Margin = new Thickness(0, 0, 4, 4); textActions.Children.Add(edit);
+        textActions.Children.Add(Button("Edit on canvas", BeginInlineTextEdit));
         textActions.Children.Add(Button("Languages…", ManageLanguages)); inspector.Children.Add(textActions);
         var installFonts = Button("Install missing fonts…", () => _ = CheckFontsAsync(CancellationToken.None, explicitlyRequested: true));
         installFonts.Name = "InstallMissingFonts";

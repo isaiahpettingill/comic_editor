@@ -110,7 +110,7 @@ public partial class CanvasTests
             Invoke(view, "ResizeCanvas"); _ = Capture(window);
             Named<NumericUpDown>(window, "CanvasWidth").Value = 400; Named<NumericUpDown>(window, "CanvasHeight").Value = 200;
             Click(window, Named<Button>(window, "ModalApply")); Invoke(view, "New");
-            Assert.Equal((400, 200), (state.Scene.Width, state.Scene.Height)); window.Close();
+            Assert.Equal((400, 200), (State(view).Scene.Width, State(view).Scene.Height)); window.Close();
         }, CancellationToken.None);
     }
 

@@ -37,6 +37,9 @@ public partial class MainView
         Tool.Eyedropper => PackIconMaterialKind.Eyedropper,
         Tool.Text => PackIconMaterialKind.FormatText,
         Tool.Spray => PackIconMaterialKind.Spray,
+        Tool.Marker => PackIconMaterialKind.Marker,
+        Tool.Dither => PackIconMaterialKind.Checkerboard,
+        Tool.Scramble => PackIconMaterialKind.ShuffleVariant,
         Tool.Select => PackIconMaterialKind.Selection,
         Tool.Lasso => PackIconMaterialKind.Lasso,
         Tool.Curve => PackIconMaterialKind.VectorCurve,
@@ -45,7 +48,7 @@ public partial class MainView
         _ => PackIconMaterialKind.Magnify
     };
     private static string ToolName(Tool tool) => tool switch
-    { Tool.Select => "Select rectangle", Tool.Lasso => "Freehand select", Tool.RoundedRectangle => "Rounded rectangle", Tool.Spray => "Spray can", _ => tool.ToString() };
+    { Tool.Select => "Select rectangle", Tool.Lasso => "Freehand select", Tool.RoundedRectangle => "Rounded rectangle", Tool.Spray => "Spray can", Tool.Scramble => "Pixel scramble", _ => tool.ToString() };
     private static bool UsesSize(Tool tool) => tool is not (Tool.Select or Tool.Lasso or Tool.Text or Tool.Fill or Tool.Eyedropper or Tool.Zoom);
     private static string ToolHelp(Tool tool) => tool switch
     {
@@ -53,13 +56,17 @@ public partial class MainView
         Tool.Polygon => "Click corners. Double-click, Enter, or Finish closes the polygon. Escape cancels.",
         Tool.Select or Tool.Lasso => "Drag to select artwork on the current layer, then drag inside to move it. Use Edit to copy, cut, paste, or delete.",
         Tool.Spray => "Hold to spray; move to cover an area. Diameter and density are adjustable.",
+        Tool.Marker => "Draw with translucent color. Size and opacity are adjustable.",
+        Tool.Dither => "Paint with a repeating 4×4 Bayer pattern. Adjust density in tool options.",
+        Tool.Scramble => "Shuffle nearby pixels while dragging without adding color.",
         Tool.Zoom => "Click to zoom in; right-click or Shift-click to zoom out. Scroll or pinch with two fingers to zoom. Middle-drag or drag three fingers to pan.",
         Tool.Text => "Drag to create a text area; click existing text to select it.",
         _ => "Drag to draw on the current artwork layer."
     };
     private void ChooseTool(Tool tool)
     {
-        FinishPath(); StopSpray(); selection = null;
+        EndInlineTextEdit(); FinishPath(); StopSpray(); selection = null;
+        if (tool == Tool.Marker && !editor.Scene.IsRgba) EnableRgbaMode();
         editor.SelectedTextId = null; editor.Tool = tool; RefreshTools(); RefreshInspector(); RefreshCanvas();
     }
 
@@ -71,20 +78,25 @@ public partial class MainView
         var size = new NumericUpDown { Name = "ToolSize", Value = settings.Size, Minimum = 1, Maximum = 64, Height = 44 };
         if (UsesSize(editor.Tool)) { body.Children.Add(Label(editor.Tool == Tool.Spray ? "Spray diameter (px)" : "Size (px)")); body.Children.Add(size); }
         var tip = new ComboBox { Name = "BrushTip", ItemsSource = Enum.GetValues<BrushTip>(), SelectedItem = settings.Tip, HorizontalAlignment = HorizontalAlignment.Stretch };
-        if (editor.Tool is Tool.Pixel or Tool.Smooth or Tool.Pressure or Tool.Eraser)
+        if (editor.Tool is Tool.Pixel or Tool.Smooth or Tool.Pressure or Tool.Eraser or Tool.Marker)
         { body.Children.Add(Label("Brush shape")); body.Children.Add(tip); }
         var fill = new ComboBox { Name = "ShapeFill", ItemsSource = Enum.GetValues<ShapeFill>(), SelectedItem = settings.Fill, HorizontalAlignment = HorizontalAlignment.Stretch };
         if (editor.Tool is Tool.Rectangle or Tool.Ellipse or Tool.RoundedRectangle or Tool.Polygon)
         { body.Children.Add(Label("Shape appearance")); body.Children.Add(fill); }
         var density = new NumericUpDown { Name = "SprayDensity", Value = settings.SprayDensity, Minimum = 1, Maximum = 100, Height = 44 };
         if (editor.Tool == Tool.Spray) { body.Children.Add(Label("Spray density")); body.Children.Add(density); }
+        var opacity = new NumericUpDown { Name = "ToolOpacity", Value = settings.Opacity, Minimum = 0, Maximum = 255, Height = 44 };
+        if (editor.Scene.IsRgba && editor.Tool is not (Tool.Select or Tool.Lasso or Tool.Text or Tool.Eyedropper or Tool.Zoom or Tool.Scramble or Tool.Eraser))
+        { body.Children.Add(Label("Opacity (0–255)")); body.Children.Add(opacity); }
+        var dither = new NumericUpDown { Name = "DitherDensity", Value = settings.DitherDensity, Minimum = 1, Maximum = 16, Height = 44 };
+        if (editor.Tool == Tool.Dither) { body.Children.Add(Label("Pattern density (1–16)")); body.Children.Add(dither); }
         var smooth = new CheckBox { Content = "Smooth mouse / touchpad strokes", IsChecked = editor.Preferences.SmoothMouse };
         body.Children.Add(smooth);
         ShowModal(ToolName(editor.Tool) + " options", body, () =>
         {
-            if (size.Value is null || density.Value is null) return;
+            if (size.Value is null || density.Value is null || opacity.Value is null || dither.Value is null) return;
             settings.Size = (int)size.Value; settings.Tip = (BrushTip)tip.SelectedItem!; settings.Fill = (ShapeFill)fill.SelectedItem!;
-            settings.SprayDensity = (int)density.Value; editor.Preferences.SmoothMouse = smooth.IsChecked == true;
+            settings.SprayDensity = (int)density.Value; settings.Opacity = (int)opacity.Value; settings.DitherDensity = (int)dither.Value; editor.Preferences.SmoothMouse = smooth.IsChecked == true;
             editor.Preferences.Save(); CloseModal(); RefreshTools();
         });
     }
@@ -182,21 +194,21 @@ public partial class MainView
         if (pathTool == Tool.Polygon)
         {
             var preview = path.ToList(); if (preview[^1] != (x, y)) preview.Add((x, y));
-            PaintRaster.Polygon(editor.Layer, preview, editor.Color, editor.BrushSize, editor.Paint.Fill);
+            PaintRaster.Polygon(editor.Layer, preview, editor.Color, editor.BrushSize, editor.Paint.Fill, palette: editor.Scene.Palette, opacity: editor.Paint.Opacity);
         }
         else
         {
             if (curveStage == 0) { curveEnd = (x, y); curveControl1 = path[0]; curveControl2 = curveEnd; }
             else if (curveStage == 1) curveControl1 = curveControl2 = (x, y);
             else curveControl2 = (x, y);
-            PaintRaster.Curve(editor.Layer, path[0], curveEnd, curveControl1, curveControl2, editor.Color, editor.BrushSize);
+            PaintRaster.Curve(editor.Layer, path[0], curveEnd, curveControl1, curveControl2, editor.Color, editor.BrushSize, editor.Scene.Palette, editor.Paint.Opacity);
         }
     }
     private void FinishPath(bool cancel = false)
     {
         if (pathBase is null || pathLayer is null) return;
         if (!cancel && pathTool == Tool.Polygon)
-        { pathLayer.Rows = pathBase.ToList(); PaintRaster.Polygon(pathLayer, path, editor.Color, editor.BrushSize, editor.Paint.Fill); }
+        { pathLayer.Rows = pathBase.ToList(); PaintRaster.Polygon(pathLayer, path, editor.Color, editor.BrushSize, editor.Paint.Fill, palette: editor.Scene.Palette, opacity: editor.Paint.Opacity); }
         var owner = pathLayer; var original = pathBase;
         var result = owner.Rows.ToList(); owner.Rows = original;
         pathBase = null; pathLayer = null; path.Clear();
@@ -204,7 +216,7 @@ public partial class MainView
         RefreshAll(); RefreshTools();
     }
     private void StopSpray() { sprayTimer?.Stop(); sprayTimer = null; }
-    private void SprayAt(int x, int y) => PaintRaster.Spray(editor.Layer, x, y, editor.Color, editor.BrushSize, editor.Paint.SprayDensity, Random.Shared);
+    private void SprayAt(int x, int y) => PaintRaster.Spray(editor.Layer, x, y, editor.Color, editor.BrushSize, editor.Paint.SprayDensity, Random.Shared, editor.Scene.Palette, editor.Paint.Opacity);
     private void StartSpray()
     {
         StopSpray(); SprayAt(startX, startY);

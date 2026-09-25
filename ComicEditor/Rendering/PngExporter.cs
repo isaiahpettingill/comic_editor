@@ -7,6 +7,7 @@ public static class PngExporter
     public static void Write(Stream stream, Cutscene scene, int frameIndex, string language)
     {
         CutsceneFonts.RequireAvailable(scene, language);
+        if (scene.IsRgba) { WriteRgba(stream, scene, frameIndex, language); return; }
         var frame = scene.Frames[frameIndex];
         var palette = scene.Palette.Select(c => Convert.ToUInt32(c[1..], 16)).ToArray();
         var rgb = Enumerable.Repeat(0xffffffu, scene.Width * scene.Height).ToArray();
@@ -21,6 +22,8 @@ public static class PngExporter
             foreach (var obj in frame.TextObjects)
             {
                 if (CutsceneFonts.IsCustom(obj.FontId) && !CutsceneFonts.IsInstalled(obj.FontId)) throw new InvalidDataException($"Required font is unavailable: {obj.FontId}.");
+                foreach (var style in obj.Styles.Where(s => s.Language == language))
+                    if (CutsceneFonts.IsCustom(style.FontId) && !CutsceneFonts.IsInstalled(style.FontId)) throw new InvalidDataException($"Required font is unavailable: {style.FontId}.");
                 var text = scene.RenderText(language, obj.Key);
                 if (string.IsNullOrWhiteSpace(text)) continue;
                 var raster = DisplayCompiler.Rasterize(scene, obj, text, language); if (raster is null) continue;
@@ -48,6 +51,38 @@ public static class PngExporter
                     }
             }
         IndexedPng.Write(stream, scene.Width, scene.Height, rgb);
+    }
+
+    private static void WriteRgba(Stream stream, Cutscene scene, int frameIndex, string language)
+    {
+        var frame = scene.Frames[frameIndex]; var rgba = new uint[scene.Width * scene.Height];
+        foreach (var layer in frame.Layers.Where(l => l.Visible))
+            for (var y = 0; y < scene.Height; y++)
+                for (var x = 0; x < scene.Width; x++)
+                {
+                    var offset = y * scene.Width + x;
+                    rgba[offset] = RgbaColor.Blend(layer.RgbaPixel(x, y), rgba[offset]);
+                }
+        if (frame.TextVisible)
+            foreach (var obj in frame.TextObjects)
+            {
+                if (CutsceneFonts.IsCustom(obj.FontId) && !CutsceneFonts.IsInstalled(obj.FontId)) throw new InvalidDataException($"Required font is unavailable: {obj.FontId}.");
+                foreach (var style in obj.Styles.Where(s => s.Language == language))
+                    if (CutsceneFonts.IsCustom(style.FontId) && !CutsceneFonts.IsInstalled(style.FontId)) throw new InvalidDataException($"Required font is unavailable: {style.FontId}.");
+                var text = scene.RenderText(language, obj.Key);
+                if (string.IsNullOrWhiteSpace(text)) continue;
+                var raster = DisplayCompiler.Rasterize(scene, obj, text, language); if (raster is null) continue;
+                var ink = RgbaColor.Parse(scene.Palette[obj.Color]);
+                for (var y = 0; y < raster.Height; y++)
+                    for (var x = 0; x < raster.Width; x++)
+                    {
+                        var alpha = raster.Alpha[(int)(y * raster.Width + x)];
+                        if (alpha == 0) continue;
+                        var offset = (int)((raster.Y + y) * scene.Width + raster.X + x);
+                        rgba[offset] = RgbaColor.Blend(ink, rgba[offset], alpha);
+                    }
+            }
+        stream.Write(RgbaPng.Encode(scene.Width, scene.Height, rgba));
     }
 
     private static uint Blend(uint foreground, uint background, int alpha)

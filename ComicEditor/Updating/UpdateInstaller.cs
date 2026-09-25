@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -62,6 +63,7 @@ public static class UpdateInstaller
                 var next = ReleaseClient.ReadInstallation(payload);
                 if (next is null || next.Runtime != release.Runtime || ReleaseClient.Normalize(next.Version) != ReleaseClient.Normalize(release.Version) || !File.Exists(Path.Combine(payload, plan.Executable)))
                     throw new InvalidDataException("The downloaded package has incorrect installation metadata or is missing its executable.");
+                if (release.Runtime == "linux-x64") CheckLinuxDependencies(payload);
                 CopyTree(payload, plan.Prepared, cancellation, overwrite: true);
             }
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Path.Combine(plan.Prepared, plan.Executable), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
@@ -71,6 +73,27 @@ public static class UpdateInstaller
             return plan;
         }
         catch { Directory.Delete(plan.Prepared, recursive: true); throw; }
+    }
+
+    private static void CheckLinuxDependencies(string payload)
+    {
+        var files = new[] { Path.Combine(payload, "ComicEditor.Desktop"), Path.Combine(payload, "compiler", "comic-compile") }
+            .Concat(Directory.EnumerateFiles(payload, "*.so"));
+        foreach (var file in files.Where(File.Exists))
+        {
+            try
+            {
+                var start = new ProcessStartInfo("ldd") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                start.ArgumentList.Add(file);
+                using var process = Process.Start(start);
+                if (process is null) continue;
+                var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+                if (!process.WaitForExit(10_000)) { process.Kill(); throw new InvalidDataException("Linux dependency check timed out."); }
+                if (output.Contains("not found", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("The update requires Linux libraries that are not installed:\n" + output);
+            }
+            catch (Win32Exception) { return; } // ldd is optional, as in the standalone installer.
+        }
     }
     private static void CopyTree(string source, string destination, CancellationToken cancellation, bool overwrite = false)
     {
@@ -188,6 +211,7 @@ public static class UpdateInstaller
             if (plan.InstallerPackage is not null) WindowsSetup.Stage(plan);
             Apply(plan);
             if (plan.InstallerPackage is not null) WindowsSetup.Register(plan);
+            LinuxDesktopIntegration.Repair(plan.Target);
             File.WriteAllText(log, "Update installed.\n");
             Restart(plan, planFile); return 0;
         }
@@ -203,6 +227,7 @@ public static class UpdateInstaller
                     if (plan.InstallerPackage is not null && File.Exists(Path.Combine(plan.Target, "Uninstall.exe")))
                         WindowsSetup.Register(plan, previous: true);
                     else if (plan.InstallerPackage is not null) WindowsSetup.Unregister(plan);
+                    LinuxDesktopIntegration.Repair(plan.Target);
                 }
                 catch (Exception rollback) { File.AppendAllText(log, "\nRollback: " + rollback.Message); return 1; }
             }
@@ -217,6 +242,8 @@ public static class UpdateInstaller
         var start = new ProcessStartInfo(Path.Combine(plan.Target, plan.Executable)) { UseShellExecute = false, WorkingDirectory = plan.Target };
         start.ArgumentList.Add("--updated"); start.ArgumentList.Add(planFile);
         using var process = Process.Start(start) ?? throw new IOException("Could not restart the editor.");
+        if (OperatingSystem.IsLinux() && process.WaitForExit(1500))
+            throw new IOException($"The updated editor exited immediately (code {process.ExitCode}). The previous version will be restored.");
     }
     public static void Complete(string planFile, string currentDirectory)
     {

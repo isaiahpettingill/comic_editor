@@ -10,7 +10,7 @@ RELEASE_SHA256='@SHA256@'
 die() { printf 'ComicEditor: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'EOF'
-Usage: bash install-comic-editor.sh [--archive FILE] [--sha256 HASH]
+Usage: bash install-comic-editor.sh [--archive FILE] [--sha256 HASH] [--repair]
        bash install-comic-editor.sh --uninstall
 
 Installs ComicEditor and comic-compile for the current Linux user, without sudo.
@@ -18,12 +18,13 @@ The release script downloads and verifies its matching Linux x64 archive.
 --archive uses an already downloaded archive (also works from a source checkout).
 --sha256 supplies an expected checksum for a local archive.
 Re-run to update. Uninstall with comic-editor-uninstall; projects are retained.
+--repair replaces a damaged ComicEditor launcher or icon in an existing managed installation.
 Locations: ${XDG_DATA_HOME:-$HOME/.local/share}/comic-editor and ~/.local/bin.
 COMIC_EDITOR_BIN_DIR can override the command directory.
 EOF
 }
 
-archive=''; expected="$RELEASE_SHA256"; uninstall=false
+archive=''; expected="$RELEASE_SHA256"; uninstall=false; repair=false
 while (($#)); do
     case "$1" in
         --archive|--sha256)
@@ -31,6 +32,7 @@ while (($#)); do
             if [[ "$1" == --archive ]]; then archive="$2"; else expected="$2"; fi
             shift 2 ;;
         --uninstall) uninstall=true; shift ;;
+        --repair) repair=true; shift ;;
         --help|-h) usage; exit 0 ;;
         *) die "Unknown option: $1 (use --help)" ;;
     esac
@@ -62,7 +64,8 @@ targets=("$root/launch" "$root/compile" "$root/uninstall" "$root/comic-editor.de
 owned_destination() {
     local destination="$1" target="$2"
     if [[ -L "$destination" && $(readlink -- "$destination") == "$target" ]]; then return 0; fi
-    [[ ( "$destination" == "$desktop" || "$destination" == "$mime" ) && ! -L "$destination" && -f "$destination" && -f "$target" ]] && cmp -s -- "$destination" "$target"
+    if "$repair" && [[ -d "$root" && ( "$destination" == "$desktop" || "$destination" == "$icon" ) ]]; then return 0; fi
+    [[ ( "$destination" == "$desktop" || "$destination" == "$icon" || "$destination" == "$mime" ) && ! -L "$destination" && -f "$destination" && -f "$target" ]] && cmp -s -- "$destination" "$target"
 }
 refresh_desktop() {
     if command -v update-mime-database >/dev/null && [[ -d "$data_home/mime" ]]; then update-mime-database "$data_home/mime" >/dev/null 2>&1 || true; fi
@@ -176,6 +179,7 @@ Terminal=false
 Categories=Graphics;2DGraphics;
 Keywords=cutscene;storyboard;drawing;localization;
 StartupNotify=true
+StartupWMClass=org.comiceditor.storyboard
 X-ComicEditor-Managed=true
 EOF
 chmod 644 "$root/comic-editor.desktop"
@@ -192,8 +196,8 @@ cat > "$root/cutscene-mime.xml" <<'EOF'
 </mime-info>
 EOF
 for i in "${!destinations[@]}"; do
-    if [[ "${destinations[i]}" == "$desktop" || "${destinations[i]}" == "$mime" ]]; then
-        # Install a regular entry in applications so desktop directory watchers see updates.
+    if [[ "${destinations[i]}" == "$desktop" || "${destinations[i]}" == "$icon" || "${destinations[i]}" == "$mime" ]]; then
+        # Stable regular files let desktop environments refresh the launcher and icon.
         install -m 644 -- "${targets[i]}" "$stage/link"
     else
         ln -s -- "${targets[i]}" "$stage/link"

@@ -152,9 +152,14 @@ public partial class MainView
                 { RefreshAll(); RefreshTools(); await CutsceneFonts.EnsureAsync(editor.Scene); RefreshCanvas(); }
                 if (UpdateHost.ResumePlan is { } plan)
                 {
+                    if (OperatingSystem.IsLinux()) await Task.Run(() => LinuxDesktopIntegration.Repair(AppContext.BaseDirectory));
                     var log = Path.Combine(Path.GetDirectoryName(plan)!, "install.log");
                     if (File.Exists(log) && File.ReadAllText(log).StartsWith("Update failed:")) await ShowError(File.ReadAllText(log));
-                    else await Task.Run(() => UpdateInstaller.Complete(plan, AppContext.BaseDirectory));
+                    else
+                    {
+                        if (OperatingSystem.IsLinux()) await Task.Delay(2000);
+                        await Task.Run(() => UpdateInstaller.Complete(plan, AppContext.BaseDirectory));
+                    }
                 }
             }
             catch (Exception ex) { await ShowError("Update recovery: " + ex.Message + "\nRecovery files remain in " + ReleaseClient.DataDirectory); }

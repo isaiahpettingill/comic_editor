@@ -23,7 +23,9 @@ The release automatically includes this installer and a SHA-256 checksum file. T
 
 Files live under `~/.local/share/comic-editor`, with `comic-editor`, `comic-compile`, and `comic-editor-uninstall` commands in `~/.local/bin`. `XDG_DATA_HOME` and `COMIC_EDITOR_BIN_DIR` can override these locations. If your shell does not include `~/.local/bin` in `PATH`, the installer prints the full command paths; desktop menu launch works independently of `PATH`.
 
-The launcher uses the standard XDG application and icon directories for KDE Plasma, GNOME, XFCE, and other compatible desktops. Run the installer as your desktop user. Updates replace the launcher with a regular `.desktop` file and refresh Plasma's menu cache when `kbuildsycoca6` or `kbuildsycoca5` is available. Re-running the newest installer repairs the older launcher. If installing outside your desktop session, log in again or run `kbuildsycoca6 --noincremental` (Plasma 6) / `kbuildsycoca5 --noincremental` (Plasma 5).
+The launcher uses the standard XDG application and icon directories for KDE Plasma, GNOME, XFCE, and other compatible desktops. Run the installer as your desktop user. The `.desktop` entry and SVG icon are regular files, refreshed after both installer and in-app updates. If either file is damaged, run the newest release installer with `--repair`; it only replaces these files in an existing ComicEditor installation. If installing outside your desktop session, log in again or run `kbuildsycoca6 --noincremental` (Plasma 6) / `kbuildsycoca5 --noincremental` (Plasma 5).
+
+On Wayland desktops, ComicEditor uses Avalonia's XWayland backend. Its X11 window class matches the stable desktop launcher ID so taskbar pins and the application icon can be associated with the running window.
 
 For an offline installation, download both assets from the same release:
 

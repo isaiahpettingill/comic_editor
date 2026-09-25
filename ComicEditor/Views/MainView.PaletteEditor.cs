@@ -121,7 +121,7 @@ public partial class MainView
             })));
         foreach (var action in actions.Children) action.Margin = new Thickness(0, 0, 4, 4);
         body.Children.Add(actions); body.Children.Add(Row(Label("Colors"), count));
-        body.Children.Add(new ScrollViewer { Name = "PaletteEditorViewport", Content = swatches, MaxHeight = touchLayout ? 84 : 175, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        body.Children.Add(new ScrollViewer { Name = "PaletteEditorViewport", Content = swatches, MaxHeight = touchLayout ? 84 : 285, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         body.Children.Add(Row(caption, hex, sample));
         body.Children.Add(picker);
         var rgbGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,6,*,6,*") };
@@ -162,7 +162,7 @@ public partial class MainView
                 selection = clipboardSelection = null; CloseModal(); RefreshAll();
             }
             catch (Exception ex) { Report(ex.Message, true); }
-        });
+        }, maxWidth: touchLayout ? 540 : 920);
         _ = Run(() => RefreshPresets());
     }
 }

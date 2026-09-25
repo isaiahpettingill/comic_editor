@@ -25,6 +25,7 @@ public partial class CanvasTests
             var view = new MainView(touch); var window = new Window { Content = view, Width = touch ? 320 : 1000, Height = touch ? 568 : 800 };
             window.Show(); _ = Capture(window); var editor = State(view); var original = editor.Scene.Palette.ToArray();
             Invoke(view, "EditPalette"); _ = Capture(window);
+            if (!touch) Assert.True(Named<Border>(window, "ModalCard").Bounds.Width >= 800);
             Click(window, Named<Button>(window, "LoadPalettePreset"));
             Assert.Equal(2, Named<WrapPanel>(window, "PaletteEditorSwatches").Children.Count);
             Named<TextBox>(window, "PaletteEditorHex").Text = "#112233"; _ = Capture(window);

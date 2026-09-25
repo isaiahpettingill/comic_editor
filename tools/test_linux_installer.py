@@ -39,7 +39,7 @@ class LinuxInstallerTests(unittest.TestCase):
             files = {
                 "ComicEditor.Desktop": f"#!/bin/sh\nprintf '{version}:%s\\n' \"$*\"\n",
                 "compiler/comic-compile": "#!/bin/sh\nprintf 'compiler:%s\\n' \"$*\"\n",
-                "comic-editor.svg": "<svg xmlns='http://www.w3.org/2000/svg'/>",
+                "comic-editor.svg": f"<svg xmlns='http://www.w3.org/2000/svg'><title>{version}</title></svg>",
                 "LICENSE": "0BSD",
             }
             if extra:
@@ -78,6 +78,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertFalse(desktop.is_symlink())
         self.assertIn('Exec="', desktop.read_text())
         self.assertIn('" %f', desktop.read_text())
+        self.assertIn("StartupWMClass=org.comiceditor.storyboard", desktop.read_text())
         self.assertIn(
             "MimeType=application/vnd.comiceditor.cutscene;", desktop.read_text()
         )
@@ -85,16 +86,17 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn('pattern="*.ctsc"', mime.read_text())
         self.assertIn('pattern="*.cutscene"', mime.read_text())
         self.assertIn(r"\\$", desktop.read_text())
-        self.assertTrue(
-            (
-                self.data / "icons/hicolor/scalable/apps/org.comiceditor.storyboard.svg"
-            ).is_file()
-        )
+        icon = self.data / "icons/hicolor/scalable/apps/org.comiceditor.storyboard.svg"
+        self.assertTrue(icon.is_file())
+        self.assertFalse(icon.is_symlink())
+        self.assertIn("one", icon.read_text())
         document = self.data / "example.cutscene"
         document.write_text("keep this project")
         self.make_archive("two")
         self.run_installer("--archive", self.archive)
         self.assertEqual(self.command("comic-editor"), "two:\n")
+        self.assertFalse(icon.is_symlink())
+        self.assertIn("two", icon.read_text())
         self.assertEqual(len(list((self.root / "releases").iterdir())), 1)
         # Rerunning an installation is also supported.
         self.run_installer("--archive", self.archive)
@@ -174,6 +176,23 @@ class LinuxInstallerTests(unittest.TestCase):
         self.run_installer("--archive", self.archive, success=False)
         self.assertEqual(command.read_text(), "unrelated")
         self.assertFalse(self.root.exists())
+
+    def test_repair_recovers_damaged_desktop_and_icon_without_replacing_commands(self):
+        self.run_installer("--archive", self.archive)
+        desktop = self.data / "applications/org.comiceditor.storyboard.desktop"
+        icon = self.data / "icons/hicolor/scalable/apps/org.comiceditor.storyboard.svg"
+        desktop.write_text("damaged desktop entry")
+        icon.write_text("damaged icon")
+        self.run_installer("--archive", self.archive, success=False)
+        self.run_installer("--archive", self.archive, "--repair")
+        self.assertIn("X-ComicEditor-Managed=true", desktop.read_text())
+        self.assertIn("<title>one</title>", icon.read_text())
+        self.assertEqual(self.command("comic-editor"), "one:\n")
+        command = self.bin / "comic-compile"
+        command.unlink()
+        command.write_text("user replacement")
+        self.run_installer("--archive", self.archive, "--repair", success=False)
+        self.assertEqual(command.read_text(), "user replacement")
 
     def test_unsafe_and_incomplete_archives_are_rejected(self):
         self.make_archive("one", {"../escaped": "bad"})

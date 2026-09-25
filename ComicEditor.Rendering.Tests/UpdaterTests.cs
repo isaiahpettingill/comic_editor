@@ -251,6 +251,59 @@ public class UpdaterTests
         Assert.False(Directory.Exists(plan.Backup)); Assert.True(Directory.Exists(plan.Target));
     }
     [Fact]
+    public void LinuxManagedUpdateRepairsLauncherAndReplacesIconSymlink()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var temp = new Temporary();
+        var data = Path.Combine(temp.Root, "data");
+        var root = Path.Combine(data, "comic-editor");
+        var app = Path.Combine(root, "releases", "build.test", "app");
+        Directory.CreateDirectory(app);
+        File.WriteAllText(Path.Combine(root, ".installer-owned"), "ComicEditor per-user installation v1\n");
+        var template = Path.Combine(root, "comic-editor.desktop");
+        File.WriteAllText(template, "[Desktop Entry]\nType=Application\nName=ComicEditor\nX-ComicEditor-Managed=true\n");
+        File.WriteAllText(Path.Combine(app, "comic-editor.svg"), "<svg>old icon</svg>");
+        File.WriteAllText(Path.Combine(app, "update.json"), Manifest("linux-x64", "1.0.0"));
+        File.WriteAllText(Path.Combine(app, "ComicEditor.Desktop"), "old executable");
+        Directory.CreateSymbolicLink(Path.Combine(root, "current"), app);
+        var desktop = Path.Combine(data, "applications", "org.comiceditor.storyboard.desktop");
+        var icon = Path.Combine(data, "icons", "hicolor", "scalable", "apps", "org.comiceditor.storyboard.svg");
+        Directory.CreateDirectory(Path.GetDirectoryName(desktop)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(icon)!);
+        File.WriteAllText(desktop, "damaged desktop entry");
+        File.CreateSymbolicLink(icon, Path.Combine(root, "current", "comic-editor.svg"));
+
+        Assert.Equal(root, LinuxDesktopIntegration.ManagedRoot(Path.Combine(root, "current")));
+        var archive = Path.Combine(temp.Root, "ComicEditor-linux-x64.tar.gz");
+        using (var file = File.Create(archive))
+        using (var gzip = new GZipStream(file, CompressionMode.Compress))
+        using (var writer = new TarWriter(gzip))
+            foreach (var (name, contents) in new Dictionary<string, string>
+            {
+                ["update.json"] = Manifest("linux-x64", "1.2.3"),
+                ["ComicEditor.Desktop"] = "new executable",
+                ["comic-editor.svg"] = "<svg>new icon</svg>"
+            })
+            {
+                using var dataStream = new MemoryStream(Encoding.UTF8.GetBytes(contents));
+                writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, name) { DataStream = dataStream, Mode = (UnixFileMode)0x1ed });
+            }
+        var bytes = File.ReadAllBytes(archive);
+        var release = new UpdateRelease(new Version(1, 2, 3), "linux-x64", Path.GetFileName(archive),
+            new Uri("https://example.test/archive"), Convert.ToHexString(SHA256.HashData(bytes)), bytes.Length);
+        var work = Path.Combine(temp.Root, "work");
+        var plan = UpdateInstaller.Prepare(archive, release, Path.Combine(root, "current"), work);
+        UpdateInstaller.Apply(plan);
+        LinuxDesktopIntegration.Repair(plan.Target);
+        Assert.Equal("new executable", File.ReadAllText(Path.Combine(root, "current", "ComicEditor.Desktop")));
+        Assert.Equal(File.ReadAllText(template), File.ReadAllText(desktop));
+        Assert.Contains("StartupWMClass=org.comiceditor.storyboard", File.ReadAllText(desktop));
+        Assert.Null(new FileInfo(icon).LinkTarget);
+        Assert.Equal("<svg>new icon</svg>", File.ReadAllText(icon));
+        UpdateInstaller.Complete(Path.Combine(work, "plan.json"), Path.Combine(root, "current"));
+        Assert.False(Directory.Exists(plan.Backup));
+    }
+    [Fact]
     public void FailedSwapRollsBackBeforeRelaunch()
     {
         using var temp = new Temporary(); var (plan, _) = Prepare(temp, false); var calls = 0;
@@ -261,6 +314,20 @@ public class UpdaterTests
         }));
         Assert.Equal("old executable", File.ReadAllText(Path.Combine(plan.Target, plan.Executable)));
         Assert.False(Directory.Exists(plan.Backup)); Assert.True(Directory.Exists(plan.Prepared));
+    }
+    [Fact]
+    public void LinuxHelperRollsBackWhenUpdatedExecutableCannotStart()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var temp = new Temporary(); var (plan, work) = Prepare(temp, tar: true);
+        plan.ParentProcess = int.MaxValue;
+        var planFile = Path.Combine(work, "plan.json");
+        File.WriteAllText(planFile, System.Text.Json.JsonSerializer.Serialize(plan, UpdateJson.Default.UpdatePlan));
+        File.WriteAllText(Path.Combine(work, "apply.approved"), plan.Token);
+        Assert.Equal(1, UpdateInstaller.RunHelper(planFile));
+        Assert.Equal("old executable", File.ReadAllText(Path.Combine(plan.Target, plan.Executable)));
+        Assert.False(Directory.Exists(plan.Backup));
+        Assert.StartsWith("Update failed:", File.ReadAllText(Path.Combine(work, "install.log")));
     }
     [Fact]
     public void RejectsMissingExecutableInsteadOfReusingTheOldOne()

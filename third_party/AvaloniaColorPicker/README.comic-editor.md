@@ -28,7 +28,7 @@ the SDK pinned in `global.json`, and run from the repository root:
 dotnet publish ComicEditor.Desktop -c Release -r win-x64 -o rebuilt
 ```
 
-Use `linux-x64`, `osx-x64`, or `osx-arm64` on the corresponding host instead.
+Use `linux-x64` or `osx-arm64` on the corresponding host instead.
 Linux requires clang and zlib development headers. Windows requires Visual
 Studio's C++ build tools. Android and browser build commands and dependencies
 are recorded in `.github/workflows/release.yml`. NuGet restores dependencies.

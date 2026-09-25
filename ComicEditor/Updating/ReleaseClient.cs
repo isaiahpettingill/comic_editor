@@ -25,7 +25,6 @@ public static class ReleaseClient
     {
         "win-x64" => "ComicEditor-win-x64-setup.exe",
         "linux-x64" => "ComicEditor-linux-x64.tar.gz",
-        "osx-x64" => "ComicEditor-osx-x64.tar.gz",
         "osx-arm64" => "ComicEditor-osx-arm64.tar.gz",
         _ => null
     };

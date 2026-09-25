@@ -14,7 +14,7 @@ def write_manifest(directory: Path, runtime: str, ref: str) -> None:
         raise ValueError(
             f"Release tag {ref} does not match application version {version}"
         )
-    if runtime not in {"win-x64", "linux-x64", "osx-x64", "osx-arm64"}:
+    if runtime not in {"win-x64", "linux-x64", "osx-arm64"}:
         raise ValueError(f"Unsupported runtime: {runtime}")
     (directory / "update.json").write_text(
         json.dumps({"version": version, "runtime": runtime}, indent=2) + "\n",

@@ -99,7 +99,6 @@ public class UpdaterTests
     [Theory]
     [InlineData("win-x64")]
     [InlineData("linux-x64")]
-    [InlineData("osx-x64")]
     [InlineData("osx-arm64")]
     public void SelectsNewStableAssetsForEachPlatform(string runtime)
     {
@@ -110,6 +109,8 @@ public class UpdaterTests
         json["prerelease"] = true; Assert.Null(ReleaseClient.Select(json.ToJsonString(), new(new Version(1, 0), runtime)));
         json["prerelease"] = false; json["draft"] = true; Assert.Null(ReleaseClient.Select(json.ToJsonString(), new(new Version(1, 0), runtime)));
     }
+    [Fact]
+    public void IntelMacIsNotAnUpdateTarget() => Assert.Null(ReleaseClient.AssetName("osx-x64"));
     [Fact]
     public void WindowsDefaultsToInstallerEvenWhenLegacyZipIsListedFirst()
     {

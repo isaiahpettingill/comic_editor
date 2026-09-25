@@ -67,8 +67,6 @@ jobs:
             rid: win-x64
           - os: ubuntu-24.04
             rid: linux-x64
-          - os: macos-15-intel
-            rid: osx-x64
           - os: macos-15
             rid: osx-arm64
     runs-on: ${{ matrix.os }}
@@ -132,16 +130,7 @@ jobs:
         run: |
           $executable = if ($IsWindows) { 'comic-compile.exe' } else { 'comic-compile' }
           $env:COMIC_TEST_COMPILER = (Resolve-Path "artifacts/${{ matrix.rid }}/compiler/$executable").Path
-          for ($attempt = 1; $attempt -le 2; $attempt++) {
-            $output = dotnet test ComicEditor.Rendering.Tests -c Release --filter NativeCompilerTests 2>&1
-            $result = $LASTEXITCODE
-            $output | Out-Host
-            if ($result -eq 0) { break }
-            $nativeCrash = $IsMacOS -and '${{ matrix.rid }}' -eq 'osx-x64' -and ($output -join "`n") -match 'compiler exited 139|Actual:\s+139'
-            if (!$nativeCrash -or $attempt -eq 2) { exit $result }
-            Write-Warning 'Intel macOS native compiler exited with signal 11; retrying the smoke test once.'
-            Start-Sleep -Seconds 3
-          }
+          dotnet test ComicEditor.Rendering.Tests -c Release --filter NativeCompilerTests
       - name: Zip Windows build
         if: runner.os == 'Windows'
         shell: pwsh
@@ -319,7 +308,7 @@ jobs:
       - name: Require and verify all desktop release signatures
         shell: bash
         run: |
-          node tools/release-signing.mjs verify dist/ComicEditor-win-x64.zip dist/ComicEditor-win-x64-setup.exe dist/ComicEditor-linux-x64.tar.gz dist/ComicEditor-osx-x64.tar.gz dist/ComicEditor-osx-arm64.tar.gz dist/ComicEditor-osx-x64-app.zip dist/ComicEditor-osx-arm64-app.zip dist/install-comic-editor.sh
+          node tools/release-signing.mjs verify dist/ComicEditor-win-x64.zip dist/ComicEditor-win-x64-setup.exe dist/ComicEditor-linux-x64.tar.gz dist/ComicEditor-osx-arm64.tar.gz dist/ComicEditor-osx-arm64-app.zip dist/install-comic-editor.sh
           cp signing/desktop-public.pem dist/
           cp signing/android-certificate.sha256 dist/
           python3 tools/ci-version.py source dist/ComicEditor-source.zip

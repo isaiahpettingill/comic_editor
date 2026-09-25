@@ -34,11 +34,20 @@ public partial class MainView
                 }
             });
             var number = Label((i + 1).ToString("D3")); number.TextAlignment = TextAlignment.Center; AddAt(row, number, 1);
-            var button = Button("", () => { SelectFrame(index); if (compact) ShowCompactPage(CompactPage.Draw); }); button.Content = row; button.Height = 74;
-            button.HorizontalAlignment = HorizontalAlignment.Stretch; button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-            button.Padding = new Thickness(4);
-            if (i == editor.FrameIndex) { button.BorderBrush = Brush(UiTheme.Accent); button.Background = Brush(UiTheme.Selection); }
-            storyboard.Children.Add(button);
+            var card = new Border
+            {
+                Name = $"FrameRow{i}",
+                Child = row,
+                Height = 74,
+                Padding = new Thickness(4),
+                Focusable = true,
+                Background = Brush(i == editor.FrameIndex ? UiTheme.Selection : UiTheme.Surface),
+                BorderBrush = Brush(i == editor.FrameIndex ? UiTheme.Accent : UiTheme.Border),
+                BorderThickness = new Thickness(i == editor.FrameIndex ? 2 : 1)
+            };
+            ToolTip.SetTip(card, "Click to open; drag to reorder");
+            AttachReorder(card, storyboard, index, true, () => { SelectFrame(index); if (compact) ShowCompactPage(CompactPage.Draw); });
+            storyboard.Children.Add(card);
         }
     }
 
@@ -80,20 +89,29 @@ public partial class MainView
         inspector.Children.Clear();
         inspector.Children.Add(Label("Layers", true));
         var rows = new StackPanel { Spacing = 1 };
-        void LayerRow(string name, bool visible, bool selected, Action select, Action toggle, Action? rename)
+        void LayerRow(string name, bool visible, bool selected, Action select, Action toggle, Action? rename, int? layerIndex = null)
         {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions(compact ? "44,*" : "32,*"), Background = selected ? Brush(UiTheme.Selection) : Brush(UiTheme.Surface) };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions(compact ? "44,*" : "32,*") };
             var eye = Icon(visible ? PackIconMaterialKind.EyeOutline : PackIconMaterialKind.EyeOffOutline, visible ? "Hide " + name : "Show " + name, toggle);
             eye.Background = Brushes.Transparent; eye.BorderThickness = default; row.Children.Add(eye);
-            var item = Button(name, select); item.HorizontalAlignment = HorizontalAlignment.Stretch;
-            item.HorizontalContentAlignment = HorizontalAlignment.Left; item.Background = Brushes.Transparent; item.BorderThickness = default;
-            if (rename is not null)
+            if (layerIndex is int index)
             {
-                item.DoubleTapped += (_, _) => rename();
-                var renameItem = new MenuItem { Header = "Rename…" }; renameItem.Click += (_, _) => rename();
+                var item = new Border { Child = Label(name), Height = compact ? 44 : 32, Padding = new Thickness(7, 4), Focusable = true, Background = Brushes.Transparent };
+                ToolTip.SetTip(item, "Click to select; drag to reorder; double-click to rename");
+                item.DoubleTapped += (_, _) => rename?.Invoke();
+                var renameItem = new MenuItem { Header = "Rename…" }; renameItem.Click += (_, _) => rename?.Invoke();
                 item.ContextMenu = new ContextMenu { Items = { renameItem } };
+                AttachReorder(item, rows, index, false, select);
+                AddAt(row, item, 1);
+                rows.Children.Add(new Border { Name = $"LayerRow{index}", Child = row, Background = selected ? Brush(UiTheme.Selection) : Brush(UiTheme.Surface) });
             }
-            AddAt(row, item, 1); rows.Children.Add(row);
+            else
+            {
+                var item = Button(name, select); item.HorizontalAlignment = HorizontalAlignment.Stretch;
+                item.HorizontalContentAlignment = HorizontalAlignment.Left; item.Background = Brushes.Transparent; item.BorderThickness = default;
+                AddAt(row, item, 1); row.Background = selected ? Brush(UiTheme.Selection) : Brush(UiTheme.Surface);
+                rows.Children.Add(row);
+            }
         }
         LayerRow($"Text ({editor.Frame.TextObjects.Count})", editor.Frame.TextVisible, editor.Tool == Tool.Text,
             () => { editor.Tool = Tool.Text; RefreshTools(); RefreshInspector(); },
@@ -102,8 +120,13 @@ public partial class MainView
         {
             var index = i; var layer = editor.Frame.Layers[i];
             LayerRow(layer.Name, layer.Visible, editor.Tool != Tool.Text && editor.LayerIndex == i,
-                () => { editor.LayerIndex = index; if (editor.Tool == Tool.Text) editor.Tool = Tool.Pixel; RefreshTools(); RefreshInspector(); },
-                () => { editor.BeforeChange(); layer.Visible = !layer.Visible; RefreshAll(); }, () => RenameLayer(layer));
+                () =>
+                {
+                    if (editor.LayerIndex == index && editor.Tool != Tool.Text) return;
+                    editor.LayerIndex = index; if (editor.Tool == Tool.Text) editor.Tool = Tool.Pixel;
+                    RefreshTools(); RefreshInspector();
+                },
+                () => { editor.BeforeChange(); layer.Visible = !layer.Visible; RefreshAll(); }, () => RenameLayer(layer), index);
         }
         inspector.Children.Add(new ScrollViewer { Content = rows, MaxHeight = compact ? 180 : 140 });
         var layerActions = Row(Icon(PackIconMaterialKind.Plus, "Add artwork layer", () =>
@@ -234,8 +257,7 @@ public partial class MainView
     {
         if (editor.Tool == Tool.Text) return;
         var target = editor.LayerIndex + delta; if (target < 0 || target >= editor.Frame.Layers.Count) return;
-        editor.BeforeChange(); var layer = editor.Layer; editor.Frame.Layers.RemoveAt(editor.LayerIndex);
-        editor.Frame.Layers.Insert(target, layer); editor.LayerIndex = target; RefreshAll();
+        editor.ReorderLayer(editor.LayerIndex, target); RefreshAll();
     }
 
     private void AddText()

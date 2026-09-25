@@ -95,6 +95,19 @@ public partial class CanvasTests
 
 public sealed class SessionTests
 {
+    [Fact]
+    public void RecoveryCaptureReusesProjectBytesFromSave()
+    {
+        var editor = new EditorState();
+        editor.Scene.Palette[0] = "#123456";
+        var project = CutsceneFile.Write(editor.Scene);
+        var snapshot = SessionSnapshot.Capture(editor, project);
+        Assert.Same(project, snapshot.Project);
+        Assert.True(snapshot.Dirty);
+        editor.MarkSaved(project);
+        Assert.False(SessionSnapshot.Capture(editor, project).Dirty);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

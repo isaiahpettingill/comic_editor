@@ -80,12 +80,13 @@ public partial class MainView
         try
         {
             var scene = editor.Scene; var bytes = CutsceneFile.Write(scene);
-            await SaveSessionSafely();
-            await new ProjectFile(file, null).Write(bytes, checkExternalChanges: false);
+            var recovery = SaveSessionSafely(bytes);
+            try { await new ProjectFile(file, null).Write(bytes, checkExternalChanges: false); }
+            finally { await recovery; }
             if (ReferenceEquals(editor.Scene, scene))
             {
                 await BindFile(file, bytes); editor.FileName = file.Name; editor.MarkSaved(bytes);
-                SetSaveMessage($"Saved {file.Name} at {DateTime.Now:t}."); RefreshTitle(); await SaveSessionSafely();
+                SetSaveMessage($"Saved {file.Name} at {DateTime.Now:t}."); RefreshTitle();
             }
         }
         catch (Exception ex) { await ShowError(ex.Message); }

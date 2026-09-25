@@ -23,8 +23,9 @@ public static class CutsceneFile
             var target = new Wire.Frame { Id = frame.Id, TextHidden = !frame.TextVisible };
             foreach (var layer in frame.Layers)
             {
-                var pixels = layer.Rows.SelectMany(row => Enumerable.Range(0, scene.Width)
-                    .Select(x => Convert.ToByte(row.Substring(x * 2, 2), 16))).ToArray();
+                var pixels = new byte[scene.Width * scene.Height];
+                for (var y = 0; y < scene.Height; y++)
+                    Convert.FromHexString(layer.Rows[y].AsSpan(), pixels.AsSpan(y * scene.Width, scene.Width), out _, out _);
                 target.Layers.Add(new Wire.ArtworkLayer { Id = layer.Id, Name = layer.Name, Visible = layer.Visible, Pixels = ByteString.CopyFrom(pixels) });
             }
             foreach (var obj in frame.TextObjects)

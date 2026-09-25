@@ -41,7 +41,7 @@ public partial class MainView
             }
             finally { IsEnabled = true; }
             sessionReady = true;
-            SessionStorage.Flush = SaveSessionSafely;
+            SessionStorage.Flush = FlushSession;
             sessionTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             sessionTimer.Tick += async (_, _) => await SessionTick(); sessionTimer.Start();
             if (TopLevel.GetTopLevel(this) is Window window) window.Closing += ClosingSession;
@@ -99,51 +99,55 @@ public partial class MainView
         SetSaveMessage("Choose Save to give this cutscene a file. Crash recovery is active.");
     }
 
-    private async Task SaveSession()
+    private async Task SaveSession(byte[]? project = null)
     {
         if (!sessionReady || !SessionStorage.Enabled || recoveryBlocked) return;
         await sessionLock.WaitAsync();
         try
         {
-            var snapshot = SessionSnapshot.Capture(editor);
+            var snapshot = SessionSnapshot.Capture(editor, project);
             snapshot.Bookmark = currentBookmark; snapshot.LocalPath = currentFile?.File.TryGetLocalPath(); snapshot.DiskHash = currentFile?.DiskHash;
-            var json = snapshot.Serialize(); if (json == lastSessionJson) return;
+            var json = await Task.Run(snapshot.Serialize); if (json == lastSessionJson) return;
             await SessionStorage.Write(json); lastSessionJson = json;
         }
         finally { sessionLock.Release(); }
     }
 
-    private async Task SaveSessionSafely()
+    private async Task SaveSessionSafely(byte[]? project = null)
     {
-        try { await SaveSession(); }
+        try { await SaveSession(project); }
         catch (Exception ex) { SetSaveMessage("Recovery could not be saved: " + ex.Message, true); }
     }
+
+    private Task FlushSession() => SaveSessionSafely();
 
     private async Task SessionTick()
     {
         await OpenPendingFiles();
         if (fileBusy || updateInstalling || dragging || pathBase is not null || cancelTouchEdit is not null) return;
-        await SaveSessionSafely();
-        if (!editor.Preferences.AutoSave || autoSavePaused || currentFile is null || !editor.IsDirty ||
-            DateTimeOffset.UtcNow - lastAutoSave < TimeSpan.FromMinutes(editor.Preferences.AutoSaveMinutes)) return;
         // Browser save handles may represent downloads, requiring a user gesture each time.
-        if (OperatingSystem.IsBrowser()) return;
-        await SaveCurrent(automatic: true);
+        if (editor.Preferences.AutoSave && !autoSavePaused && currentFile is not null && !OperatingSystem.IsBrowser() &&
+            DateTimeOffset.UtcNow - lastAutoSave >= TimeSpan.FromMinutes(editor.Preferences.AutoSaveMinutes))
+            await SaveCurrent(automatic: true);
+        else await SaveSessionSafely();
     }
 
     private async Task SaveCurrent(bool automatic)
     {
         if (currentFile is null || fileBusy) return;
         var file = currentFile; var scene = editor.Scene; var bytes = CutsceneFile.Write(scene);
+        if (automatic && !editor.DiffersFromSaved(bytes)) { await SaveSessionSafely(bytes); return; }
         fileBusy = true;
         try
         {
-            await SaveSessionSafely(); // Keep recovery intact even if a provider write is interrupted.
-            await file.Write(bytes, checkExternalChanges: true);
+            // Recovery and the project file have independent destinations.
+            var recovery = SaveSessionSafely(bytes);
+            try { await file.Write(bytes, checkExternalChanges: true); }
+            finally { await recovery; }
             if (ReferenceEquals(editor.Scene, scene) && ReferenceEquals(currentFile, file)) editor.MarkSaved(bytes);
             lastAutoSave = DateTimeOffset.UtcNow; autoSavePaused = false;
             SetSaveMessage($"{(automatic ? "Autosaved" : "Saved")} {file.File.Name} at {DateTime.Now:t}.");
-            RefreshTitle(); await SaveSessionSafely();
+            RefreshTitle(); // The periodic recovery tick will mark this snapshot clean.
         }
         catch (Exception ex)
         {

@@ -67,7 +67,7 @@ public partial class MainView : UserControl
         };
         KeyDown += OnKeyDown;
         AttachedToVisualTree += StartSession;
-        DetachedFromVisualTree += (_, _) => { sessionTimer?.Stop(); if (SessionStorage.Flush == SaveSessionSafely) SessionStorage.Flush = null; };
+        DetachedFromVisualTree += (_, _) => { sessionTimer?.Stop(); if (SessionStorage.Flush == FlushSession) SessionStorage.Flush = null; };
         DetachedFromVisualTree += (_, _) => StopUpdates();
         DetachedFromVisualTree += (_, _) => StopSpray();
         DetachedFromVisualTree += (_, _) => ResetCanvasNavigation();

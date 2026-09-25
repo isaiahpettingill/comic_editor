@@ -11,7 +11,8 @@ public sealed class EditorState
     private byte[]? saved;
     public bool CanUndo => undo.Count > 0;
     public bool CanRedo => redo.Count > 0;
-    public bool IsDirty => saved is not null && !CutsceneFile.Write(Scene).AsSpan().SequenceEqual(saved);
+    public bool IsDirty => DiffersFromSaved(CutsceneFile.Write(Scene));
+    public bool DiffersFromSaved(ReadOnlySpan<byte> project) => saved is not null && !project.SequenceEqual(saved);
     public void MarkSaved(byte[]? written = null) => saved = written ?? CutsceneFile.Write(Scene);
     public void MarkUnsaved() => saved = [];
     public EditorState(EditorPreferences? preferences = null)
@@ -197,11 +198,26 @@ public sealed class EditorState
 
     public void MoveFrame(int delta)
     {
-        var target = FrameIndex + delta;
-        if (target < 0 || target >= Scene.Frames.Count) return;
+        ReorderFrame(FrameIndex, FrameIndex + delta);
+    }
+
+    public void ReorderFrame(int from, int target)
+    {
+        if (from < 0 || from >= Scene.Frames.Count || target < 0 || target >= Scene.Frames.Count || from == target) return;
         BeforeChange();
-        var frame = Frame;
-        Scene.Frames.RemoveAt(FrameIndex); Scene.Frames.Insert(target, frame);
+        var frame = Scene.Frames[from];
+        Scene.Frames.RemoveAt(from); Scene.Frames.Insert(target, frame);
         FrameIndex = target;
+        SelectedTextId = null;
+        LayerIndex = Math.Min(LayerIndex, Frame.Layers.Count - 1);
+    }
+
+    public void ReorderLayer(int from, int target)
+    {
+        var layers = Frame.Layers;
+        if (from < 0 || from >= layers.Count || target < 0 || target >= layers.Count || from == target) return;
+        BeforeChange();
+        var layer = layers[from]; layers.RemoveAt(from); layers.Insert(target, layer);
+        LayerIndex = target;
     }
 }

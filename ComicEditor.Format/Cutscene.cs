@@ -107,10 +107,19 @@ public sealed class Cutscene
             if (frame.Layers.Count == 0) throw new InvalidDataException("Every frame needs an artwork layer.");
             foreach (var layer in frame.Layers)
             {
-                if (layer.Rows.Count != Height || layer.Rows.Any(r => r.Length != Width * 2 ||
-                    Enumerable.Range(0, Width).Any(x => !byte.TryParse(r.AsSpan(x * 2, 2), System.Globalization.NumberStyles.HexNumber,
-                        System.Globalization.CultureInfo.InvariantCulture, out var index) || (index != 255 && index >= Palette.Count))))
+                if (layer.Rows.Count != Height)
                     throw new InvalidDataException("Artwork must contain one valid palette byte per pixel.");
+                foreach (var row in layer.Rows)
+                {
+                    if (row.Length != Width * 2) throw new InvalidDataException("Artwork must contain one valid palette byte per pixel.");
+                    for (var x = 0; x < Width; x++)
+                    {
+                        var high = HexDigit(row[x * 2]); var low = HexDigit(row[x * 2 + 1]);
+                        var index = high * 16 + low;
+                        if (high < 0 || low < 0 || index != 255 && index >= Palette.Count)
+                            throw new InvalidDataException("Artwork must contain one valid palette byte per pixel.");
+                    }
+                }
             }
             foreach (var obj in frame.TextObjects)
                 if (string.IsNullOrWhiteSpace(obj.Key) || obj.Width <= 0 || obj.Height <= 0 || obj.FontSize <= 0 ||
@@ -119,6 +128,14 @@ public sealed class Cutscene
                     throw new InvalidDataException("Invalid text object.");
         }
     }
+
+    private static int HexDigit(char value) => value switch
+    {
+        >= '0' and <= '9' => value - '0',
+        >= 'A' and <= 'F' => value - 'A' + 10,
+        >= 'a' and <= 'f' => value - 'a' + 10,
+        _ => -1
+    };
 }
 
 public sealed class Frame

@@ -14,13 +14,17 @@ public sealed class SessionSnapshot
     public int Frame { get; set; }
     public bool Dirty { get; set; }
 
-    public static SessionSnapshot Capture(EditorState editor) => new()
+    public static SessionSnapshot Capture(EditorState editor, byte[]? project = null)
     {
-        Project = CutsceneFile.Write(editor.Scene),
-        FileName = editor.FileName,
-        Frame = editor.FrameIndex,
-        Dirty = editor.IsDirty
-    };
+        project ??= CutsceneFile.Write(editor.Scene);
+        return new SessionSnapshot
+        {
+            Project = project,
+            FileName = editor.FileName,
+            Frame = editor.FrameIndex,
+            Dirty = editor.DiffersFromSaved(project)
+        };
+    }
     public void Restore(EditorState editor)
     {
         editor.Load(Project, FileName);

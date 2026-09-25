@@ -73,7 +73,7 @@ Palette references: [Catppuccin](https://github.com/catppuccin/palette), [Solari
 
 ## Editing
 
-Use the storyboard's duplicate icon to create a new frame from the current one. **Alt+Left/Right** selects adjacent frames. **Compare** fits previous and current frames side by side on desktop. **Onion skin** overlays previous artwork, with an adjacent opacity control. Drag pane headers to swap desktop panes and drag dividers to resize them. The conventional menu bar includes File, Edit, Frame, View, Canvas, Palette, and Languages. Undo and Redo buttons remain visible in the toolbar.
+Use the storyboard's duplicate icon to create a new frame from the current one. Drag a frame thumbnail to reorder it; the insertion line shows its destination. **Alt+Left/Right** selects adjacent frames. **Compare** fits previous and current frames side by side on desktop. **Onion skin** overlays previous artwork, with an adjacent opacity control. Drag pane headers to swap desktop panes and drag dividers to resize them. The conventional menu bar includes File, Edit, Frame, View, Canvas, Palette, and Languages. Undo and Redo buttons remain visible in the toolbar.
 
 Android keeps a touch layout in both portrait and landscape. Draw, Frames, Layers/text, and Colors buttons switch the workspace without permanently stacking panels around the canvas. The current tool icon opens the tool picker; Options opens the selected tool's settings. The layers icon beside zoom opens onion-skin settings. The top bar keeps Undo, Redo, the frame count, and the preview language accessible. Small desktop/browser windows use this compact layout too.
 
@@ -89,7 +89,7 @@ New text reuses the last applied font, size, bold, and italic style. New project
 
 Each cutscene has its own 2–255 color palette (128 by default); index 255 is reserved for transparency. Swatches flow across the palette pane. Open **Palette → Palette editor…** or **Edit palette…** to change its size and colors, load a preset, or import/export a GIMP `.gpl` file. Right-click a swatch to edit just that color. Pressure uses normal pen/pointer pressure, falling back to full pressure for devices without it.
 
-Layer rows show visibility, names, and stacking order (topmost first). Double-click an artwork layer to rename it. Text has its own visibility row above artwork. Layer controls add, delete, raise, and lower artwork layers.
+Layer rows show visibility, names, and stacking order (topmost first). Drag an artwork layer's name to reorder it; the text row stays above artwork. Double-click an artwork layer to rename it. Text has its own visibility row above artwork. Layer controls add, delete, raise, and lower artwork layers.
 
 Choose **Text**, then **click and drag** to create its wrapping area. Clicking existing text selects it; dragging moves it, and its eight handles resize the area. **Delete** removes selected text when focus is outside an input field. Edit the selected language directly in the inspector; **Layout & style…** opens a modal for position, dimensions, font, size, style, and palette color. Apply and Cancel keep property edits atomic. Missing and overflowing translations are marked in the editor. Exported artwork never contains localization keys or selection markers.
 

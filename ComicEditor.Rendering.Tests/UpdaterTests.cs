@@ -317,6 +317,32 @@ public class UpdaterTests
         Assert.False(Directory.Exists(plan.Backup)); Assert.True(Directory.Exists(plan.Prepared));
     }
     [Fact]
+    public void WindowsAccessDeniedDuringSwapIsRetriedWithoutLosingTheInstall()
+    {
+        using var temp = new Temporary(); var (plan, _) = Prepare(temp, false); var attempts = 0;
+        UpdateInstaller.Apply(plan, (from, to) =>
+        {
+            if (from == plan.Prepared && ++attempts <= 2) throw new UnauthorizedAccessException(from);
+            Directory.Move(from, to);
+        }, _ => { });
+        Assert.Equal(3, attempts);
+        Assert.Equal("new executable", File.ReadAllText(Path.Combine(plan.Target, plan.Executable)));
+        Assert.Equal("old executable", File.ReadAllText(Path.Combine(plan.Backup, plan.Executable)));
+    }
+    [Fact]
+    public void PersistentAccessDeniedRestoresThePreviousInstall()
+    {
+        using var temp = new Temporary(); var (plan, _) = Prepare(temp, false);
+        Assert.Throws<UnauthorizedAccessException>(() => UpdateInstaller.Apply(plan, (from, to) =>
+        {
+            if (from == plan.Prepared) throw new UnauthorizedAccessException(from);
+            Directory.Move(from, to);
+        }, _ => { }));
+        Assert.Equal("old executable", File.ReadAllText(Path.Combine(plan.Target, plan.Executable)));
+        Assert.True(Directory.Exists(plan.Prepared));
+        Assert.False(Directory.Exists(plan.Backup));
+    }
+    [Fact]
     public void LinuxHelperRollsBackWhenUpdatedExecutableCannotStart()
     {
         if (!OperatingSystem.IsLinux()) return;

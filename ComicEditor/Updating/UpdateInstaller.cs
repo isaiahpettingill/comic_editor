@@ -182,14 +182,32 @@ public static class UpdateInstaller
             !Version.TryParse(plan.PreviousVersion, out _))) throw new InvalidDataException("Invalid Windows installer plan.");
         return plan;
     }
-    public static void Apply(UpdatePlan plan, Action<string, string>? moveDirectory = null)
+    private static void MoveWithRetry(string source, string destination, Action<string, string> moveDirectory, Action<TimeSpan> pause)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { moveDirectory(source, destination); return; }
+            catch (Exception error) when (attempt < 14 && IsTransientMoveFailure(error))
+            {
+                // NSIS, Explorer, or an antivirus scanner can briefly retain a handle
+                // after staging. Keep both directory names intact until a move succeeds.
+                pause(TimeSpan.FromMilliseconds(Math.Min(1000, 100 * (attempt + 1))));
+            }
+        }
+    }
+
+    private static bool IsTransientMoveFailure(Exception error) => error is UnauthorizedAccessException ||
+        error is IOException io && (io.HResult & 0xffff) is 5 or 32 or 33;
+
+    public static void Apply(UpdatePlan plan, Action<string, string>? moveDirectory = null, Action<TimeSpan>? pause = null)
     {
         moveDirectory ??= Directory.Move;
+        pause ??= Thread.Sleep;
         if (File.ReadAllText(Path.Combine(plan.Prepared, ".update-token")) != plan.Token || ReleaseClient.ReadInstallation(plan.Target)?.Runtime != plan.Runtime)
             throw new InvalidDataException("Update staging does not match this installation.");
-        moveDirectory(plan.Target, plan.Backup);
-        try { moveDirectory(plan.Prepared, plan.Target); }
-        catch { moveDirectory(plan.Backup, plan.Target); throw; }
+        MoveWithRetry(plan.Target, plan.Backup, moveDirectory, pause);
+        try { MoveWithRetry(plan.Prepared, plan.Target, moveDirectory, pause); }
+        catch { MoveWithRetry(plan.Backup, plan.Target, moveDirectory, pause); throw; }
     }
     public static int RunHelper(string planFile)
     {
@@ -222,8 +240,8 @@ public static class UpdateInstaller
             {
                 try
                 {
-                    if (Directory.Exists(plan.Target)) Directory.Move(plan.Target, plan.Prepared);
-                    Directory.Move(plan.Backup, plan.Target);
+                    if (Directory.Exists(plan.Target)) MoveWithRetry(plan.Target, plan.Prepared, Directory.Move, Thread.Sleep);
+                    MoveWithRetry(plan.Backup, plan.Target, Directory.Move, Thread.Sleep);
                     if (plan.InstallerPackage is not null && File.Exists(Path.Combine(plan.Target, "Uninstall.exe")))
                         WindowsSetup.Register(plan, previous: true);
                     else if (plan.InstallerPackage is not null) WindowsSetup.Unregister(plan);

@@ -12,7 +12,7 @@ public sealed class ArtworkSelection
     public uint[] Pixels { get; }
     public bool[] Mask { get; }
     public ArtworkLayer Owner { get; set; }
-    public ArtworkSelection(ArtworkLayer layer, int x, int y, int width, int height, IReadOnlyList<(double X, double Y)>? polygon = null)
+    public ArtworkSelection(ArtworkLayer layer, int x, int y, int width, int height, IReadOnlyList<(double X, double Y)>? polygon = null, bool ellipse = false)
     {
         Owner = layer; X = x; Y = y; Width = width; Height = height;
         Pixels = new uint[width * height]; Mask = new bool[Pixels.Length];
@@ -20,7 +20,9 @@ public sealed class ArtworkSelection
             for (var px = 0; px < width; px++)
             {
                 var i = py * width + px;
-                Mask[i] = polygon is null || PaintRaster.Inside(polygon, x + px + .5, y + py + .5);
+                var nx = (px + .5 - width / 2.0) / (width / 2.0);
+                var ny = (py + .5 - height / 2.0) / (height / 2.0);
+                Mask[i] = (!ellipse || nx * nx + ny * ny <= 1) && (polygon is null || PaintRaster.Inside(polygon, x + px + .5, y + py + .5));
                 Pixels[i] = layer.IsRgba ? layer.RgbaPixel(x + px, y + py) : (uint)(layer.Pixel(x + px, y + py) + 1);
             }
     }

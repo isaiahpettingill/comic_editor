@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.VisualTree;
 using ComicEditor.Editing;
 using ComicEditor.Views;
 
@@ -15,6 +16,11 @@ public partial class CanvasTests
         {
             var view = new MainView(); var window = new Window { Content = view, Width = 1200, Height = 800 };
             window.Show(); _ = Capture(window);
+            var title = Named<Button>(window, "ProjectTab0");
+            var close = Named<Button>(window, "CloseProjectTab0");
+            var add = Named<Button>(window, "NewProjectTab");
+            Assert.Same(title.GetVisualAncestors().OfType<Border>().First(), close.GetVisualAncestors().OfType<Border>().First());
+            Assert.NotSame(title.GetVisualAncestors().OfType<Border>().First(), add.GetVisualAncestors().OfType<Border>().FirstOrDefault());
             var first = State(view); first.BeforeChange(); first.Layer.SetPixel(1, 1, 2);
             Invoke(view, "New"); _ = Capture(window);
             var second = State(view); Assert.NotSame(first, second);

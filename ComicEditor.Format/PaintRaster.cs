@@ -195,4 +195,57 @@ public static class PaintRaster
             }
         }
     }
+
+    public static void Blur(ArtworkLayer layer, int x0, int y0, int x1, int y1, int size, IReadOnlyList<string> palette)
+    {
+        var colors = layer.IsRgba ? [] : palette.Select(RgbaColor.Parse).ToArray();
+        var steps = Math.Max(Math.Abs(x1 - x0), Math.Abs(y1 - y0));
+        var radius = Math.Max(1, Math.Clamp(size, 1, 64) / 2);
+        var sampleRadius = Math.Clamp(size / 6, 1, 4);
+        for (var i = 0; i <= steps; i++)
+        {
+            var cx = steps == 0 ? x0 : x0 + (x1 - x0) * i / steps;
+            var cy = steps == 0 ? y0 : y0 + (y1 - y0) * i / steps;
+            var results = new List<(int X, int Y, uint Color)>();
+            for (var y = Math.Max(0, cy - radius); y <= Math.Min(layer.Rows.Count - 1, cy + radius); y++)
+                for (var x = Math.Max(0, cx - radius); x <= Math.Min(layer.Width - 1, cx + radius); x++)
+                {
+                    if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > radius * radius) continue;
+                    long red = 0, green = 0, blue = 0, alpha = 0;
+                    var count = 0;
+                    for (var sy = Math.Max(0, y - sampleRadius); sy <= Math.Min(layer.Rows.Count - 1, y + sampleRadius); sy++)
+                        for (var sx = Math.Max(0, x - sampleRadius); sx <= Math.Min(layer.Width - 1, x + sampleRadius); sx++)
+                        {
+                            var paletteIndex = layer.IsRgba ? -1 : layer.Pixel(sx, sy);
+                            var color = layer.IsRgba ? layer.RgbaPixel(sx, sy) : paletteIndex >= 0 ? colors[paletteIndex] : 0;
+                            var a = color & 255;
+                            red += ((color >> 24) & 255) * a;
+                            green += ((color >> 16) & 255) * a;
+                            blue += ((color >> 8) & 255) * a;
+                            alpha += a; count++;
+                        }
+                    var a8 = (uint)((alpha + count / 2) / count);
+                    var output = alpha == 0 ? 0 :
+                        (uint)((red + alpha / 2) / alpha) << 24 |
+                        (uint)((green + alpha / 2) / alpha) << 16 |
+                        (uint)((blue + alpha / 2) / alpha) << 8 | a8;
+                    results.Add((x, y, output));
+                }
+            foreach (var (x, y, color) in results)
+            {
+                if (layer.IsRgba) { layer.SetRgbaPixel(x, y, color); continue; }
+                if ((color & 255) < 128) { layer.SetPixel(x, y, -1); continue; }
+                var index = 0; var nearest = long.MaxValue;
+                for (var p = 0; p < colors.Length; p++)
+                {
+                    var dr = (long)(int)(color >> 24) - (int)(colors[p] >> 24);
+                    var dg = (long)(int)((color >> 16) & 255) - (int)((colors[p] >> 16) & 255);
+                    var db = (long)(int)((color >> 8) & 255) - (int)((colors[p] >> 8) & 255);
+                    var distance = dr * dr + dg * dg + db * db;
+                    if (distance < nearest) { nearest = distance; index = p; }
+                }
+                layer.SetPixel(x, y, index);
+            }
+        }
+    }
 }

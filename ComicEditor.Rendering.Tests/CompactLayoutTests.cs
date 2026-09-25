@@ -76,9 +76,10 @@ public partial class CanvasTests
             // Every tool remains accessible through the same picker in either orientation.
             var picker = Named<Button>(window, "CompactToolPicker"); Click(window, picker);
             var flyout = Assert.IsType<Flyout>(picker.Flyout);
-            var choices = Assert.IsType<Grid>(Assert.IsType<ScrollViewer>(flyout.Content).Content);
-            Assert.Equal(Enum.GetValues<Tool>().Length, choices.Children.Count);
-            var text = choices.Children.OfType<Button>().Single(b => b.Name == "CompactToolText");
+            var choices = Assert.IsType<StackPanel>(Assert.IsType<ScrollViewer>(flyout.Content).Content);
+            var buttons = choices.GetVisualDescendants().OfType<Button>().ToArray();
+            Assert.Equal(Enum.GetValues<Tool>().Length, buttons.Length);
+            var text = buttons.Single(b => b.Name == "CompactToolText");
             text.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); _ = Capture(window);
             Assert.Equal(Tool.Text, state.Tool);
             window.Close();

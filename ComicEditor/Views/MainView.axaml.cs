@@ -66,7 +66,7 @@ public partial class MainView : UserControl
             try { await CutsceneFonts.LoadGoogleAsync("https://fonts.google.com/specimen/" + Uri.EscapeDataString(id[7..])); RefreshCanvas(); }
             catch (Exception ex) { await ShowError("Could not load the remembered font: " + ex.Message); }
         };
-        KeyDown += OnKeyDown;
+        AddHandler(KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
         AttachedToVisualTree += StartSession;
         DetachedFromVisualTree += (_, _) => { sessionTimer?.Stop(); if (SessionStorage.Flush == FlushSession) SessionStorage.Flush = null; };
         DetachedFromVisualTree += (_, _) => StopUpdates();
@@ -431,7 +431,7 @@ public partial class MainView : UserControl
         if (inlineTextBox is not null && (editor.SelectedTextId != inlineTextObjectId || editor.Language != inlineLanguage || editor.Frame.TextObjects.All(t => t.Id != inlineTextObjectId))) EndInlineTextEdit();
         canvas.OnionSkin = editor.OnionSkin; canvas.OnionOpacity = editor.OnionOpacity;
         canvas.SelectedTextId = editor.SelectedTextId; canvas.ShowTextBounds = true; canvas.InvalidateVisual();
-        if (selection?.Owner != editor.Layer || editor.Tool is not (Tool.Select or Tool.Lasso)) selection = null;
+        if (selection?.Owner != editor.Layer || editor.Tool is not (Tool.Select or Tool.Lasso or Tool.EllipseSelect)) selection = null;
         canvas.SelectionBounds = selection is null ? null : new Rect(selection.X, selection.Y, selection.Width, selection.Height);
         previous.Scene = editor.Scene; previous.FrameIndex = Math.Max(0, editor.FrameIndex - 1); previous.Language = editor.Language;
         previous.IsVisible = editor.Compare && editor.FrameIndex > 0 && !compact;
@@ -452,15 +452,7 @@ public partial class MainView : UserControl
         if (inlineTextBox is not null) { RefreshInlineTextToolbar(); return; }
         toolRail.Children.Clear(); toolOptions.Children.Clear();
         if (compact) { RefreshCompactTools(); return; }
-        var all = Enum.GetValues<Tool>();
-        for (var i = 0; i < all.Length; i++)
-        {
-            var chosen = all[i];
-            var button = Icon(ToolIcon(chosen), ToolName(chosen) + " — " + ToolHelp(chosen), () => ChooseTool(chosen));
-            button.Width = button.Height = compact ? 40 : 34;
-            if (chosen == editor.Tool) { button.Background = Brush(UiTheme.Selection); button.BorderBrush = Brush(UiTheme.Accent); }
-            toolRail.Children.Add(button);
-        }
+        foreach (var group in ToolGroups) toolRail.Children.Add(GroupButton(group));
         toolOptions.Children.Add(Label(ToolName(editor.Tool), true));
         if (UsesSize(editor.Tool))
         {

@@ -33,7 +33,7 @@ public partial class MainView
         if (e.Pointer.Type == PointerType.Pen) e.PreventGestureRecognition();
         canvas.Focus(); var point = canvas.CanvasPoint(e);
         startX = lastX = (int)point.X; startY = lastY = (int)point.Y;
-        if (editor.Tool is Tool.Select or Tool.Lasso)
+        if (editor.Tool is Tool.Select or Tool.Lasso or Tool.EllipseSelect)
         {
             StartSelection(startX, startY); dragging = true; e.Pointer.Capture(canvas); RefreshCanvas(); return;
         }
@@ -93,6 +93,7 @@ public partial class MainView
         else if (editor.Tool == Tool.Spray) StartSpray();
         else if (editor.Tool == Tool.Dither) PaintRaster.Dither(editor.Layer, startX, startY, startX, startY, color, editor.BrushSize, editor.Paint.DitherDensity, editor.Scene.Palette, editor.Paint.Opacity);
         else if (editor.Tool == Tool.Scramble) PaintRaster.Scramble(editor.Layer, startX, startY, startX, startY, editor.BrushSize, Random.Shared);
+        else if (editor.Tool == Tool.Blur) PaintRaster.Blur(editor.Layer, startX, startY, startX, startY, editor.BrushSize, editor.Scene.Palette);
         else
         {
             smoother = editor.Tool == Tool.Smooth || e.Pointer.Type == PointerType.Mouse && editor.Preferences.SmoothMouse ? new StrokeSmoother(point) : null;
@@ -110,7 +111,7 @@ public partial class MainView
             return;
         }
         var point = canvas.CanvasPoint(e); var x = (int)point.X; var y = (int)point.Y;
-        if (editor.Tool is Tool.Select or Tool.Lasso) { MoveSelection(x, y); RefreshCanvas(); return; }
+        if (editor.Tool is Tool.Select or Tool.Lasso or Tool.EllipseSelect) { MoveSelection(x, y); RefreshCanvas(); return; }
         if (editor.Tool is Tool.Curve or Tool.Polygon) { DrawPath(x, y); RefreshCanvas(); return; }
         if (editor.Tool == Tool.Text)
         {
@@ -151,6 +152,7 @@ public partial class MainView
         }
         else if (editor.Tool == Tool.Dither) PaintRaster.Dither(editor.Layer, lastX, lastY, x, y, editor.Color, editor.BrushSize, editor.Paint.DitherDensity, editor.Scene.Palette, editor.Paint.Opacity);
         else if (editor.Tool == Tool.Scramble) PaintRaster.Scramble(editor.Layer, lastX, lastY, x, y, editor.BrushSize, Random.Shared);
+        else if (editor.Tool == Tool.Blur) PaintRaster.Blur(editor.Layer, lastX, lastY, x, y, editor.BrushSize, editor.Scene.Palette);
         else
         {
             var color = editor.Tool == Tool.Eraser ? -1 : editor.Color;
@@ -164,7 +166,7 @@ public partial class MainView
     {
         if (!dragging || e.Pointer != drawingPointer) return;
         var endpoint = canvas!.CanvasPoint(e);
-        if (editor.Tool is Tool.Select or Tool.Lasso)
+        if (editor.Tool is Tool.Select or Tool.Lasso or Tool.EllipseSelect)
         {
             MoveSelection((int)endpoint.X, (int)endpoint.Y); EndSelection((int)endpoint.X, (int)endpoint.Y);
             dragging = false; e.Pointer.Capture(null); RefreshAll(); return;

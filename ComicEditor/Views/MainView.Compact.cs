@@ -56,20 +56,25 @@ public partial class MainView
         if (toolOptions is null) return;
         toolOptions.Margin = new Thickness(4, 2);
         toolOptions.Spacing = 4;
-        var choices = new Grid { Name = "CompactToolChoices", ColumnDefinitions = new ColumnDefinitions("*,*") };
-        for (var i = 0; i < (Enum.GetValues<Tool>().Length + 1) / 2; i++) choices.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        var choices = new StackPanel { Name = "CompactToolChoices", Spacing = 4 };
         var toolScroll = new ScrollViewer { Content = choices, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var flyout = new Flyout { Content = toolScroll };
         flyout.Opening += (_, _) => toolScroll.MaxHeight = Math.Max(88, Bounds.Height - 100);
-        foreach (var tool in Enum.GetValues<Tool>())
+        foreach (var group in ToolGroups)
         {
-            var button = Button("", () => { flyout.Hide(); ChooseTool(tool); });
-            button.Name = "CompactTool" + tool;
-            var caption = Label(ToolName(tool)); caption.FontSize = 12;
-            button.Content = Row(new PackIconMaterial { Kind = ToolIcon(tool), Width = 22, Height = 22 }, caption);
-            button.Width = 140; button.Margin = new Thickness(2);
-            if (tool == editor.Tool) button.Background = Brush(UiTheme.Selection);
-            AddAt(choices, button, (int)tool % 2, (int)tool / 2);
+            choices.Children.Add(Label(group.Id, true));
+            var row = new WrapPanel { Orientation = Orientation.Horizontal };
+            foreach (var tool in group.Tools)
+            {
+                var button = Button("", () => { flyout.Hide(); ChooseTool(tool); });
+                button.Name = "CompactTool" + tool;
+                var caption = Label(ToolName(tool)); caption.FontSize = 12;
+                button.Content = Row(new PackIconMaterial { Kind = ToolIcon(tool), Width = 22, Height = 22 }, caption);
+                button.Width = 140; button.Margin = new Thickness(2);
+                if (tool == editor.Tool) button.Background = Brush(UiTheme.Selection);
+                row.Children.Add(button);
+            }
+            choices.Children.Add(row);
         }
         var chooseTool = Icon(ToolIcon(editor.Tool), "Choose drawing tool: " + ToolName(editor.Tool), () => { });
         chooseTool.Name = "CompactToolPicker"; chooseTool.Flyout = flyout;

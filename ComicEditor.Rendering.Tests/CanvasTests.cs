@@ -342,7 +342,7 @@ public partial class CanvasTests
 
             var tools = Named<StackPanel>(window, "ToolRail").Children;
 
-            Assert.Equal(Enum.GetValues<Tool>().Length, tools.Count);
+            Assert.Equal(11, tools.Count);
 
             Assert.Single(tools.Select(c => c.Bounds.X).Distinct());
 

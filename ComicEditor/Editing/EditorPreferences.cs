@@ -18,6 +18,7 @@ public sealed class EditorPreferences
     public int Color { get; set; }
     public Tool Tool { get; set; }
     public Dictionary<string, PaintSettings> Tools { get; set; } = new();
+    public Dictionary<string, Tool> LastToolInGroup { get; set; } = new();
     public string[]? Palette { get; set; }
     public string Language { get; set; } = "en";
     public bool OnionSkin { get; set; }
@@ -46,6 +47,8 @@ public sealed class EditorPreferences
         if (!Enum.IsDefined(value.Tool)) value.Tool = Tool.Pixel;
         value.Tools ??= new();
         value.Tools = value.Tools.Where(p => p.Value is not null).ToDictionary(p => p.Key, p => p.Value);
+        value.LastToolInGroup ??= new();
+        value.LastToolInGroup = value.LastToolInGroup.Where(p => Enum.IsDefined(p.Value)).ToDictionary(p => p.Key, p => p.Value);
         foreach (var settings in value.Tools.Values) settings.Validate();
         if (value.Palette is not { Length: >= 2 and <= 65535 } || value.Palette.Any(c => !RgbaColor.IsHex(c))) value.Palette = null;
         value.Color = Math.Clamp(value.Color, 0, (value.Palette?.Length ?? 128) - 1);

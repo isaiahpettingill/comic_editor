@@ -91,12 +91,23 @@ public partial class MainView
             var dirty = current ? editor.IsDirty : tab.Dirty;
             var label = (tab.Editor.FileName ?? $"Untitled {i + 1}") + (dirty ? " ●" : "");
             var item = Button(label, () => SwitchTab(tab)); item.Name = $"ProjectTab{i}";
-            item.Background = Brush(current ? UiTheme.Selection : UiTheme.Surface);
-            item.BorderBrush = Brush(current ? UiTheme.Accent : UiTheme.Border);
-            item.MinWidth = 100; item.MaxWidth = 190; item.Height = touchLayout ? 40 : 29;
+            item.Background = Avalonia.Media.Brushes.Transparent;
+            item.BorderThickness = new Thickness(0);
+            item.MinWidth = 80; item.MaxWidth = 165; item.Height = touchLayout ? 40 : 29;
+            item.HorizontalContentAlignment = HorizontalAlignment.Left;
             var close = Button("×", () => CloseTab(tab)); close.Name = $"CloseProjectTab{i}";
-            close.Width = close.Height = touchLayout ? 40 : 29;
-            tabStrip.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { item, close } });
+            close.Width = close.Height = touchLayout ? 40 : 25;
+            close.Padding = new Thickness(0); close.Background = Avalonia.Media.Brushes.Transparent;
+            close.BorderThickness = new Thickness(0);
+            var tabContent = new StackPanel { Orientation = Orientation.Horizontal, Children = { item, close } };
+            tabStrip.Children.Add(new Border
+            {
+                Background = Brush(current ? UiTheme.Selection : UiTheme.Surface),
+                BorderBrush = Brush(current ? UiTheme.Accent : UiTheme.Border),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4, 4, 0, 0),
+                Child = tabContent
+            });
         }
         var add = Button("+", New); add.Name = "NewProjectTab"; add.Width = add.Height = touchLayout ? 40 : 29;
         tabStrip.Children.Add(add);

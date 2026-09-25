@@ -2,7 +2,7 @@ using ComicEditor.Format;
 
 namespace ComicEditor.Editing;
 
-public enum Tool { Pixel, Smooth, Pressure, Eraser, Fill, Line, Rectangle, Ellipse, Eyedropper, Text, Spray, Select, Lasso, Curve, Polygon, RoundedRectangle, Zoom, Marker, Dither, Scramble }
+public enum Tool { Pixel, Smooth, Pressure, Eraser, Fill, Line, Rectangle, Ellipse, Eyedropper, Text, Spray, Select, Lasso, Curve, Polygon, RoundedRectangle, Zoom, Marker, Dither, Scramble, Blur, EllipseSelect }
 
 public sealed class EditorState
 {
@@ -44,7 +44,7 @@ public sealed class EditorState
     }
     public void New() => Load(CutsceneFile.Write(CreateScene()));
     public PaintSettings Paint => Preferences.Tools.TryGetValue(Tool.ToString(), out var settings) ? settings :
-        Preferences.Tools[Tool.ToString()] = new PaintSettings { Size = Tool == Tool.Spray ? 16 : Tool == Tool.Marker ? 12 : Tool is Tool.Dither or Tool.Scramble ? 8 : 1, Opacity = Tool == Tool.Marker ? 96 : 255 };
+        Preferences.Tools[Tool.ToString()] = new PaintSettings { Size = Tool == Tool.Spray ? 16 : Tool == Tool.Marker ? 12 : Tool is Tool.Dither or Tool.Scramble or Tool.Blur ? 8 : 1, Opacity = Tool == Tool.Marker ? 96 : 255 };
     public int FrameIndex { get; private set; }
     private int layerIndex;
     public int LayerIndex { get => layerIndex; set { if (layerIndex != value) FinishPendingEdit?.Invoke(); layerIndex = value; } }

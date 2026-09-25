@@ -94,4 +94,21 @@ public sealed class RgbaTests
         Assert.Equal("google:Anton", restored.StyleAt("es", "HoXla", 2).FontId);
         Assert.Equal(16, restored.StyleAt("en", "Hello", 2).Size);
     }
+
+    [Fact]
+    public void BlurSoftensArtworkInIndexedAndRgbaModes()
+    {
+        foreach (var rgba in new[] { false, true })
+        {
+            var scene = Cutscene.Create(5, 1, rgba);
+            scene.Palette = rgba ? ["#000000FF", "#FFFFFFFF", "#AAAAAAFF"] : ["#000000", "#FFFFFF", "#AAAAAA"];
+            var layer = scene.Frames[0].Layers[0];
+            for (var x = 0; x < 5; x++)
+                if (rgba) layer.SetRgbaPixel(x, 0, x == 2 ? 0x000000FF : 0xFFFFFFFF);
+                else layer.SetPixel(x, 0, x == 2 ? 0 : 1);
+            PaintRaster.Blur(layer, 2, 0, 2, 0, 2, scene.Palette);
+            if (rgba) Assert.Equal(0xAAAAAAFFu, layer.RgbaPixel(2, 0));
+            else Assert.Equal(2, layer.Pixel(2, 0));
+        }
+    }
 }

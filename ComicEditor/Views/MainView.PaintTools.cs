@@ -10,6 +10,54 @@ namespace ComicEditor.Views;
 
 public partial class MainView
 {
+    private sealed record ToolGroup(string Id, Tool[] Tools);
+    private static readonly ToolGroup[] ToolGroups =
+    [
+        new("Brush", [Tool.Pixel, Tool.Smooth, Tool.Pressure, Tool.Marker]),
+        new("Eraser", [Tool.Eraser]),
+        new("Fill", [Tool.Fill]),
+        new("Line", [Tool.Line, Tool.Curve]),
+        new("Shapes", [Tool.Rectangle, Tool.RoundedRectangle, Tool.Ellipse, Tool.Polygon]),
+        new("Eyedropper", [Tool.Eyedropper]),
+        new("Text", [Tool.Text]),
+        new("Spray", [Tool.Spray, Tool.Dither]),
+        new("Selection", [Tool.Select, Tool.Lasso, Tool.EllipseSelect]),
+        new("Effects", [Tool.Scramble, Tool.Blur]),
+        new("Zoom", [Tool.Zoom])
+    ];
+    private Tool RememberedTool(ToolGroup group) => group.Tools.Contains(editor.Tool) ? editor.Tool :
+        editor.Preferences.LastToolInGroup.TryGetValue(group.Id, out var last) && group.Tools.Contains(last) ? last : group.Tools[0];
+
+    private Button GroupButton(ToolGroup group)
+    {
+        var chosen = RememberedTool(group);
+        var button = Icon(ToolIcon(chosen), $"{ToolName(chosen)} — {ToolHelp(chosen)}" + (group.Tools.Length > 1 ? " Right-click to choose another tool." : ""), () => ChooseTool(RememberedTool(group)));
+        button.Name = "ToolGroup" + group.Id; button.Width = button.Height = compact ? 40 : 34;
+        if (group.Tools.Length > 1)
+        {
+            button.Content = new Grid
+            {
+                Width = 26,
+                Height = 26,
+                Children =
+                {
+                    new PackIconMaterial { Kind = ToolIcon(chosen), Width = 19, Height = 19, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top },
+                    new PackIconMaterial { Kind = PackIconMaterialKind.MenuDown, Width = 10, Height = 10, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom }
+                }
+            };
+            var menu = new ContextMenu();
+            foreach (var tool in group.Tools)
+            {
+                var item = new MenuItem { Header = Row(new PackIconMaterial { Kind = ToolIcon(tool), Width = 18, Height = 18 }, Label(ToolName(tool))) };
+                item.Click += (_, _) => ChooseTool(tool);
+                menu.Items.Add(item);
+            }
+            button.ContextMenu = menu;
+        }
+        if (group.Tools.Contains(editor.Tool)) { button.Background = Brush(UiTheme.Selection); button.BorderBrush = Brush(UiTheme.Accent); }
+        return button;
+    }
+
     private ArtworkSelection? selection, clipboardSelection;
     private List<string>? selectionBase;
     private bool movingSelection;
@@ -40,25 +88,28 @@ public partial class MainView
         Tool.Marker => PackIconMaterialKind.Marker,
         Tool.Dither => PackIconMaterialKind.Checkerboard,
         Tool.Scramble => PackIconMaterialKind.ShuffleVariant,
+        Tool.Blur => PackIconMaterialKind.Blur,
         Tool.Select => PackIconMaterialKind.Selection,
         Tool.Lasso => PackIconMaterialKind.Lasso,
+        Tool.EllipseSelect => PackIconMaterialKind.EllipseOutline,
         Tool.Curve => PackIconMaterialKind.VectorCurve,
         Tool.Polygon => PackIconMaterialKind.VectorPolygon,
         Tool.RoundedRectangle => PackIconMaterialKind.SquareRoundedOutline,
         _ => PackIconMaterialKind.Magnify
     };
     private static string ToolName(Tool tool) => tool switch
-    { Tool.Select => "Select rectangle", Tool.Lasso => "Freehand select", Tool.RoundedRectangle => "Rounded rectangle", Tool.Spray => "Spray can", Tool.Scramble => "Pixel scramble", _ => tool.ToString() };
-    private static bool UsesSize(Tool tool) => tool is not (Tool.Select or Tool.Lasso or Tool.Text or Tool.Fill or Tool.Eyedropper or Tool.Zoom);
+    { Tool.Select => "Select rectangle", Tool.Lasso => "Freehand select", Tool.EllipseSelect => "Select ellipse", Tool.RoundedRectangle => "Rounded rectangle", Tool.Spray => "Spray can", Tool.Scramble => "Pixel scramble", _ => tool.ToString() };
+    private static bool UsesSize(Tool tool) => tool is not (Tool.Select or Tool.Lasso or Tool.EllipseSelect or Tool.Text or Tool.Fill or Tool.Eyedropper or Tool.Zoom);
     private static string ToolHelp(Tool tool) => tool switch
     {
         Tool.Curve => "Drag the end points, then drag two bends. Finish accepts early; Escape cancels.",
         Tool.Polygon => "Click corners. Double-click, Enter, or Finish closes the polygon. Escape cancels.",
-        Tool.Select or Tool.Lasso => "Drag to select artwork on the current layer, then drag inside to move it. Use Edit to copy, cut, paste, or delete.",
+        Tool.Select or Tool.Lasso or Tool.EllipseSelect => "Drag to select artwork on the current layer, then drag inside to move it. Use Edit to copy, cut, paste, or delete.",
         Tool.Spray => "Hold to spray; move to cover an area. Diameter and density are adjustable.",
         Tool.Marker => "Draw with translucent color. Size and opacity are adjustable.",
         Tool.Dither => "Paint with a repeating 4×4 Bayer pattern. Adjust density in tool options.",
         Tool.Scramble => "Shuffle nearby pixels while dragging without adding color.",
+        Tool.Blur => "Soften nearby pixels while dragging. Works in RGBA and indexed color modes.",
         Tool.Zoom => "Click to zoom in; right-click or Shift-click to zoom out. Scroll or pinch with two fingers to zoom. Middle-drag or drag three fingers to pan.",
         Tool.Text => "Drag to create a text area; click existing text to select it.",
         _ => "Drag to draw on the current artwork layer."
@@ -67,7 +118,11 @@ public partial class MainView
     {
         EndInlineTextEdit(); FinishPath(); StopSpray(); selection = null;
         if (tool == Tool.Marker && !editor.Scene.IsRgba) EnableRgbaMode();
+        var group = ToolGroups.FirstOrDefault(g => g.Tools.Contains(tool));
+        if (group is not null) editor.Preferences.LastToolInGroup[group.Id] = tool;
+        var changed = editor.Tool != tool;
         editor.SelectedTextId = null; editor.Tool = tool; RefreshTools(); RefreshInspector(); RefreshCanvas();
+        if (!changed) editor.Preferences.Save();
     }
 
     private void EditToolOptions()
@@ -86,7 +141,7 @@ public partial class MainView
         var density = new NumericUpDown { Name = "SprayDensity", Value = settings.SprayDensity, Minimum = 1, Maximum = 100, Height = 44 };
         if (editor.Tool == Tool.Spray) { body.Children.Add(Label("Spray density")); body.Children.Add(density); }
         var opacity = new NumericUpDown { Name = "ToolOpacity", Value = settings.Opacity, Minimum = 0, Maximum = 255, Height = 44 };
-        if (editor.Scene.IsRgba && editor.Tool is not (Tool.Select or Tool.Lasso or Tool.Text or Tool.Eyedropper or Tool.Zoom or Tool.Scramble or Tool.Eraser))
+        if (editor.Scene.IsRgba && editor.Tool is not (Tool.Select or Tool.Lasso or Tool.EllipseSelect or Tool.Text or Tool.Eyedropper or Tool.Zoom or Tool.Scramble or Tool.Blur or Tool.Eraser))
         { body.Children.Add(Label("Opacity (0–255)")); body.Children.Add(opacity); }
         var dither = new NumericUpDown { Name = "DitherDensity", Value = settings.DitherDensity, Minimum = 1, Maximum = 16, Height = 44 };
         if (editor.Tool == Tool.Dither) { body.Children.Add(Label("Pattern density (1–16)")); body.Children.Add(dither); }
@@ -126,7 +181,12 @@ public partial class MainView
         {
             if (editor.Tool == Tool.Lasso && (lasso.Count == 0 || lasso[^1] != (x, y))) lasso.Add((x, y));
             if (canvas is not null) canvas.SelectionOutline = editor.Tool == Tool.Lasso ? lasso.Select(p => new Point(p.X, p.Y)).ToArray() :
-                [new(startX, startY), new(x, startY), new(x, y), new(startX, y)];
+                editor.Tool == Tool.EllipseSelect ? Enumerable.Range(0, 48).Select(i =>
+                {
+                    var angle = i * Math.PI * 2 / 48;
+                    return new Point((startX + x) / 2.0 + Math.Cos(angle) * Math.Abs(x - startX) / 2,
+                        (startY + y) / 2.0 + Math.Sin(angle) * Math.Abs(y - startY) / 2);
+                }).ToArray() : [new(startX, startY), new(x, startY), new(x, y), new(startX, y)];
         }
     }
     private void EndSelection(int x, int y)
@@ -136,8 +196,8 @@ public partial class MainView
             var left = Math.Min(startX, x); var top = Math.Min(startY, y); var right = Math.Max(startX, x); var bottom = Math.Max(startY, y);
             if (editor.Tool == Tool.Lasso && lasso.Count > 2)
             { left = (int)lasso.Min(p => p.X); right = (int)lasso.Max(p => p.X); top = (int)lasso.Min(p => p.Y); bottom = (int)lasso.Max(p => p.Y); }
-            if ((editor.Tool == Tool.Select || lasso.Count > 2) && right > left && bottom > top)
-                selection = new ArtworkSelection(editor.Layer, left, top, right - left + 1, bottom - top + 1, editor.Tool == Tool.Lasso ? lasso : null);
+            if ((editor.Tool is Tool.Select or Tool.EllipseSelect || lasso.Count > 2) && right > left && bottom > top)
+                selection = new ArtworkSelection(editor.Layer, left, top, right - left + 1, bottom - top + 1, editor.Tool == Tool.Lasso ? lasso : null, editor.Tool == Tool.EllipseSelect);
         }
         movingSelection = false; selectionBase = null; lasso.Clear();
         if (canvas is not null) canvas.SelectionOutline = null;

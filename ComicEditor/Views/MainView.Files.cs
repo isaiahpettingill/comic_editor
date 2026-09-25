@@ -127,7 +127,7 @@ public partial class MainView
             Children =
         {
             Label("Language"), language,
-            Label("Crisp text edges, white background, and only the colors visible in each image. The preview language stays unchanged.")
+            Label("Smooth text edges, white background, and only the colors visible in each image. The preview language stays unchanged.")
         }
         }, () =>
         {

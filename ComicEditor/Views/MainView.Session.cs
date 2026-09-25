@@ -301,11 +301,11 @@ public partial class MainView
             Spacing = 10,
             Children =
             {
-                enabled, Label("Save interval (minutes)"), interval,
+                enabled, Label("Backup save interval (minutes)"), interval,
                 Label(OperatingSystem.IsBrowser()
                     ? "This browser keeps a recovery copy in local storage every 5 seconds. Use Save to download your cutscene; automatic downloads are disabled."
-                    : "Choose Save once to select a file. Autosave then saves your edits to that file at this interval."),
-                Label("Your last cutscene and unsaved edits reopen on startup, even with autosave off. Recovery is updated every 5 seconds between strokes. Undo history resets after reopening."),
+                    : "Choose Save once to select a file. Autosave saves shortly after you stop editing and checks again at this interval."),
+                Label("Your last cutscene and unsaved edits reopen on startup, even with autosave off. Recovery saves after editing pauses and every 5 seconds while you work. Undo history resets after reopening."),
                 autosaveStatus
             }
         }, () =>

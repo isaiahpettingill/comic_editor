@@ -418,7 +418,7 @@ public partial class MainView : UserControl
         if (TopLevel.GetTopLevel(this) is Window window)
             window.Title = $"{editor.FileName ?? "Untitled"}{(editor.FastDirty ? " *" : "")} — ComicEditor";
         RefreshTabs();
-        if (editor.FastDirty) QueueThumbnailRefresh();
+        if (editor.FastDirty) { QueueThumbnailRefresh(); QueueIdleSave(); }
     }
 
     private void RefreshCanvas()

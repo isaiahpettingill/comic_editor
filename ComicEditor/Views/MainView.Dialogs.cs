@@ -50,7 +50,7 @@ public partial class MainView
         }, "Resize");
     }
 
-    private void ShowModal(string title, Control body, Action? apply = null, string applyText = "Apply", double maxWidth = 540)
+    private void ShowModal(string title, Control body, Action? apply = null, string applyText = "Apply")
     {
         if (shell is null || rootGrid is null) return;
         returnFocus = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as Control;
@@ -68,7 +68,7 @@ public partial class MainView
             Background = Brush(UiTheme.Surface),
             BorderBrush = Brush(UiTheme.Border),
             BorderThickness = new Thickness(1),
-            MaxWidth = maxWidth,
+            MaxWidth = 540,
             MaxHeight = Math.Max(120, Bounds.Height - 24),
             Margin = new Thickness(12),
             HorizontalAlignment = HorizontalAlignment.Stretch,

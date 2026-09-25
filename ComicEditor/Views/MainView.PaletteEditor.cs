@@ -162,7 +162,8 @@ public partial class MainView
                 selection = clipboardSelection = null; CloseModal(); RefreshAll();
             }
             catch (Exception ex) { Report(ex.Message, true); }
-        }, maxWidth: touchLayout ? 540 : 920);
+        });
+        if (!touchLayout && modal?.Child is Border card) card.MaxWidth = 920;
         _ = Run(() => RefreshPresets());
     }
 }

@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using ComicEditor.Editing;
+using ComicEditor.Format;
 using IconPacks.Avalonia.Material;
 
 namespace ComicEditor.Views;
@@ -80,8 +81,27 @@ public partial class MainView
         chooseTool.Name = "CompactToolPicker"; chooseTool.Flyout = flyout;
         toolOptions.Children.Add(chooseTool);
         var options = Button(pathBase is not null ? "Finish" : UsesSize(editor.Tool) ? $"{editor.BrushSize}px · Options" : "Options", () => { if (pathBase is not null) FinishPath(); else EditToolOptions(); });
-        options.Width = 112; options.Padding = new Thickness(4); options.FontSize = 12; options.Name = "ToolOptions";
+        var shapeTool = editor.Tool is Tool.Rectangle or Tool.Ellipse or Tool.RoundedRectangle or Tool.Polygon;
+        options.Width = shapeTool ? 44 : 112; options.Padding = new Thickness(4); options.FontSize = 12; options.Name = "ToolOptions";
+        if (shapeTool) { options.Content = new PackIconMaterial { Kind = PackIconMaterialKind.Tune, Width = 22, Height = 22 }; ToolTip.SetTip(options, "Tool options"); }
         toolOptions.Children.Add(options);
+        if (shapeTool)
+        {
+            var fill = new ToggleButton
+            {
+                Name = "ShapeFillToolbar",
+                Content = editor.Paint.Fill == ShapeFill.Solid ? "Solid" : "Line",
+                IsChecked = editor.Paint.Fill == ShapeFill.Solid,
+                Width = 60,
+                Height = 44
+            };
+            fill.Click += (_, _) =>
+            {
+                editor.Paint.Fill = fill.IsChecked == true ? ShapeFill.Solid : ShapeFill.Outline;
+                fill.Content = fill.IsChecked == true ? "Solid" : "Line"; editor.Preferences.Save();
+            };
+            ToolTip.SetTip(fill, "Toggle filled shape"); toolOptions.Children.Add(fill);
+        }
         var scales = new[] { "Fit", "100%", "200%", "400%", $"{zoom:P0}" }.Distinct().ToArray();
         var scale = new ComboBox { Name = "CompactZoom", ItemsSource = scales, SelectedItem = zoom == 0 ? "Fit" : $"{zoom:P0}", Width = 84, Height = 44, MinHeight = 44, Padding = new Thickness(6, 3) };
         Avalonia.Automation.AutomationProperties.SetName(scale, "Canvas zoom");

@@ -6,15 +6,21 @@ public enum Tool { Pixel, Smooth, Pressure, Eraser, Fill, Line, Rectangle, Ellip
 
 public sealed class EditorState
 {
-    private readonly Stack<(byte[] Data, int Frame)> undo = new();
-    private readonly Stack<(byte[] Data, int Frame)> redo = new();
+    private readonly Stack<(Cutscene Data, int Frame)> undo = new();
+    private readonly Stack<(Cutscene Data, int Frame)> redo = new();
     private byte[]? saved;
+    private long savedRevision;
+    public long Revision { get; private set; }
+    public bool FastDirty => saved is null || saved.Length == 0 || Revision != savedRevision;
+    public byte[]? SavedProject => saved;
+    public event Action? Changed;
     public bool CanUndo => undo.Count > 0;
     public bool CanRedo => redo.Count > 0;
     public bool IsDirty => DiffersFromSaved(CutsceneFile.Write(Scene));
     public bool DiffersFromSaved(ReadOnlySpan<byte> project) => saved is not null && !project.SequenceEqual(saved);
-    public void MarkSaved(byte[]? written = null) => saved = written ?? CutsceneFile.Write(Scene);
-    public void MarkUnsaved() => saved = [];
+    public void MarkSaved(byte[]? written = null, long? revision = null)
+    { saved = written ?? CutsceneFile.Write(Scene); savedRevision = revision ?? Revision; }
+    public void MarkUnsaved() { saved = []; savedRevision = -1; }
     public EditorState(EditorPreferences? preferences = null)
     {
         Preferences = preferences ?? new();
@@ -64,13 +70,15 @@ public sealed class EditorState
     public void BeforeChange()
     {
         FinishPendingEdit?.Invoke();
-        undo.Push((CutsceneFile.Write(Scene), FrameIndex));
+        undo.Push((Scene.Snapshot(), FrameIndex));
+        Revision++;
         if (undo.Count > 60)
         {
             var latest = undo.ToArray().Take(60).Reverse().ToArray();
             undo.Clear(); foreach (var value in latest) undo.Push(value);
         }
         redo.Clear();
+        Changed?.Invoke();
     }
 
     public bool Undo() => Restore(undo, redo);
@@ -80,28 +88,30 @@ public sealed class EditorState
     // history stacks so cancelling that provisional edit doesn't destroy redo.
     public Action CaptureProvisionalEdit()
     {
-        var owner = Scene; var data = CutsceneFile.Write(Scene); var frame = FrameIndex; var layer = LayerIndex;
+        var owner = Scene; var data = Scene.Snapshot(); var frame = FrameIndex; var layer = LayerIndex; var revision = Revision;
         var text = SelectedTextId; var color = Color;
         var priorUndo = undo.Reverse().ToArray(); var priorRedo = redo.Reverse().ToArray();
         return () =>
         {
             if (!ReferenceEquals(Scene, owner)) return; // A new/opened project or history restore supersedes the gesture.
-            Scene = CutsceneFile.Parse(data); FrameIndex = frame; layerIndex = layer;
+            Scene = data; FrameIndex = frame; layerIndex = layer; Revision = revision;
             SelectedTextId = text; Color = color;
             undo.Clear(); foreach (var entry in priorUndo) undo.Push(entry);
             redo.Clear(); foreach (var entry in priorRedo) redo.Push(entry);
         };
     }
 
-    private bool Restore(Stack<(byte[] Data, int Frame)> source, Stack<(byte[] Data, int Frame)> destination)
+    private bool Restore(Stack<(Cutscene Data, int Frame)> source, Stack<(Cutscene Data, int Frame)> destination)
     {
         if (!source.TryPop(out var state)) return false;
-        destination.Push((CutsceneFile.Write(Scene), FrameIndex));
-        Scene = CutsceneFile.Parse(state.Data);
+        destination.Push((Scene.Snapshot(), FrameIndex));
+        Scene = state.Data; Revision++;
         FrameIndex = state.Frame;
         LayerIndex = Math.Min(LayerIndex, Frame.Layers.Count - 1);
         SelectedTextId = null;
         EnsureLanguage();
+        if (!IsDirty) savedRevision = Revision;
+        Changed?.Invoke();
         return true;
     }
 
@@ -109,6 +119,7 @@ public sealed class EditorState
     {
         FinishPendingEdit?.Invoke();
         Scene = CutsceneFile.Parse(data);
+        Revision++;
         FrameIndex = 0; LayerIndex = 0; SelectedTextId = null; FileName = name;
         undo.Clear(); redo.Clear();
         EnsureLanguage(); MarkSaved();
@@ -191,7 +202,7 @@ public sealed class EditorState
     public void AddFrame(bool duplicate)
     {
         BeforeChange();
-        var next = duplicate ? CutsceneFile.Parse(CutsceneFile.Write(Scene)).Frames[FrameIndex] : Frame.Create(Scene.Width, Scene.Height, Scene.IsRgba);
+        var next = duplicate ? Frame.Snapshot() : Frame.Create(Scene.Width, Scene.Height, Scene.IsRgba);
         next.Id = Guid.NewGuid().ToString("N");
         foreach (var layer in next.Layers) layer.Id = Guid.NewGuid().ToString("N");
         foreach (var text in next.TextObjects) text.Id = Guid.NewGuid().ToString("N");

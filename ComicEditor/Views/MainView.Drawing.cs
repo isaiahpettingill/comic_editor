@@ -88,7 +88,7 @@ public partial class MainView
         }
         editor.BeforeChange(); dragging = true; e.Pointer.Capture(canvas);
         var color = editor.Tool == Tool.Eraser ? -1 : editor.Color;
-        if (editor.Tool == Tool.Fill) { Raster.Fill(editor.Layer, startX, startY, color, editor.Scene.Palette, editor.Paint.Opacity); dragging = false; e.Pointer.Capture(null); RefreshAll(); return; }
+        if (editor.Tool == Tool.Fill) { Raster.Fill(editor.Layer, startX, startY, color, editor.Scene.Palette, editor.Paint.Opacity); dragging = false; e.Pointer.Capture(null); RefreshAfterArtworkEdit(); return; }
         if (editor.Tool is Tool.Line or Tool.Rectangle or Tool.Ellipse or Tool.RoundedRectangle) shapeStart = editor.Layer.Rows.ToList();
         else if (editor.Tool == Tool.Spray) StartSpray();
         else if (editor.Tool == Tool.Dither) PaintRaster.Dither(editor.Layer, startX, startY, startX, startY, color, editor.BrushSize, editor.Paint.DitherDensity, editor.Scene.Palette, editor.Paint.Opacity);
@@ -193,7 +193,8 @@ public partial class MainView
             editor.Frame.TextObjects.Add(obj); editor.SelectedTextId = obj.Id;
         }
         creatingText = false; if (canvas is not null) canvas.DraftTextBounds = null;
-        e.Pointer.Capture(null); RefreshAll();
+        e.Pointer.Capture(null);
+        if (editor.Tool == Tool.Text) RefreshAll(); else RefreshAfterArtworkEdit();
         if (editNewText) BeginInlineTextEdit();
     }
 

@@ -50,6 +50,21 @@ public sealed class Cutscene
         ["pt"] = new()
     };
 
+    // Rows are immutable strings. Copy their lists and mutable metadata so a worker
+    // can serialize this snapshot while the editor continues changing the original.
+    public Cutscene Snapshot() => new()
+    {
+        Version = Version,
+        Width = Width,
+        Height = Height,
+        FallbackLanguage = FallbackLanguage,
+        FallbackFontIds = FallbackFontIds.ToList(),
+        Palette = Palette.ToList(),
+        Frames = Frames.Select(frame => frame.Snapshot()).ToList(),
+        Translations = new Dictionary<string, Dictionary<string, string>>(
+            Translations.ToDictionary(p => p.Key, p => new Dictionary<string, string>(p.Value, p.Value.Comparer)), Translations.Comparer)
+    };
+
     public static Cutscene Create(int width = 320, int height = 180, bool rgba = false)
     {
         var scene = new Cutscene
@@ -194,6 +209,18 @@ public sealed class Frame
     public List<ArtworkLayer> Layers { get; set; } = [];
     public List<TextObject> TextObjects { get; set; } = [];
 
+    public Frame Snapshot() => new()
+    {
+        TextVisible = TextVisible,
+        Id = Id,
+        Layers = Layers.Select(layer => new ArtworkLayer
+        {
+            Id = layer.Id, Name = layer.Name, Visible = layer.Visible,
+            IsRgba = layer.IsRgba, Rows = layer.Rows.ToList()
+        }).ToList(),
+        TextObjects = TextObjects.Select(text => text.Snapshot()).ToList()
+    };
+
     public static Frame Create(int width, int height, bool rgba = false) => new()
     {
         Layers = [ArtworkLayer.Create("Artwork", width, height, rgba)]
@@ -257,6 +284,15 @@ public sealed class TextObject
     public int Color { get; set; } = 0;
     public Dictionary<string, TextPlacement> Placements { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<TextStyleSpan> Styles { get; set; } = [];
+
+    public TextObject Snapshot() => new()
+    {
+        Id = Id, Key = Key, X = X, Y = Y, Width = Width, Height = Height,
+        FontSize = FontSize, FontId = FontId, Bold = Bold, Italic = Italic, Color = Color,
+        Placements = new Dictionary<string, TextPlacement>(Placements.ToDictionary(p => p.Key,
+            p => new TextPlacement { X = p.Value.X, Y = p.Value.Y, Width = p.Value.Width, Height = p.Value.Height }), Placements.Comparer),
+        Styles = Styles.Select(s => new TextStyleSpan { Language = s.Language, Start = s.Start, Length = s.Length, FontId = s.FontId, FontSize = s.FontSize }).ToList()
+    };
 
     public TextPlacement Placement(string language, string fallback) => language != fallback && Placements.TryGetValue(language, out var value)
         ? value : new TextPlacement { X = X, Y = Y, Width = Width, Height = Height };

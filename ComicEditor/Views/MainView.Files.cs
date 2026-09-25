@@ -84,13 +84,14 @@ public partial class MainView
         fileBusy = true;
         try
         {
-            var scene = editor.Scene; var bytes = CutsceneFile.Write(scene);
-            var recovery = SaveSessionSafely(bytes);
+            var scene = editor.Scene; var revision = editor.Revision; var snapshot = scene.Snapshot();
+            var bytes = await Task.Run(() => CutsceneFile.Write(snapshot));
+            var recovery = SaveSessionSafely();
             try { await new ProjectFile(file, null).Write(bytes, checkExternalChanges: false); }
             finally { await recovery; }
             if (ReferenceEquals(editor.Scene, scene))
             {
-                await BindFile(file, bytes); editor.FileName = file.Name; editor.MarkSaved(bytes);
+                await BindFile(file, bytes); editor.FileName = file.Name; editor.MarkSaved(bytes, revision);
                 SetSaveMessage($"Saved {file.Name} at {DateTime.Now:t}."); RefreshTitle();
             }
         }

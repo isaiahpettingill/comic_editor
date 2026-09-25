@@ -72,13 +72,15 @@ public sealed class CutsceneCanvas : Control
         {
             for (var y = 0; y < scene.Height; y++)
             {
-                var row = layer.Rows[y];
+                var row = Convert.FromHexString(layer.Rows[y]);
                 for (var x = 0; x < scene.Width; x++)
                 {
-                    var color = scene.IsRgba ? 0 : Convert.ToInt32(row.Substring(x * 2, 2), 16);
+                    var color = scene.IsRgba ? 0 : row[x];
                     if (!scene.IsRgba && color == 255) continue;
                     var offset = (y * scene.Width + x) * 4;
-                    var rgba = scene.IsRgba ? layer.RgbaPixel(x, y) : colors[color];
+                    var rgba = scene.IsRgba ?
+                        ((uint)row[x * 4] << 24) | ((uint)row[x * 4 + 1] << 16) | ((uint)row[x * 4 + 2] << 8) | row[x * 4 + 3]
+                        : colors[color];
                     if (scene.IsRgba)
                     {
                         var pixelIndex = y * scene.Width + x;

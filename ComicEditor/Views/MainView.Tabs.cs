@@ -27,11 +27,12 @@ public partial class MainView
         activeTab.Bookmark = currentBookmark;
         activeTab.AutoSavePaused = autoSavePaused;
         activeTab.LastAutoSave = lastAutoSave;
-        activeTab.Dirty = editor.IsDirty;
+        activeTab.Dirty = editor.FastDirty;
     }
 
     private void AddTab(EditorState state)
     {
+        TrackEditor(state);
         var tab = new ProjectTab(state);
         tabs.Add(tab); SwitchTab(tab, force: true);
     }
@@ -88,7 +89,7 @@ public partial class MainView
         {
             var tab = tabs[i]; var index = i;
             var current = tab == activeTab;
-            var dirty = current ? editor.IsDirty : tab.Dirty;
+            var dirty = current ? editor.FastDirty : tab.Dirty;
             var label = (tab.Editor.FileName ?? $"Untitled {i + 1}") + (dirty ? " ●" : "");
             var item = Button(label, () => SwitchTab(tab)); item.Name = $"ProjectTab{i}";
             item.Background = Avalonia.Media.Brushes.Transparent;

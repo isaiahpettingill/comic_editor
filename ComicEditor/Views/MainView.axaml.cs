@@ -416,8 +416,9 @@ public partial class MainView : UserControl
     private void RefreshTitle()
     {
         if (TopLevel.GetTopLevel(this) is Window window)
-            window.Title = $"{editor.FileName ?? "Untitled"}{(editor.IsDirty ? " *" : "")} — ComicEditor";
+            window.Title = $"{editor.FileName ?? "Untitled"}{(editor.FastDirty ? " *" : "")} — ComicEditor";
         RefreshTabs();
+        if (editor.FastDirty) QueueThumbnailRefresh();
     }
 
     private void RefreshCanvas()
@@ -459,6 +460,21 @@ public partial class MainView : UserControl
             var size = new NumericUpDown { Value = editor.BrushSize, Minimum = 1, Maximum = 64, Width = 120, Height = 32, MinHeight = 32 };
             size.ValueChanged += (_, _) => editor.BrushSize = (int)(size.Value ?? 1);
             toolOptions.Children.Add(size); ToolTip.SetTip(size, "Brush size in pixels");
+        }
+        if (editor.Tool is Tool.Rectangle or Tool.Ellipse or Tool.RoundedRectangle or Tool.Polygon)
+        {
+            var fill = new ComboBox
+            {
+                Name = "ShapeFillToolbar",
+                ItemsSource = Enum.GetValues<ShapeFill>(),
+                SelectedItem = editor.Paint.Fill,
+                Width = 110,
+                Height = 32,
+                MinHeight = 32,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            fill.SelectionChanged += (_, _) => { if (fill.SelectedItem is ShapeFill selected) { editor.Paint.Fill = selected; editor.Preferences.Save(); } };
+            ToolTip.SetTip(fill, "Shape appearance"); toolOptions.Children.Add(fill);
         }
         var options = Icon(PackIconMaterialKind.Tune, "Tool options", EditToolOptions); options.Name = "ToolOptions";
         toolOptions.Children.Add(options);

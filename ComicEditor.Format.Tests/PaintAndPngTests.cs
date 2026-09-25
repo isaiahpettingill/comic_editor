@@ -6,6 +6,24 @@ namespace ComicEditor.Format.Tests;
 
 public class PaintAndPngTests
 {
+    [Fact]
+    public void SnapshotKeepsArtworkAndTextStableWhileOriginalChanges()
+    {
+        var scene = Cutscene.Create(4, 4, rgba: true);
+        scene.Frames[0].TextObjects.Add(new TextObject { Key = "line", Styles = [new TextStyleSpan { FontSize = 18, Length = 1 }] });
+        scene.Translations["en"]["line"] = "before";
+        var snapshot = scene.Snapshot();
+        var expected = CutsceneFile.Write(snapshot);
+
+        scene.Frames[0].Layers[0].SetRgbaPixel(0, 0, 0xff0000ff);
+        scene.Frames[0].TextObjects[0].Styles[0].FontSize = 32;
+        scene.Translations["en"]["line"] = "after";
+        scene.Palette[0] = "#FFFFFFFF";
+
+        Assert.Equal(expected, CutsceneFile.Write(snapshot));
+        Assert.NotEqual(expected, CutsceneFile.Write(scene));
+    }
+
     [Theory]
     [InlineData(1, 1)]
     [InlineData(2, 1)]

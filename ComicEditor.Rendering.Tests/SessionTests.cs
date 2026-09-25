@@ -148,6 +148,20 @@ public sealed class SessionTests
     }
 
     [Fact]
+    public void BackgroundSaveKeepsNewerRevisionDirty()
+    {
+        var editor = new EditorState();
+        editor.BeforeChange(); editor.Layer.SetPixel(0, 0, 1);
+        var snapshot = editor.Scene.Snapshot(); var revision = editor.Revision;
+        editor.BeforeChange(); editor.Layer.SetPixel(1, 0, 2);
+
+        editor.MarkSaved(CutsceneFile.Write(snapshot), revision);
+
+        Assert.True(editor.FastDirty);
+        Assert.True(editor.IsDirty);
+    }
+
+    [Fact]
     public async Task RecoveryReplacesAtomicallyAndRetainsPriorCopyOnFailure()
     {
         var root = Path.Combine(Path.GetTempPath(), "comic-session-test-" + Guid.NewGuid().ToString("N"));

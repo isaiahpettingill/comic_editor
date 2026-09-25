@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using ComicEditor.Editing;
 using ComicEditor.Format;
 using ComicEditor.Rendering;
@@ -12,26 +13,83 @@ namespace ComicEditor.Views;
 
 public partial class MainView
 {
+    private StackPanel? renderedStoryboard;
+    private Cutscene? thumbnailScene;
+    private string[] thumbnailFrameIds = [];
+    private readonly List<CutsceneCanvas> thumbnailCanvases = [];
+    private readonly List<Border> thumbnailCards = [];
+    private readonly HashSet<int> thumbnailPendingFrames = [];
+    private DispatcherTimer? thumbnailTimer;
+    private bool thumbnailRefreshAll;
+
+    private void QueueThumbnailRefresh(bool all = false)
+    {
+        if (thumbnailCanvases.Count == 0) return;
+        thumbnailRefreshAll |= all;
+        if (!all) thumbnailPendingFrames.Add(editor.FrameIndex);
+        thumbnailTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+        thumbnailTimer.Tick -= RefreshQueuedThumbnails;
+        thumbnailTimer.Tick += RefreshQueuedThumbnails;
+        thumbnailTimer.Stop(); thumbnailTimer.Start();
+    }
+
+    private void RefreshQueuedThumbnails(object? sender, EventArgs args)
+    {
+        thumbnailTimer?.Stop();
+        if (thumbnailRefreshAll)
+            foreach (var thumb in thumbnailCanvases) thumb.InvalidateVisual();
+        else
+            foreach (var index in thumbnailPendingFrames)
+                if (index >= 0 && index < thumbnailCanvases.Count) thumbnailCanvases[index].InvalidateVisual();
+        thumbnailRefreshAll = false; thumbnailPendingFrames.Clear();
+    }
+
     private void RefreshStoryboard()
     {
         if (storyboard is null) return;
+        var ids = editor.Scene.Frames.Select(frame => frame.Id).ToArray();
+        if (renderedStoryboard == storyboard && ids.SequenceEqual(thumbnailFrameIds))
+        {
+            var changedScene = !ReferenceEquals(thumbnailScene, editor.Scene);
+            var changedLanguage = thumbnailCanvases.Count > 0 && thumbnailCanvases[0].Language != editor.Language;
+            var changedDimensions = thumbnailCanvases.Count > 0 &&
+                (thumbnailCanvases[0].Width != editor.Scene.Width || thumbnailCanvases[0].Height != editor.Scene.Height);
+            thumbnailScene = editor.Scene;
+            for (var i = 0; i < thumbnailCanvases.Count; i++)
+            {
+                thumbnailCanvases[i].Scene = editor.Scene;
+                thumbnailCanvases[i].Language = editor.Language;
+                thumbnailCanvases[i].Width = editor.Scene.Width;
+                thumbnailCanvases[i].Height = editor.Scene.Height;
+                thumbnailCards[i].Background = Brush(i == editor.FrameIndex ? UiTheme.Selection : UiTheme.Surface);
+                thumbnailCards[i].BorderBrush = Brush(i == editor.FrameIndex ? UiTheme.Accent : UiTheme.Border);
+                thumbnailCards[i].BorderThickness = new Thickness(i == editor.FrameIndex ? 2 : 1);
+            }
+            QueueThumbnailRefresh(changedScene || changedLanguage || changedDimensions);
+            return;
+        }
+        renderedStoryboard = storyboard; thumbnailScene = editor.Scene; thumbnailFrameIds = ids;
+        thumbnailPendingFrames.Clear(); thumbnailRefreshAll = false;
+        thumbnailCanvases.Clear(); thumbnailCards.Clear();
         storyboard.Children.Clear();
         for (var i = 0; i < editor.Scene.Frames.Count; i++)
         {
             var index = i;
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,44"), Height = 64 };
+            var thumbnail = new CutsceneCanvas
+            {
+                Scene = editor.Scene,
+                FrameIndex = i,
+                Language = editor.Language,
+                Width = editor.Scene.Width,
+                Height = editor.Scene.Height,
+                IsHitTestVisible = false
+            };
+            thumbnailCanvases.Add(thumbnail);
             row.Children.Add(new Viewbox
             {
                 Stretch = Stretch.Uniform,
-                Child = new CutsceneCanvas
-                {
-                    Scene = editor.Scene,
-                    FrameIndex = i,
-                    Language = editor.Language,
-                    Width = editor.Scene.Width,
-                    Height = editor.Scene.Height,
-                    IsHitTestVisible = false
-                }
+                Child = thumbnail
             });
             var number = Label((i + 1).ToString("D3")); number.TextAlignment = TextAlignment.Center; AddAt(row, number, 1);
             var card = new Border
@@ -46,9 +104,15 @@ public partial class MainView
                 BorderThickness = new Thickness(i == editor.FrameIndex ? 2 : 1)
             };
             ToolTip.SetTip(card, "Click to open; drag to reorder");
+            thumbnailCards.Add(card);
             AttachReorder(card, storyboard, index, true, () => { SelectFrame(index); if (compact) ShowCompactPage(CompactPage.Draw); });
             storyboard.Children.Add(card);
         }
+    }
+
+    private void RefreshAfterArtworkEdit()
+    {
+        RefreshCanvas(); RefreshTitle(); QueueThumbnailRefresh();
     }
 
     private void RefreshPalette()
@@ -196,7 +260,7 @@ public partial class MainView
             // Renaming this object preserves other objects sharing its old key.
             foreach (var entries in editor.Scene.Translations.Values)
                 if (!entries.ContainsKey(next) && entries.TryGetValue(obj.Key, out var value)) entries[next] = value;
-            obj.Key = next; RefreshCanvas(); RefreshTitle();
+            obj.Key = next; RefreshCanvas(); RefreshTitle(); QueueThumbnailRefresh();
         };
         AddAt(keyRow, key, 1); inspector.Children.Add(keyRow);
         var language = new ComboBox
@@ -245,7 +309,7 @@ public partial class MainView
             var next = translation.Text ?? "";
             if (editor.Scene.Text(lang, obj.Key) == next) return;
             if (!captured) { editor.BeforeChange(); captured = true; }
-            editor.SetTranslation(lang, obj.Key, next); UpdateWarning(); RefreshCanvas(); RefreshTitle(); QueueFontCheck();
+            editor.SetTranslation(lang, obj.Key, next); UpdateWarning(); RefreshCanvas(); RefreshTitle(); QueueThumbnailRefresh(); QueueFontCheck();
         };
         refreshFontWarning = UpdateWarning;
         UpdateWarning(); inspector.Children.Add(warning); inspector.Children.Add(translation);

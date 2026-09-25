@@ -61,7 +61,7 @@ public partial class CanvasTests
     }
 
     [Fact]
-    public async Task UndoPaletteChangeClearsArtworkClipboardWithObsoleteIndices()
+    public async Task UndoPaletteChangeRemapsArtworkClipboardByColor()
     {
         using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
         await session.Dispatch(() =>
@@ -74,7 +74,7 @@ public partial class CanvasTests
             Invoke(view, "SelectAllArtwork"); Invoke(view, "CopySelection", false);
             Invoke(view, "Undo"); Assert.Equal(2, editor.Scene.Palette.Count);
             Invoke(view, "PasteSelection"); editor.Scene.Validate();
-            Assert.Equal(-1, editor.Layer.Pixel(0, 0));
+            Assert.Equal(0, editor.Layer.Pixel(0, 0));
             window.Close();
         }, CancellationToken.None);
     }

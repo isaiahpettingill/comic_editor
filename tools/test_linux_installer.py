@@ -73,6 +73,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.run_installer("--archive", self.archive)
         self.assertEqual(self.command("comic-editor", "two words"), "one:two words\n")
         self.assertEqual(self.command("comic-compile", "a b"), "compiler:a b\n")
+        self.assertTrue((self.bin / "comic-editor-update").is_symlink())
         desktop = self.data / "applications/org.comiceditor.storyboard.desktop"
         self.assertTrue(desktop.is_file())
         self.assertFalse(desktop.is_symlink())
@@ -105,6 +106,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertFalse(mime.exists())
         self.assertFalse(desktop.is_symlink())
         self.assertFalse((self.bin / "comic-editor").is_symlink())
+        self.assertFalse((self.bin / "comic-editor-update").is_symlink())
         self.assertEqual(document.read_text(), "keep this project")
         self.run_installer("--uninstall")
 
@@ -151,7 +153,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertFalse(desktop.exists())
         self.assertEqual(log.read_text().count("kbuildsycoca6:"), 3)
 
-    def test_plasma5_refresh_fallback_and_user_edited_desktop_is_preserved(self):
+    def test_plasma5_refresh_and_launcher_repair(self):
         mock_bin = self.base / "mock"
         mock_bin.mkdir()
         log = self.base / "menu-refresh"
@@ -165,9 +167,10 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertEqual(log.read_text(), "--noincremental")
         desktop = self.data / "applications/org.comiceditor.storyboard.desktop"
         desktop.write_text("user replacement")
-        self.run_installer("--archive", self.archive, success=False)
+        self.run_installer("--archive", self.archive)
+        self.assertIn("StartupWMClass=org.comiceditor.storyboard", desktop.read_text())
         self.command("comic-editor-uninstall")
-        self.assertEqual(desktop.read_text(), "user replacement")
+        self.assertFalse(desktop.exists())
 
     def test_unrelated_command_is_not_overwritten(self):
         self.bin.mkdir()
@@ -183,8 +186,7 @@ class LinuxInstallerTests(unittest.TestCase):
         icon = self.data / "icons/hicolor/scalable/apps/org.comiceditor.storyboard.svg"
         desktop.write_text("damaged desktop entry")
         icon.write_text("damaged icon")
-        self.run_installer("--archive", self.archive, success=False)
-        self.run_installer("--archive", self.archive, "--repair")
+        self.run_installer("--archive", self.archive)
         self.assertIn("X-ComicEditor-Managed=true", desktop.read_text())
         self.assertIn("<title>one</title>", icon.read_text())
         self.assertEqual(self.command("comic-editor"), "one:\n")
@@ -211,13 +213,34 @@ class LinuxInstallerTests(unittest.TestCase):
         self.command("comic-editor-uninstall")
         self.assertEqual(command.read_text(), "user replacement")
 
-    def test_release_download_url_and_embedded_checksum(self):
+    def test_saved_installer_fetches_latest_and_repairs_on_every_run(self):
+        private = self.base / "private.pem"
+        signature = self.base / "archive.sig"
+        subprocess.run(
+            ["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(private)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        public = subprocess.check_output(
+            ["openssl", "pkey", "-in", str(private), "-pubout"], text=True
+        )
+
+        def sign():
+            subprocess.run(
+                ["openssl", "dgst", "-sha256", "-sign", str(private),
+                 "-sigopt", "rsa_padding_mode:pss", "-sigopt", "rsa_pss_saltlen:32",
+                 "-out", str(signature), str(self.archive)],
+                check=True,
+            )
+
+        sign()
         installer = self.base / "install-comic-editor.sh"
-        PACKAGING.package(self.archive, installer, "example/comic_editor", "v1.2.3")
-        self.assertNotIn("@SHA256@", installer.read_text())
+        PACKAGING.package(self.archive, installer, "example/comic_editor", public)
+        self.assertNotIn("@PUBLIC_KEY@", installer.read_text())
         expected = hashlib.sha256(self.archive.read_bytes()).hexdigest()
-        self.assertIn(expected, installer.read_text())
-        # Replace network access with a downloader that records the requested URL.
+        self.assertIn(expected, self.archive.with_name(self.archive.name + ".sha256").read_text())
+        # Replace the network with the current archive and its real signature.
         mock_bin = self.base / "mock"
         mock_bin.mkdir()
         curl = mock_bin / "curl"
@@ -225,26 +248,38 @@ class LinuxInstallerTests(unittest.TestCase):
             "#!/bin/bash\nwhile (($#)); do\n"
             ' if [[ "$1" == --output ]]; then output="$2"; shift 2;\n'
             ' else url="$1"; shift; fi\ndone\n'
-            'printf "%s" "$url" > "$REQUEST_LOG"\n'
-            'cp "$TEST_ARCHIVE" "$output"\n'
+            'printf "%s\\n" "$url" >> "$REQUEST_LOG"\n'
+            'if [[ "$url" == *.sig ]]; then cp "$TEST_SIGNATURE" "$output"; '
+            'else cp "$TEST_ARCHIVE" "$output"; fi\n'
         )
         curl.chmod(0o755)
         self.env.update(
             PATH=str(mock_bin) + ":" + os.environ["PATH"],
             TEST_ARCHIVE=str(self.archive),
+            TEST_SIGNATURE=str(signature),
             REQUEST_LOG=str(self.base / "url"),
         )
         self.run_installer(script=installer)
         self.assertEqual(
-            (self.base / "url").read_text(),
-            "https://github.com/example/comic_editor/releases/download/"
-            "v1.2.3/ComicEditor-linux-x64.tar.gz",
+            (self.base / "url").read_text().splitlines(),
+            ["https://github.com/example/comic_editor/releases/latest/download/ComicEditor-linux-x64.tar.gz",
+             "https://github.com/example/comic_editor/releases/latest/download/ComicEditor-linux-x64.tar.gz.sig"],
         )
+        desktop = self.data / "applications/org.comiceditor.storyboard.desktop"
+        icon = self.data / "icons/hicolor/scalable/apps/org.comiceditor.storyboard.svg"
+        desktop.write_text("damaged desktop")
+        icon.write_text("damaged icon")
+        self.make_archive("two")
+        sign()
+        self.run_installer(script=self.bin / "comic-editor-update")
+        self.assertEqual(self.command("comic-editor"), "two:\n")
+        self.assertIn("StartupWMClass=org.comiceditor.storyboard", desktop.read_text())
+        self.assertIn("<title>two</title>", icon.read_text())
         self.make_archive("tampered")
         self.run_installer(script=installer, success=False)
-        self.assertEqual(self.command("comic-editor"), "one:\n")
+        self.assertEqual(self.command("comic-editor"), "two:\n")
 
-    def test_main_branch_packaging_uses_allocated_release_tag(self):
+    def test_main_branch_packages_reusable_installer(self):
         env = dict(
             self.env,
             GITHUB_REPOSITORY="example/comic_editor",
@@ -258,8 +293,9 @@ class LinuxInstallerTests(unittest.TestCase):
             check=True,
         )
         installer = (self.base / "install-comic-editor.sh").read_text()
-        self.assertIn("RELEASE_TAG='v1.2.3'", installer)
-        self.assertNotIn("RELEASE_TAG='main'", installer)
+        self.assertIn("/releases/latest/download/", installer)
+        self.assertNotIn("RELEASE_TAG=", installer)
+        self.assertIn("-----BEGIN PUBLIC KEY-----", installer)
 
 
 if __name__ == "__main__":

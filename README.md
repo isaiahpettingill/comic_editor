@@ -19,11 +19,11 @@ Download **install-comic-editor.sh** from a GitHub Release and run:
 bash install-comic-editor.sh
 ```
 
-The release automatically includes this installer and a SHA-256 checksum file. The script downloads that release's Linux x64 archive, verifies its embedded checksum, installs the editor and CLI, and adds **ComicEditor** to your desktop application menu with its icon. No .NET installation or sudo is needed. Re-run the installer from a newer release to update; close the editor first.
+The release includes a reusable installer. It downloads the latest Linux x64 archive and verifies its release signature before installing the editor and CLI. It also adds **ComicEditor** to your desktop application menu with its icon. No .NET installation or sudo is needed. Close the editor and run `comic-editor-update` to update or repair it; you do not need to download another installer.
 
-Files live under `~/.local/share/comic-editor`, with `comic-editor`, `comic-compile`, and `comic-editor-uninstall` commands in `~/.local/bin`. `XDG_DATA_HOME` and `COMIC_EDITOR_BIN_DIR` can override these locations. If your shell does not include `~/.local/bin` in `PATH`, the installer prints the full command paths; desktop menu launch works independently of `PATH`.
+Files live under `~/.local/share/comic-editor`, with `comic-editor`, `comic-editor-update`, `comic-compile`, and `comic-editor-uninstall` commands in `~/.local/bin`. `XDG_DATA_HOME` and `COMIC_EDITOR_BIN_DIR` can override these locations. If your shell does not include `~/.local/bin` in `PATH`, the installer prints the full command paths; desktop menu launch works independently of `PATH`.
 
-The launcher uses the standard XDG application and icon directories for KDE Plasma, GNOME, XFCE, and other compatible desktops. Run the installer as your desktop user. The `.desktop` entry and SVG icon are regular files, refreshed after both installer and in-app updates. If either file is damaged, run the newest release installer with `--repair`; it only replaces these files in an existing ComicEditor installation. If installing outside your desktop session, log in again or run `kbuildsycoca6 --noincremental` (Plasma 6) / `kbuildsycoca5 --noincremental` (Plasma 5).
+The launcher uses the standard XDG application and icon directories for KDE Plasma, GNOME, XFCE, and other compatible desktops. Run the installer as your desktop user. The `.desktop` entry and SVG icon are regular files, repaired on every `comic-editor-update` run and refreshed after in-app updates. If installing outside your desktop session, log in again or run `kbuildsycoca6 --noincremental` (Plasma 6) / `kbuildsycoca5 --noincremental` (Plasma 5).
 
 On Wayland desktops, ComicEditor uses Avalonia's XWayland backend. Its X11 window class matches the stable desktop launcher ID so taskbar pins and the application icon can be associated with the running window.
 
@@ -37,7 +37,7 @@ bash install-comic-editor.sh --archive ComicEditor-linux-x64.tar.gz
 
 The Linux binary targets x86-64, glibc-based desktop distributions compatible with the Ubuntu 24.04 build environment. ARM Linux and Alpine/musl are not included. Normal desktop libraries are required: X11 (or XWayland in a Wayland session), fontconfig, ICU, and the usual .NET native dependencies. The installer reports missing linked libraries before replacing an existing installation. Distribution package names vary; see [Avalonia's Linux dependency guidance](https://docs.avaloniaui.net/docs/deployment/linux). It registers `.ctsc` and `.cutscene` with the desktop MIME database without changing system packages.
 
-For local builds, the unstamped source installer accepts `bash tools/install-linux.sh --archive /path/to/ComicEditor-linux-x64.tar.gz --sha256 HASH`; the checksum option is optional only for this source-checkout mode.
+For local builds, the unstamped source installer accepts `bash tools/install-linux.sh --archive /path/to/ComicEditor-linux-x64.tar.gz --sha256 HASH`. Local archives can be checked with `--sha256`; release downloads always require a valid signature.
 
 ## File associations and project extensions
 

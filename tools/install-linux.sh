@@ -4,27 +4,25 @@ set -euo pipefail
 
 # Filled by the Linux release job. Source checkouts support --archive.
 RELEASE_REPOSITORY='@REPOSITORY@'
-RELEASE_TAG='@TAG@'
-RELEASE_SHA256='@SHA256@'
 
 die() { printf 'ComicEditor: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'EOF'
-Usage: bash install-comic-editor.sh [--archive FILE] [--sha256 HASH] [--repair]
+Usage: bash install-comic-editor.sh [--archive FILE] [--sha256 HASH]
        bash install-comic-editor.sh --uninstall
 
 Installs ComicEditor and comic-compile for the current Linux user, without sudo.
-The release script downloads and verifies its matching Linux x64 archive.
+The release script downloads and verifies the latest Linux x64 release each time.
 --archive uses an already downloaded archive (also works from a source checkout).
 --sha256 supplies an expected checksum for a local archive.
-Re-run to update. Uninstall with comic-editor-uninstall; projects are retained.
---repair replaces a damaged ComicEditor launcher or icon in an existing managed installation.
+Re-run to update or repair the launcher and icon. Projects are retained.
+Uninstall with comic-editor-uninstall.
 Locations: ${XDG_DATA_HOME:-$HOME/.local/share}/comic-editor and ~/.local/bin.
 COMIC_EDITOR_BIN_DIR can override the command directory.
 EOF
 }
 
-archive=''; expected="$RELEASE_SHA256"; uninstall=false; repair=false
+archive=''; expected=''; uninstall=false
 while (($#)); do
     case "$1" in
         --archive|--sha256)
@@ -32,7 +30,7 @@ while (($#)); do
             if [[ "$1" == --archive ]]; then archive="$2"; else expected="$2"; fi
             shift 2 ;;
         --uninstall) uninstall=true; shift ;;
-        --repair) repair=true; shift ;;
+        --repair) shift ;; # Accepted for older instructions; repair is automatic.
         --help|-h) usage; exit 0 ;;
         *) die "Unknown option: $1 (use --help)" ;;
     esac
@@ -59,12 +57,12 @@ if [[ -e "$root" ]]; then
     [[ -f "$root/.installer-owned" && $(cat "$root/.installer-owned") == "$marker" ]] || die "Refusing to replace an unmanaged directory: $root"
 fi
 
-destinations=("$bin_home/comic-editor" "$bin_home/comic-compile" "$bin_home/comic-editor-uninstall" "$desktop" "$icon" "$mime")
-targets=("$root/launch" "$root/compile" "$root/uninstall" "$root/comic-editor.desktop" "$root/current/comic-editor.svg" "$root/cutscene-mime.xml")
+destinations=("$bin_home/comic-editor" "$bin_home/comic-compile" "$bin_home/comic-editor-update" "$bin_home/comic-editor-uninstall" "$desktop" "$icon" "$mime")
+targets=("$root/launch" "$root/compile" "$root/installer.sh" "$root/uninstall" "$root/comic-editor.desktop" "$root/current/comic-editor.svg" "$root/cutscene-mime.xml")
 owned_destination() {
     local destination="$1" target="$2"
     if [[ -L "$destination" && $(readlink -- "$destination") == "$target" ]]; then return 0; fi
-    if "$repair" && [[ -d "$root" && ( "$destination" == "$desktop" || "$destination" == "$icon" ) ]]; then return 0; fi
+    if ! "$uninstall" && [[ -d "$root" && ( "$destination" == "$desktop" || "$destination" == "$icon" ) ]]; then return 0; fi
     [[ ( "$destination" == "$desktop" || "$destination" == "$icon" || "$destination" == "$mime" ) && ! -L "$destination" && -f "$destination" && -f "$target" ]] && cmp -s -- "$destination" "$target"
 }
 refresh_desktop() {
@@ -107,19 +105,30 @@ mkdir -p -- "$data_home"
 stage=$(mktemp -d "$data_home/.comic-editor-install.XXXXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
 if [[ -z "$archive" ]]; then
-    [[ "$RELEASE_REPOSITORY" != @* && "$RELEASE_TAG" != @* && "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || die 'Use the installer from a GitHub release, or supply --archive FILE.'
-    url="https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_TAG/ComicEditor-linux-x64.tar.gz"
-    archive="$stage/release.tar.gz"
-    printf 'Downloading ComicEditor %s…\n' "$RELEASE_TAG"
-    if command -v curl >/dev/null; then
-        curl --fail --location --retry 3 --proto '=https' --tlsv1.2 --output "$archive" "$url"
-    elif command -v wget >/dev/null; then
-        wget --https-only -O "$archive" "$url"
-    else die 'Install curl or wget, or use --archive FILE.'; fi
+    [[ "$RELEASE_REPOSITORY" != @* && "$RELEASE_REPOSITORY" == */* ]] || die 'Use the installer from a GitHub release, or supply --archive FILE.'
+    command -v openssl >/dev/null || die 'Install openssl to verify the downloaded release, or use --archive FILE.'
+    url="https://github.com/$RELEASE_REPOSITORY/releases/latest/download/ComicEditor-linux-x64.tar.gz"
+    archive="$stage/ComicEditor-linux-x64.tar.gz"
+    printf 'Downloading the latest ComicEditor release…\n'
+    download() {
+        if command -v curl >/dev/null; then
+            curl --fail --location --retry 3 --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$2" "$1"
+        elif command -v wget >/dev/null; then
+            wget --https-only -O "$2" "$1"
+        else die 'Install curl or wget, or use --archive FILE.'; fi
+    }
+    download "$url" "$archive"
+    download "$url.sig" "$stage/release.sig"
+    cat > "$stage/public.pem" <<'PUBLIC_KEY'
+@PUBLIC_KEY@
+PUBLIC_KEY
+    openssl dgst -sha256 -verify "$stage/public.pem" -signature "$stage/release.sig" \
+        -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:32 "$archive" >/dev/null \
+        || die 'Release signature verification failed; installation was not changed.'
 fi
 [[ -f "$archive" ]] || die "Archive not found: $archive"
 actual=$(sha256sum < "$archive"); actual=${actual%% *}
-if [[ "$expected" != @* || "$expected" != "$RELEASE_SHA256" ]]; then
+if [[ -n "$expected" ]]; then
     [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || die 'Invalid SHA-256 checksum.'
     [[ "${actual,,}" == "${expected,,}" ]] || die 'Archive checksum mismatch; installation was not changed.'
 fi
@@ -210,5 +219,5 @@ if [[ "$old" == "$root/releases/"*/app && "$old" != "$version/app" ]]; then
     previous=${old%/app}
     [[ $(dirname "$previous") == "$root/releases" && ! -L "$previous" ]] && rm -rf -- "$previous"
 fi
-printf 'Installed ComicEditor. Open it from your application menu or run:\n  %s\nCLI: %s\nUninstall: %s\n' "$bin_home/comic-editor" "$bin_home/comic-compile" "$bin_home/comic-editor-uninstall"
+printf 'Installed ComicEditor. Open it from your application menu or run:\n  %s\nUpdate or repair: %s\nCLI: %s\nUninstall: %s\n' "$bin_home/comic-editor" "$bin_home/comic-editor-update" "$bin_home/comic-compile" "$bin_home/comic-editor-uninstall"
 case ":$PATH:" in *":$bin_home:"*) ;; *) printf 'For terminal commands, add %s to PATH.\n' "$bin_home" ;; esac

@@ -1,24 +1,22 @@
-"""Stamp the standalone installer with this release's URL and archive checksum."""
+"""Package a reusable installer with the pinned desktop release signing key."""
 
 import hashlib
 import os
 from pathlib import Path
 import re
-from urllib.parse import quote
 
 
-def package(archive: Path, output: Path, repository: str, tag: str) -> None:
-    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repository) or not re.fullmatch(
-        r"v\d+\.\d+\.\d+", tag
-    ):
-        raise ValueError("A GitHub owner/repository and release tag are required")
+def package(archive: Path, output: Path, repository: str, public_key: str) -> None:
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repository):
+        raise ValueError("A GitHub owner/repository is required")
+    if not public_key.startswith("-----BEGIN PUBLIC KEY-----\n") or not public_key.rstrip().endswith("-----END PUBLIC KEY-----"):
+        raise ValueError("A PEM release signing key is required")
     with archive.open("rb") as source:
         checksum = hashlib.file_digest(source, "sha256").hexdigest()
     template = Path(__file__).with_name("install-linux.sh").read_text()
     for key, value in {
         "@REPOSITORY@": repository,
-        "@TAG@": quote(tag, safe=""),
-        "@SHA256@": checksum,
+        "@PUBLIC_KEY@": public_key.rstrip(),
     }.items():
         template = template.replace(key, value)
     output.write_text(template, newline="\n")
@@ -33,5 +31,5 @@ if __name__ == "__main__":
         Path("ComicEditor-linux-x64.tar.gz"),
         Path("install-comic-editor.sh"),
         os.environ["GITHUB_REPOSITORY"],
-        "v" + os.environ["COMIC_RELEASE_VERSION"],
+        Path(__file__).resolve().parent.parent.joinpath("signing/desktop-public.pem").read_text(),
     )

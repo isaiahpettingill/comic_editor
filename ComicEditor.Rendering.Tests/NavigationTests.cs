@@ -15,6 +15,28 @@ namespace ComicEditor.Rendering.Tests;
 public partial class CanvasTests
 {
     [Fact]
+    public async Task PenContactReportedAsRightButtonDrawsWithoutOpeningCanvasMenu()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(); var window = new Window { Content = view, Width = 1100, Height = 800 };
+            window.Show(); _ = Capture(window);
+            var editor = State(view);
+            var canvas = window.GetVisualDescendants().OfType<CutsceneCanvas>().Single(c => c.Focusable);
+            var point = canvas.TranslatePoint(new Point(80, 70), window)!.Value;
+            using var pen = new Pointer(Pointer.GetNextFreeId(), PointerType.Pen, true);
+            var down = new PointerPointProperties(RawInputModifiers.RightMouseButton, PointerUpdateKind.RightButtonPressed, 0, .6f, 0, 0);
+            var up = new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.RightButtonReleased);
+            canvas.RaiseEvent(new PointerPressedEventArgs(canvas, pen, window, point, 1, down, KeyModifiers.None));
+            Assert.Equal(0, editor.Layer.Pixel(80, 70));
+            Assert.False(canvas.ContextMenu!.IsOpen);
+            canvas.RaiseEvent(new PointerReleasedEventArgs(canvas, pen, window, point, 2, up, KeyModifiers.None, MouseButton.Right));
+            window.Close();
+        }, CancellationToken.None);
+    }
+
+    [Fact]
     public async Task PenDrawsOnZoomedCanvasWithoutScrolling()
     {
         using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));

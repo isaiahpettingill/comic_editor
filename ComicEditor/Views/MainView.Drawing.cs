@@ -16,7 +16,6 @@ public partial class MainView
     private Avalonia.Rect originalTextBounds;
     private int startX, startY, lastX, lastY;
     private List<string>? shapeStart;
-    private bool canvasPenContextRequest;
 
     private void CanvasPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -24,16 +23,22 @@ public partial class MainView
         if (inlineTextBox is not null) EndInlineTextEdit();
         drawingPointer = e.Pointer;
         var properties = e.GetCurrentPoint(canvas).Properties;
-        canvasPenContextRequest = e.Pointer.Type == PointerType.Pen;
-        if (canvasPenContextRequest) e.PreventGestureRecognition();
-        if (!canvasPenContextRequest && properties.IsRightButtonPressed) PrepareCanvasClipboardMenu(canvas.CanvasPoint(e));
+        var nonMouse = e.Pointer.Type != PointerType.Mouse;
+        if (nonMouse) e.PreventGestureRecognition();
+        if (!nonMouse && properties.IsRightButtonPressed && editor.Tool != Tool.Zoom)
+        {
+            PrepareCanvasClipboardMenu(canvas.CanvasPoint(e));
+            canvasClipboardMenu?.Open(canvas);
+            e.Handled = true;
+            return;
+        }
         if (editor.Tool == Tool.Zoom && (properties.IsLeftButtonPressed || properties.IsRightButtonPressed))
         {
             var current = zoom > 0 ? zoom : canvas.TranslatePoint(new Point(1, 0), this)!.Value.X - canvas.TranslatePoint(default, this)!.Value.X;
-            zoom = Math.Clamp(current * (!canvasPenContextRequest && properties.IsRightButtonPressed || e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? .5 : 2), .1, 32);
+            zoom = Math.Clamp(current * (!nonMouse && properties.IsRightButtonPressed || e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? .5 : 2), .1, 32);
             RefreshCanvas(); RefreshTools(); e.Handled = true; return;
         }
-        if (!properties.IsLeftButtonPressed && !(canvasPenContextRequest && properties.IsRightButtonPressed)) return;
+        if (!properties.IsLeftButtonPressed && !(nonMouse && properties.IsRightButtonPressed)) return;
         canvas.Focus(); var point = canvas.CanvasPoint(e);
         startX = lastX = (int)point.X; startY = lastY = (int)point.Y;
         if (editor.Tool is Tool.Select or Tool.Lasso or Tool.EllipseSelect)

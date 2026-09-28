@@ -20,6 +20,10 @@ public partial class MainView
         canvasCutItem.Click += (_, _) => CopySelection(true);
         canvasPasteItem.Click += (_, _) => PasteSelectionAt((int)canvasContextPoint.X, (int)canvasContextPoint.Y);
         canvas.ContextMenu = new ContextMenu { Items = { canvasCopyItem, canvasCutItem, canvasPasteItem } };
+        canvas.ContextRequested += (_, e) =>
+        {
+            if (canvasPenContextRequest) e.Handled = true;
+        };
     }
 
     private void PrepareCanvasClipboardMenu(Point point)

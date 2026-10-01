@@ -52,10 +52,6 @@ public sealed class TestApp : Application
 
         .UseSkia()
 
-        .WithInterFont()
-
-        .With(new Avalonia.Media.FontManagerOptions { DefaultFamilyName = "fonts:Inter#Inter" })
-
         .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
 
 }

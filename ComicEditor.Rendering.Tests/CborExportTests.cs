@@ -32,10 +32,13 @@ public partial class CanvasTests
             var bytes = CborExporter.Compile(scene); var position = 0;
             var root = (Dictionary<string, object>)Read(bytes, ref position);
             Assert.Equal(bytes.Length, position);
-            Assert.Equal(1u, root["version"]); Assert.Equal(160u, root["width"]); Assert.Equal(80u, root["height"]);
+            Assert.Equal(2u, root["version"]); Assert.Equal(160u, root["width"]); Assert.Equal(80u, root["height"]);
             Assert.Equal("en", root["fallback_language"]);
             Assert.Equal(new object[] { "en", "es", "fr" }, (List<object>)root["languages"]);
-            var png = (byte[])Assert.Single((List<object>)root["frames"]);
+            var exportedFrame = (Dictionary<string, object>)Assert.Single((List<object>)root["frames"]);
+            Assert.Equal(1000u, exportedFrame["duration_ms"]); Assert.Equal("always", exportedFrame["req"]);
+            Assert.Empty((List<object>)root["vars"]);
+            var png = (byte[])exportedFrame["png"];
             var art = RgbaPng.Decode(png, 160, 80);
             Assert.Equal(rgba ? 0xff000080u : 0xff0000ffu, art[0]);
             Assert.All(art.Skip(1), pixel => Assert.Equal(0u, pixel)); // Base contains no text.

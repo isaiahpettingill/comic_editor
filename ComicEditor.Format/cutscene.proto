@@ -21,6 +21,8 @@ message Frame {
   string id = 1;
   repeated ArtworkLayer layers = 2; // Ordered bottom to top.
   repeated TextObject text_objects = 3; // Drawn above artwork.
+  uint32 duration_ms = 5; // 0 (legacy absence) means 1000 ms; new files use 1..3600000.
+  string req = 6; // Empty (legacy absence) means always; otherwise always, never, VAR or not VAR.
   bool text_hidden = 4; // False preserves text visibility in older files.
 }
 

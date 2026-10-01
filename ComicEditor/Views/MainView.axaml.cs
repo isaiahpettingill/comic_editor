@@ -70,7 +70,7 @@ public partial class MainView : UserControl
         AttachedToVisualTree += StartSession;
         DetachedFromVisualTree += (_, _) => { sessionTimer?.Stop(); if (SessionStorage.Flush == FlushSession) SessionStorage.Flush = null; };
         DetachedFromVisualTree += (_, _) => StopUpdates();
-        DetachedFromVisualTree += (_, _) => StopSpray();
+        DetachedFromVisualTree += (_, _) => { StopSpray(); StopPlayback(); };
         DetachedFromVisualTree += (_, _) => ResetCanvasNavigation();
         DetachedFromVisualTree += (_, _) => { fontCheck?.Cancel(); fontInstall?.Cancel(); };
     }
@@ -183,6 +183,7 @@ public partial class MainView : UserControl
 
     private void Build(bool small)
     {
+        StopPlayback();
         EndInlineTextEdit();
         ResetCanvasNavigation();
         if (desktopWorkspace is not null && !compact)
@@ -219,7 +220,7 @@ public partial class MainView : UserControl
             ("Paste artwork|Ctrl+V", PasteSelection), ("Select all artwork|Ctrl+A", SelectAllArtwork),
             ("Delete selected artwork", DeleteSelection), ("Deselect", Deselect),
             ("Tool options…", EditToolOptions), ("Drawing input…", EditDrawingInput)));
-        menu.Items.Add(MenuGroup("F_rame", ("Add frame", () => { editor.AddFrame(false); RefreshAll(); }
+        menu.Items.Add(MenuGroup("F_rame", ("Play cutscene…", PreviewPlayback), ("Timing & visibility…", () => FrameSettings(editor.FrameIndex)), ("Add frame", () => { editor.AddFrame(false); RefreshAll(); }
         ),
             ("Duplicate frame", () => { editor.AddFrame(true); RefreshAll(); }
         ), ("Copy frame", () => CopyFrame()
@@ -331,12 +332,12 @@ public partial class MainView : UserControl
         var story = new DockPanel();
         var storyHeader = new StackPanel { Spacing = 6 };
         storyHeader.Children.Add(PaneHeader(Pane.Storyboard, "Storyboard"));
-        var storyActions = Row(Icon(PackIconMaterialKind.Plus, "Add frame", () => { editor.AddFrame(false); RefreshAll(); }),
+        var storyActions = new WrapPanel { Orientation = Orientation.Horizontal, Children = { Icon(PackIconMaterialKind.Play, "Play cutscene", PreviewPlayback), Icon(PackIconMaterialKind.Plus, "Add frame", () => { editor.AddFrame(false); RefreshAll(); }),
             Icon(PackIconMaterialKind.ContentCopy, "Duplicate frame", () => { editor.AddFrame(true); RefreshAll(); }),
             Icon(PackIconMaterialKind.DeleteOutline, "Delete frame", () => { editor.DeleteFrame(); RefreshAll(); }),
             Icon(PackIconMaterialKind.ArrowUp, "Move earlier", () => { editor.MoveFrame(-1); RefreshAll(); }),
-            Icon(PackIconMaterialKind.ArrowDown, "Move later", () => { editor.MoveFrame(1); RefreshAll(); }));
-        storyActions.Spacing = 2; storyActions.Margin = new Thickness(6, 0, 6, 4);
+            Icon(PackIconMaterialKind.ArrowDown, "Move later", () => { editor.MoveFrame(1); RefreshAll(); }) } };
+        foreach (var action in storyActions.Children) action.Margin = new Thickness(1); storyActions.Margin = new Thickness(6, 0, 6, 4);
         storyHeader.Children.Add(storyActions); DockPanel.SetDock(storyHeader, Dock.Top); story.Children.Add(storyHeader);
         if (small)
         {

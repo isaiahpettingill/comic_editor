@@ -21,6 +21,7 @@ public partial class MainView
     {
         row.PointerPressed += (_, e) =>
         {
+            if (e.Source is Avalonia.Visual visual && (visual is Button || visual.GetVisualAncestors().OfType<Button>().Any())) return;
             if (listDragPointer is not null || e.Pointer.Type == PointerType.Touch ||
                 !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed) return;
             row.Focus();

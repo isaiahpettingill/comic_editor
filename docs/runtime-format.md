@@ -76,18 +76,22 @@ protobuf export. Font resolution, visible-layer composition, text effects,
 per-language placements and missing-translation fallback match protobuf export.
 Both indexed and RGBA sources produce the same CBOR representation.
 
-Version 1 is one CBOR map with text keys and only these seven fields:
+Version 2 is one CBOR map with text keys and these eight fields:
 
 | Key | Value |
 | --- | --- |
-| `version` | Unsigned integer `1` (independent of protobuf versions) |
+| `version` | Unsigned integer `2` (independent of protobuf versions) |
 | `width`, `height` | Canvas dimensions in pixels |
 | `languages` | Array of language tags, sorted ordinally |
 | `fallback_language` | One tag from `languages`; `und` for a project without languages |
-| `frames` | Ordered array of PNG **byte strings**, one flattened base image per frame, with no text |
+| `vars` | Sorted array of distinct case-sensitive variable names used by frame conditions |
+| `frames` | Ordered array of maps `{png, duration_ms, req}`; each `png` is a flattened base image with no text |
 | `text` | Flat array of maps: `{frame, language, x, y, png}` |
 
-`frame` is a zero-based frame index; `language` is a tag from `languages`;
+`png` in a frame map is a PNG **byte string**. `duration_ms` is an unsigned
+integer from 1 to 3600000. `req` is a text string defined below.
+
+`frame` in a text entry is a zero-based index in the original `frames` array; `language` is a tag from `languages`;
 `x` and `y` are integer canvas coordinates of the cropped text image's top-left
 corner. `png` is a PNG byte string with dimensions encoded in its PNG header.
 All images are lossless 8-bit RGBA PNGs with straight (unpremultiplied) alpha.
@@ -115,3 +119,77 @@ use the same `render(data, language, frame_index)` function for each page. Reade
 should reject unsupported versions and validate dimensions, frame references,
 language tags and image bounds before uploading textures. Apply file-size and
 allocation limits appropriate to your application when reading untrusted assets.
+
+
+### Frame timing and variants
+
+On each thumbnail, **… → Timing & visibility…** sets duration in milliseconds
+and one of four show modes. The clock badge shows its duration; the visibility
+badge shows ✓ (always), ⊘ (never), a variable name (set), or !NAME (not set).
+Tooltips show the full values. Defaults are **1000 ms** and **always**.
+Settings are saved in the editable project and preserved by undo, duplication
+and frame copy/paste.
+
+The storyboard's play button (or **Frame → Play cutscene…**) opens a timed preview
+in the current language. Check the variables to set, then Play. Pause preserves
+the current frame's remaining time; Play resumes; Restart returns to the first
+matching frame. Changing variables resets playback. Preview plays once, retains
+the last frame at completion, and stops when closed. It does not change the
+editing selection. Very short durations are best-effort at the display's refresh
+rate; delayed timer ticks advance across all elapsed frames without adding drift.
+
+| `req` | Show when |
+| --- | --- |
+| `"always"` | Always |
+| `"never"` | Never |
+| `"PLAYER_A"` | `PLAYER_A` is in the runtime's set of defined variables |
+| `"not PLAYER_A"` | `PLAYER_A` is absent from that set |
+
+Names match `[A-Za-z_][A-Za-z0-9_]{0,63}`, are case-sensitive, and cannot be
+`always`, `never` or `not`. A condition tests one variable; there are no boolean
+expressions or mutually exclusive groups. Multiple variables can be set. `vars`
+is automatically derived from conditions, sorted ordinally, and includes names
+used in negated conditions. The export contains every frame so the game can
+choose a variant at runtime. Excluded frames take **zero time**.
+
+Conceptually, a CBOR v2 file decodes to this structure (PNG bytes abbreviated):
+
+```json
+{
+  "version": 2,
+  "width": 320,
+  "height": 180,
+  "languages": ["en", "es"],
+  "fallback_language": "en",
+  "vars": ["PLAYER_A", "PLAYER_B"],
+  "frames": [
+    {"png": "<PNG bytes>", "duration_ms": 1000, "req": "always"},
+    {"png": "<PNG bytes>", "duration_ms": 80, "req": "PLAYER_A"},
+    {"png": "<PNG bytes>", "duration_ms": 80, "req": "not PLAYER_A"},
+    {"png": "<PNG bytes>", "duration_ms": 1500, "req": "PLAYER_B"},
+    {"png": "<PNG bytes>", "duration_ms": 1000, "req": "never"}
+  ],
+  "text": [{"frame": 1, "language": "es", "x": 12, "y": 30, "png": "<PNG bytes>"}]
+}
+```
+
+For `PLAYER_A` set and `PLAYER_B` unset, play original frame indices 0, 1 for
+1000 ms and 80 ms. Keep original indices when looking up localized text;
+filtering must not renumber its `frame` references. Draw each selected frame's
+base and localized text together, then wait for its duration before advancing.
+
+The Python example reads both v1 and v2, and includes `selected_frames` and a
+Tk playback viewer (requires Python's Tk support):
+
+```sh
+uv run examples/render_cbor.py story.cbor es --play --var PLAYER_A
+```
+
+V1 CBOR stored raw PNG byte strings in `frames` and had no timing or conditions;
+the example treats these as 1000 ms / always with no variables. New exports are
+v2, so v1-only readers must update. Editable protobuf adds `Frame.duration_ms`
+and `Frame.req`; compiled protobuf adds `DisplayCutscene.vars` and the same
+per-frame fields. These are additive fields; artwork versions are unchanged.
+Legacy missing/zero duration means 1000 ms; missing/empty `req` means always.
+Older readers can still render artwork but need to implement these fields to
+honor timing and variants. PNG/book exports remain static documents.

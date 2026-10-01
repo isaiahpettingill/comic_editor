@@ -12,16 +12,22 @@ public static class CborExporter
         var display = DisplayCompiler.Compile(scene);
         using var output = new MemoryStream();
         var writer = new Writer(output);
-        writer.Map(7);
-        writer.Text("version"); writer.Number(1);
+        writer.Map(8);
+        writer.Text("version"); writer.Number(2);
         writer.Text("width"); writer.Number(display.CanvasWidth);
         writer.Text("height"); writer.Number(display.CanvasHeight);
         writer.Text("languages"); writer.Array(display.Languages.Count);
         foreach (var language in display.Languages) writer.Text(language);
         writer.Text("fallback_language"); writer.Text(display.Languages[(int)display.FallbackLanguageIndex]);
+        writer.Text("vars"); writer.Array(display.Vars.Count);
+        foreach (var variable in display.Vars) writer.Text(variable);
         writer.Text("frames"); writer.Array(display.Frames.Count);
         foreach (var frame in display.Frames)
         {
+            writer.Map(3);
+            writer.Text("duration_ms"); writer.Number(frame.DurationMs);
+            writer.Text("req"); writer.Text(frame.Req);
+            writer.Text("png");
             if (scene.IsRgba) writer.Bytes(frame.RgbaArtworkPng.Span);
             else
             {

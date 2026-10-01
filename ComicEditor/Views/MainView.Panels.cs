@@ -21,6 +21,16 @@ public partial class MainView
     private readonly HashSet<int> thumbnailPendingFrames = [];
     private DispatcherTimer? thumbnailTimer;
     private bool thumbnailRefreshAll;
+    private readonly List<(TextBlock Timing, TextBlock Condition)> frameBadges = [];
+
+    private void RefreshFrameBadge(int index)
+    {
+        var frame = editor.Scene.Frames[index]; var badge = frameBadges[index];
+        badge.Timing.Text = "◷ " + (frame.DurationMs / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "s";
+        badge.Condition.Text = frame.Requirement switch { "always" => "✓", "never" => "⊘", _ when frame.Requirement.StartsWith("not ", StringComparison.Ordinal) => "!" + frame.Requirement[4..], _ => frame.Requirement };
+        ToolTip.SetTip(badge.Timing, $"Duration: {frame.DurationMs} ms");
+        ToolTip.SetTip(badge.Condition, "Show: " + frame.Requirement);
+    }
 
     private void QueueThumbnailRefresh(bool all = false)
     {
@@ -57,6 +67,7 @@ public partial class MainView
             thumbnailScene = editor.Scene;
             for (var i = 0; i < thumbnailCanvases.Count; i++)
             {
+                RefreshFrameBadge(i);
                 thumbnailCanvases[i].Scene = editor.Scene;
                 thumbnailCanvases[i].Language = editor.Language;
                 thumbnailCanvases[i].Width = editor.Scene.Width;
@@ -70,12 +81,12 @@ public partial class MainView
         }
         renderedStoryboard = storyboard; thumbnailScene = editor.Scene; thumbnailFrameIds = ids;
         thumbnailPendingFrames.Clear(); thumbnailRefreshAll = false;
-        thumbnailCanvases.Clear(); thumbnailCards.Clear();
+        thumbnailCanvases.Clear(); thumbnailCards.Clear(); frameBadges.Clear();
         storyboard.Children.Clear();
         for (var i = 0; i < editor.Scene.Frames.Count; i++)
         {
             var index = i;
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,44"), Height = 64 };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,100"), Height = 64 };
             var thumbnail = new CutsceneCanvas
             {
                 Scene = editor.Scene,
@@ -91,7 +102,11 @@ public partial class MainView
                 Stretch = Stretch.Uniform,
                 Child = thumbnail
             });
-            var number = Label((i + 1).ToString("D3")); number.TextAlignment = TextAlignment.Center; AddAt(row, number, 1);
+            var number = Label((i + 1).ToString("D3")); number.TextAlignment = TextAlignment.Center;
+            var timing = Label(""); timing.Name = $"FrameTiming{i}"; timing.FontSize = 11;
+            var condition = Label(""); condition.Name = $"FrameRequirement{i}"; condition.FontSize = 11; condition.MaxWidth = 96; condition.TextWrapping = TextWrapping.NoWrap; condition.TextTrimming = TextTrimming.CharacterEllipsis;
+            frameBadges.Add((timing, condition)); RefreshFrameBadge(i);
+            AddAt(row, new StackPanel { Children = { Row(number, FrameOptions(index)), timing, condition } }, 1);
             var card = new Border
             {
                 Name = $"FrameRow{i}",

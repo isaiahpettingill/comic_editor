@@ -157,6 +157,8 @@ public sealed class Cutscene
             throw new InvalidDataException("Fallback fonts must be Google Fonts family references.");
         foreach (var frame in Frames)
         {
+            if (frame.DurationMs is < 1 or > FramePlayback.MaximumDurationMs || !FramePlayback.IsRequirement(frame.Requirement))
+                throw new InvalidDataException("Frame duration must be 1..3600000 ms and requirement must be always, never, VAR or not VAR.");
             if (frame.Layers.Count == 0) throw new InvalidDataException("Every frame needs an artwork layer.");
             foreach (var layer in frame.Layers)
             {
@@ -209,6 +211,8 @@ public sealed class Cutscene
 
 public sealed class Frame
 {
+    public int DurationMs { get; set; } = FramePlayback.DefaultDurationMs;
+    public string Requirement { get; set; } = "always";
     public bool TextVisible { get; set; } = true;
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public List<ArtworkLayer> Layers { get; set; } = [];
@@ -216,6 +220,8 @@ public sealed class Frame
 
     public Frame Snapshot() => new()
     {
+        DurationMs = DurationMs,
+        Requirement = Requirement,
         TextVisible = TextVisible,
         Id = Id,
         Layers = Layers.Select(layer => new ArtworkLayer

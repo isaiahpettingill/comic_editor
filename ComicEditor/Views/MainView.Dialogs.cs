@@ -83,6 +83,7 @@ public partial class MainView
     private void CloseModal()
     {
         if (updateInstalling) return;
+        StopPlayback();
         fontInstall?.Cancel();
         if (modal is not null) shell?.Children.Remove(modal);
         modal = null; if (rootGrid is not null) rootGrid.IsEnabled = true;

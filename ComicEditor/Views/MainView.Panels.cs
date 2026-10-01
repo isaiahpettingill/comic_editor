@@ -74,7 +74,6 @@ public partial class MainView
                 thumbnailCanvases[i].Height = editor.Scene.Height;
                 thumbnailCards[i].Background = Brush(i == editor.FrameIndex ? UiTheme.Selection : UiTheme.Surface);
                 thumbnailCards[i].BorderBrush = Brush(i == editor.FrameIndex ? UiTheme.Accent : UiTheme.Border);
-                thumbnailCards[i].BorderThickness = new Thickness(i == editor.FrameIndex ? 2 : 1);
             }
             QueueThumbnailRefresh(changedScene || changedLanguage || changedDimensions);
             return;
@@ -86,7 +85,9 @@ public partial class MainView
         for (var i = 0; i < editor.Scene.Frames.Count; i++)
         {
             var index = i;
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,100"), Height = 64 };
+            // Let the artwork use the pane width. A fixed metadata column made
+            // previews only a few dozen pixels wide in the default storyboard.
+            var row = new StackPanel { Spacing = 4 };
             var thumbnail = new CutsceneCanvas
             {
                 Scene = editor.Scene,
@@ -99,24 +100,31 @@ public partial class MainView
             thumbnailCanvases.Add(thumbnail);
             row.Children.Add(new Viewbox
             {
+                Name = $"FramePreview{i}",
                 Stretch = Stretch.Uniform,
+                MaxHeight = compact ? 260 : 220,
                 Child = thumbnail
             });
-            var number = Label((i + 1).ToString("D3")); number.TextAlignment = TextAlignment.Center;
+            var number = Label((i + 1).ToString("D3"), true); number.FontSize = 12;
             var timing = Label(""); timing.Name = $"FrameTiming{i}"; timing.FontSize = 11;
-            var condition = Label(""); condition.Name = $"FrameRequirement{i}"; condition.FontSize = 11; condition.MaxWidth = 96; condition.TextWrapping = TextWrapping.NoWrap; condition.TextTrimming = TextTrimming.CharacterEllipsis;
+            var condition = Label(""); condition.Name = $"FrameRequirement{i}"; condition.FontSize = 11; condition.TextWrapping = TextWrapping.NoWrap; condition.TextTrimming = TextTrimming.CharacterEllipsis;
             frameBadges.Add((timing, condition)); RefreshFrameBadge(i);
-            AddAt(row, new StackPanel { Children = { Row(number, FrameOptions(index)), timing, condition } }, 1);
+            var details = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto") };
+            timing.Margin = new Thickness(6, 0, 0, 0);
+            condition.Margin = new Thickness(6, 0);
+            AddAt(details, number); AddAt(details, timing, 1); AddAt(details, condition, 2); AddAt(details, FrameOptions(index), 3);
+            row.Children.Add(details);
             var card = new Border
             {
                 Name = $"FrameRow{i}",
                 Child = row,
-                Height = 74,
                 Padding = new Thickness(4),
                 Focusable = true,
                 Background = Brush(i == editor.FrameIndex ? UiTheme.Selection : UiTheme.Surface),
                 BorderBrush = Brush(i == editor.FrameIndex ? UiTheme.Accent : UiTheme.Border),
-                BorderThickness = new Thickness(i == editor.FrameIndex ? 2 : 1)
+                // Reserve the selection border so selecting a frame never
+                // resizes its preview or shifts the rows below it.
+                BorderThickness = new Thickness(2)
             };
             ToolTip.SetTip(card, "Click to open; drag to reorder");
             thumbnailCards.Add(card);

@@ -59,7 +59,7 @@ public partial class MainView
         var heading = Label(title, true); heading.FontSize = 18; heading.Margin = new Thickness(0, 0, 0, 12); panel.Children.Add(heading);
         AddAt(panel, new ScrollViewer { Content = body, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled }, row: 1);
         var footer = Row(Button(apply is null ? "Close" : "Cancel", CloseModal)); footer.HorizontalAlignment = HorizontalAlignment.Right; footer.Margin = new Thickness(0, 14, 0, 0);
-        if (apply is not null) { var confirm = Button(applyText, apply); confirm.Name = "ModalApply"; footer.Children.Add(confirm); }
+        if (apply is not null) { var confirm = Button(applyText, apply, chrome: false); confirm.Name = "ModalApply"; footer.Children.Add(confirm); }
         AddAt(panel, footer, row: 2);
         var card = new Border
         {

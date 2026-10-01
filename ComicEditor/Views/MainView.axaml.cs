@@ -37,6 +37,7 @@ public partial class MainView : UserControl
     private double zoom { get => editor.Preferences.Zoom; set { editor.Preferences.Zoom = value; editor.Preferences.Save(); } } // Zero fits.
     private ScrollViewer? canvasScroll;
     private Viewbox? canvasFit;
+    private ComicEditor.Styles.EditorChrome? chromeStyle;
 
     public MainView() : this(OperatingSystem.IsAndroid() || OperatingSystem.IsIOS()) { }
 
@@ -86,7 +87,7 @@ public partial class MainView : UserControl
         TextWrapping = TextWrapping.Wrap
     };
 
-    private Button Button(string text, Action action)
+    private Button Button(string text, Action action, bool chrome = true)
     {
         var button = new Button
         {
@@ -97,13 +98,14 @@ public partial class MainView : UserControl
             VerticalContentAlignment = VerticalAlignment.Center,
             HorizontalContentAlignment = HorizontalAlignment.Center
         };
+        if (chrome) button.Classes.Add("chrome");
         button.Click += (_, _) => action();
         return button;
     }
 
-    private Button Icon(PackIconMaterialKind kind, string tip, Action action)
+    private Button Icon(PackIconMaterialKind kind, string tip, Action action, bool chrome = true)
     {
-        var button = Button("", action);
+        var button = Button("", action, chrome);
         button.Content = new PackIconMaterial { Kind = kind, Width = compact ? 22 : 18, Height = compact ? 22 : 18 };
         button.Width = compact ? 44 : 32; button.Padding = new Thickness(5);
         ToolTip.SetTip(button, tip);
@@ -192,6 +194,8 @@ public partial class MainView : UserControl
             paletteHeight = rootGrid.RowDefinitions[4].ActualHeight;
         compact = small;
         compactSingleRow = small && CompactLandscape;
+        if (chromeStyle is not null) Styles.Remove(chromeStyle);
+        Styles.Add(chromeStyle = new ComicEditor.Styles.EditorChrome(UiTheme));
         shell = new Grid();
         var root = rootGrid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,5,Auto"), Background = Brush(UiTheme.Background) };
         root.RowDefinitions[2].MinHeight = small ? 0 : 300;
@@ -230,17 +234,7 @@ public partial class MainView : UserControl
             ("Move earlier", () => { editor.MoveFrame(-1); RefreshAll(); }
         ), ("Move later", () => { editor.MoveFrame(1); RefreshAll(); }
         )));
-        menu.Items.Add(MenuGroup("_View", ("Previous / current", () => { editor.Compare = !editor.Compare; Build(compact); }
-        ),
-            ("Onion skin", () => { editor.OnionSkin = !editor.OnionSkin; Build(compact); }
-        ),
-            ("Reset pane layout", () =>
-            {
-                desktopWorkspace = null; paneOrder[0] = Pane.Storyboard; paneOrder[1] = Pane.Canvas; paneOrder[2] = Pane.Inspector;
-                paneWidths[0] = new(190); paneWidths[1] = new(1, GridUnitType.Star); paneWidths[2] = new(300); Build(compact);
-            }
-        )));
-        ((MenuItem)menu.Items[3]!).Items.Add(ThemeMenu());
+        menu.Items.Add(ViewMenu());
         menu.Items.Add(MenuGroup("_Canvas", ("Resize canvas…", ResizeCanvas), ("Convert to RGBA color…", EnableRgbaMode)));
         menu.Items.Add(MenuGroup("_Palette", ("Palette editor…", EditPalette), ("Edit selected color…", EditPaletteColor)));
         menu.Items.Add(MenuGroup("_Languages", ("Manage languages…", ManageLanguages)));
@@ -275,26 +269,8 @@ public partial class MainView : UserControl
         redoButton = Icon(PackIconMaterialKind.Redo, "Redo", Redo); redoButton.Name = "RedoButton";
         var nav = Row(Icon(PackIconMaterialKind.ChevronLeft, "Previous frame (Alt+Left)", () => SelectFrame(editor.FrameIndex - 1)),
             frameCount, Icon(PackIconMaterialKind.ChevronRight, "Next frame (Alt+Right)", () => SelectFrame(editor.FrameIndex + 1)));
-        var onion = new ToggleButton { Content = "Onion skin", IsChecked = editor.OnionSkin, Height = 32, VerticalAlignment = VerticalAlignment.Center };
-        onion.Click += (_, _) => { editor.OnionSkin = onion.IsChecked == true; RefreshCanvas(); };
-        var opacity = new Slider
-        {
-            Name = "OnionOpacity",
-            Minimum = 0,
-            Maximum = 1,
-            Value = editor.OnionOpacity,
-            Width = 90,
-            Height = 32,
-            VerticalAlignment = VerticalAlignment.Center,
-            IsEnabled = editor.OnionSkin
-        };
-        var percent = Label($"{editor.OnionOpacity:P0}"); percent.Width = 36;
-        opacity.PropertyChanged += (_, e) => { if (e.Property == Slider.ValueProperty) { editor.OnionOpacity = opacity.Value; percent.Text = $"{opacity.Value:P0}"; RefreshCanvas(); } };
-        onion.Click += (_, _) => opacity.IsEnabled = editor.OnionSkin;
-        var compare = new ToggleButton { Content = "Compare", IsChecked = editor.Compare, Height = 32, IsVisible = !small, VerticalAlignment = VerticalAlignment.Center };
-        compare.Click += (_, _) => { editor.Compare = compare.IsChecked == true; RefreshCanvas(); };
         var controls = new WrapPanel { Margin = new Thickness(8, 4, 8, 6), Orientation = Orientation.Horizontal };
-        foreach (var group in new[] { Row(undoButton, redoButton), nav, Row(Label("Language"), previewLanguage), Row(onion, opacity, percent, compare) })
+        foreach (var group in new[] { Row(undoButton, redoButton), nav, Row(Label("Language"), previewLanguage) })
         { group.Margin = new Thickness(0, 0, 12, 2); controls.Children.Add(group); }
         if (small)
         {
@@ -306,14 +282,6 @@ public partial class MainView : UserControl
             var top = compactTopBar = new Grid { Name = "CompactTopBar", ColumnDefinitions = new ColumnDefinitions(compactSingleRow ? "44,44,44,Auto,*,80" : "44,44,44,*,80"), Margin = new Thickness(4, 2) };
             top.Children.Add(menu); AddAt(top, undoButton, 1); AddAt(top, redoButton, 2);
             AddAt(top, frameCount, compactSingleRow ? 4 : 3); AddAt(top, previewLanguage, compactSingleRow ? 5 : 4); header.Children.Add(top);
-            // The original desktop comparison group is not used on compact screens.
-            ((StackPanel)onion.Parent!).Children.Clear();
-            var onionSettings = new StackPanel { Spacing = 8, Children = { onion, Row(opacity, percent) } };
-            compactOnionButton = Icon(PackIconMaterialKind.LayersOutline, "Onion skin settings", () => { });
-            compactOnionButton.Name = "CompactOnion";
-            compactOnionButton.Flyout = new Flyout { Content = onionSettings };
-            onion.Height = 44;
-            opacity.Height = 44; opacity.Width = 140;
         }
         else AddAt(root, controls, row: 1);
         tabStrip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness(4, 1, 4, 2) };
@@ -332,12 +300,17 @@ public partial class MainView : UserControl
         var story = new DockPanel();
         var storyHeader = new StackPanel { Spacing = 6 };
         storyHeader.Children.Add(PaneHeader(Pane.Storyboard, "Storyboard"));
-        var storyActions = new WrapPanel { Orientation = Orientation.Horizontal, Children = { Icon(PackIconMaterialKind.Play, "Play cutscene", PreviewPlayback), Icon(PackIconMaterialKind.Plus, "Add frame", () => { editor.AddFrame(false); RefreshAll(); }),
+        var storyActions = new UniformGrid { Name = "StoryboardActions", Columns = 6, Children = { Icon(PackIconMaterialKind.Play, "Play cutscene", PreviewPlayback), Icon(PackIconMaterialKind.Plus, "Add frame", () => { editor.AddFrame(false); RefreshAll(); }),
             Icon(PackIconMaterialKind.ContentCopy, "Duplicate frame", () => { editor.AddFrame(true); RefreshAll(); }),
             Icon(PackIconMaterialKind.DeleteOutline, "Delete frame", () => { editor.DeleteFrame(); RefreshAll(); }),
             Icon(PackIconMaterialKind.ArrowUp, "Move earlier", () => { editor.MoveFrame(-1); RefreshAll(); }),
             Icon(PackIconMaterialKind.ArrowDown, "Move later", () => { editor.MoveFrame(1); RefreshAll(); }) } };
-        foreach (var action in storyActions.Children) action.Margin = new Thickness(1); storyActions.Margin = new Thickness(6, 0, 6, 4);
+        foreach (var action in storyActions.Children.OfType<Button>())
+        {
+            action.Width = double.NaN; action.HorizontalAlignment = HorizontalAlignment.Stretch;
+            action.Margin = new Thickness(1); action.Padding = new Thickness(3);
+        }
+        storyActions.Margin = new Thickness(6, 0, 6, 4);
         storyHeader.Children.Add(storyActions); DockPanel.SetDock(storyHeader, Dock.Top); story.Children.Add(storyHeader);
         if (small)
         {

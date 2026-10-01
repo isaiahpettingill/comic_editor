@@ -15,7 +15,6 @@ public partial class MainView
     private CompactPage compactPage;
     private Control[] compactPages = [];
     private Button[] compactTabs = [];
-    private Button? compactOnionButton;
     private Border? compactColor;
 
     private void AddCompactWorkspace(Grid root, Grid workspace, Control draw, Control frames, Control layers, Control colors)
@@ -67,7 +66,7 @@ public partial class MainView
             var row = new WrapPanel { Orientation = Orientation.Horizontal };
             foreach (var tool in group.Tools)
             {
-                var button = Button("", () => { flyout.Hide(); ChooseTool(tool); });
+                var button = Button("", () => { flyout.Hide(); ChooseTool(tool); }, chrome: false);
                 button.Name = "CompactTool" + tool;
                 var caption = Label(ToolName(tool)); caption.FontSize = 12;
                 button.Content = Row(new PackIconMaterial { Kind = ToolIcon(tool), Width = 22, Height = 22 }, caption);
@@ -77,7 +76,7 @@ public partial class MainView
             }
             choices.Children.Add(row);
         }
-        var chooseTool = Icon(ToolIcon(editor.Tool), "Choose drawing tool: " + ToolName(editor.Tool), () => { });
+        var chooseTool = Icon(ToolIcon(editor.Tool), "Choose drawing tool: " + ToolName(editor.Tool), () => { }, chrome: false);
         chooseTool.Name = "CompactToolPicker"; chooseTool.Flyout = flyout;
         toolOptions.Children.Add(chooseTool);
         var options = Button(pathBase is not null ? "Finish" : UsesSize(editor.Tool) ? $"{editor.BrushSize}px · Options" : "Options", () => { if (pathBase is not null) FinishPath(); else EditToolOptions(); });
@@ -107,6 +106,5 @@ public partial class MainView
         Avalonia.Automation.AutomationProperties.SetName(scale, "Canvas zoom");
         scale.SelectionChanged += (_, _) => { if (scale.SelectedIndex <= 3) zoom = scale.SelectedIndex switch { 1 => 1, 2 => 2, 3 => 4, _ => 0 }; RefreshCanvas(); };
         toolOptions.Children.Add(scale);
-        if (compactOnionButton is not null) toolOptions.Children.Add(compactOnionButton);
     }
 }

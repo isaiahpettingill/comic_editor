@@ -48,7 +48,8 @@ public partial class MainView
     private Button FrameOptions(int index)
     {
         var button = Button("…", () => { }); button.Name = $"FrameOptions{index}";
-        button.Padding = new Thickness(3, 0); button.Width = 28; button.Height = 24;
+        button.Padding = new Thickness(3, 0); button.Width = compact ? 44 : 28; button.Height = compact ? 44 : 24;
+        Avalonia.Automation.AutomationProperties.SetName(button, $"Frame {index + 1} options");
         ToolTip.SetTip(button, "Frame options");
         var settings = new MenuItem { Header = "Timing & visibility…", Name = $"FrameSettings{index}" };
         settings.Click += (_, _) => FrameSettings(index);

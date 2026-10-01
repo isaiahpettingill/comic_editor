@@ -38,7 +38,7 @@ public partial class MainView
         {
             if (suppressClick) { suppressClick = false; return; }
             ChooseTool(RememberedTool(group));
-        });
+        }, chrome: false);
         button.Name = "ToolGroup" + group.Id; button.Width = button.Height = compact ? 40 : 34;
         if (group.Tools.Length > 1)
         {

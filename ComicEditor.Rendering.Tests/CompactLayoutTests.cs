@@ -25,7 +25,7 @@ public partial class CanvasTests
             var view = new MainView(touchLayout: true);
             var window = new Window { Content = view, Width = width, Height = height };
             window.Show(); _ = Capture(window);
-            foreach (var name in new[] { "UndoButton", "RedoButton", "CompactToolPicker", "CompactZoom", "CompactOnion", "CompactDraw", "CompactFrames", "CompactLayers", "CompactColors" })
+            foreach (var name in new[] { "UndoButton", "RedoButton", "CompactToolPicker", "CompactZoom", "CompactDraw", "CompactFrames", "CompactLayers", "CompactColors" })
             {
                 var control = Named<Control>(window, name);
                 Assert.True(control.IsEffectivelyVisible, name);

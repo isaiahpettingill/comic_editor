@@ -52,6 +52,10 @@ public sealed class TestApp : Application
 
         .UseSkia()
 
+        .WithInterFont()
+
+        .With(new Avalonia.Media.FontManagerOptions { DefaultFamilyName = "fonts:Inter#Inter" })
+
         .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
 
 }
@@ -318,15 +322,13 @@ public partial class CanvasTests
 
             var language = Named<ComboBox>(window, "PreviewLanguage");
 
-            var opacity = Named<Slider>(window, "OnionOpacity");
-
-            var thumb = opacity.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.Thumb>().Single();
+            var undo = Named<Button>(window, "UndoButton");
 
             var languageCenter = language.TranslatePoint(new Point(0, language.Bounds.Height / 2), window)!.Value.Y;
 
-            var thumbCenter = thumb.TranslatePoint(new Point(0, thumb.Bounds.Height / 2), window)!.Value.Y;
+            var undoCenter = undo.TranslatePoint(new Point(0, undo.Bounds.Height / 2), window)!.Value.Y;
 
-            Assert.InRange(Math.Abs(languageCenter - thumbCenter), 0, 1);
+            Assert.InRange(Math.Abs(languageCenter - undoCenter), 0, 1);
 
             for (var i = 0; i < 128; i++)
 

@@ -2,6 +2,9 @@
 
 A small Avalonia 12 storyboard editor for hand-drawn cutscenes with indexed or RGBA artwork. It targets .NET 11. Editable `.ctsc` / `.cutscene` projects retain artwork, text, translations, and font references; compiled `.cutscene.runtime` game assets flatten artwork and prerender localized text. PNG export is optional. The software is [0BSD](LICENSE); the bundled Comic Shanns font has its own [MIT license](licenses/Comic-Shanns-MIT.txt). The [IconPacks package](licenses/IconPacks-MIT.txt) and [Material icons](licenses/MaterialDesignIcons-LICENSE.txt) retain their own licenses.
 
+<img width="1275" height="820" alt="image" src="https://github.com/user-attachments/assets/d95765f8-0596-49a9-b9c8-dea16858e35b" />
+
+
 ## Build and run
 
 Install the .NET 11 SDK. Avalonia packages and the Protobuf compiler used for C# generation restore through NuGet.

@@ -30,9 +30,33 @@ public partial class CanvasTests
             var up = new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.RightButtonReleased);
             canvas.RaiseEvent(new PointerPressedEventArgs(canvas, pen, window, point, 1, down, KeyModifiers.None));
             Assert.Equal(0, editor.Layer.Pixel(80, 70));
-            Assert.False(canvas.ContextMenu!.IsOpen);
+            var menu = (ContextMenu)typeof(MainView).GetField("canvasClipboardMenu", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(view)!;
+            Assert.False(menu.IsOpen);
             canvas.RaiseEvent(new PointerReleasedEventArgs(canvas, pen, window, point, 2, up, KeyModifiers.None, MouseButton.Right));
             window.Close();
+        }, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task HoldingTouchOnCanvasDoesNotOpenMenuButMouseRightClickDoes()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(async () =>
+        {
+            var view = new MainView(); var window = new Window { Content = view, Width = 1100, Height = 800 };
+            window.Show(); _ = Capture(window);
+            var canvas = window.GetVisualDescendants().OfType<CutsceneCanvas>().Single(c => c.Focusable);
+            var menu = (ContextMenu)typeof(MainView).GetField("canvasClipboardMenu", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(view)!;
+            var point = canvas.TranslatePoint(new Point(80, 70), window)!.Value;
+            using (var touch = window.TouchBegin(point))
+            {
+                await Task.Delay(800);
+                Assert.False(menu.IsOpen);
+            }
+            window.MouseDown(point, MouseButton.Right);
+            Assert.True(menu.IsOpen);
+            window.MouseUp(point, MouseButton.Right);
+            menu.Close(); window.Close();
         }, CancellationToken.None);
     }
 

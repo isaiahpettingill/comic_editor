@@ -8,6 +8,7 @@ namespace ComicEditor.Views;
 public partial class MainView
 {
     private MenuItem? canvasCopyItem, canvasCutItem, canvasPasteItem;
+    private ContextMenu? canvasClipboardMenu;
     private Point canvasContextPoint;
 
     private void AttachCanvasClipboardMenu()
@@ -19,11 +20,9 @@ public partial class MainView
         canvasCopyItem.Click += (_, _) => CopySelection(false);
         canvasCutItem.Click += (_, _) => CopySelection(true);
         canvasPasteItem.Click += (_, _) => PasteSelectionAt((int)canvasContextPoint.X, (int)canvasContextPoint.Y);
-        canvas.ContextMenu = new ContextMenu { Items = { canvasCopyItem, canvasCutItem, canvasPasteItem } };
-        canvas.ContextRequested += (_, e) =>
-        {
-            if (canvasPenContextRequest) e.Handled = true;
-        };
+        // Open this explicitly for mouse right clicks. Avalonia's attached menu
+        // also opens for a touch/pen hold, which interrupts drawing.
+        canvasClipboardMenu = new ContextMenu { Items = { canvasCopyItem, canvasCutItem, canvasPasteItem } };
     }
 
     private void PrepareCanvasClipboardMenu(Point point)

@@ -38,7 +38,9 @@ public partial class CanvasTests
             third.Scene.Validate();
 
             var canvas = (CutsceneCanvas)typeof(MainView).GetField("canvas", fields)!.GetValue(view)!;
-            Assert.Equal(3, canvas.ContextMenu!.Items.Count);
+            var canvasMenu = (ContextMenu)typeof(MainView).GetField("canvasClipboardMenu", fields)!.GetValue(view)!;
+            Assert.Equal(3, canvasMenu.Items.Count);
+            Assert.Null(canvas.ContextMenu);
             var storyboard = (StackPanel)typeof(MainView).GetField("storyboard", fields)!.GetValue(view)!;
             var row = (Border)storyboard.Children[0];
             Assert.Equal(2, row.ContextMenu!.Items.Count);

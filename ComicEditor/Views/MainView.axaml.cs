@@ -208,7 +208,7 @@ public partial class MainView : UserControl
         var menu = new Menu { Height = small ? 44 : 30, HorizontalAlignment = HorizontalAlignment.Stretch };
         var header = new StackPanel { Spacing = 0 }; AddAt(root, header);
         menu.Items.Add(MenuGroup("_File", ("_New|Ctrl+N", New), ("New indexed cutscene", () => NewWithMode(false)), ("New RGBA cutscene", () => NewWithMode(true)), ("_Open…|Ctrl+O", () => _ = Open()),
-            ("_Save|Ctrl+S", () => _ = Save()), ("Save _as…", () => _ = SaveAs()), ("Build game cutscene…", () => _ = ExportDisplay()),
+            ("_Save|Ctrl+S", () => _ = Save()), ("Save _as…", () => _ = SaveAs()), ("Build game cutscene…", () => _ = ExportDisplay()), ("Build CBOR game cutscene…", () => _ = ExportDisplay(cbor: true)),
             ("Export frame PNG…", () => _ = Export(false)), ("Export all PNGs…", () => _ = Export(true)),
             ("Export PDF…", () => ExportBook(BookFormat.Pdf)), ("Export EPUB…", () => ExportBook(BookFormat.Epub)),
             ("Export CBZ…", () => ExportBook(BookFormat.Cbz))));

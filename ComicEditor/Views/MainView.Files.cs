@@ -99,22 +99,22 @@ public partial class MainView
         finally { fileBusy = false; }
     }
 
-    private async Task ExportDisplay()
+    private async Task ExportDisplay(bool cbor = false)
     {
         FinishPath();
         var storage = TopLevel.GetTopLevel(this)?.StorageProvider; if (storage is null) return;
         var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Build game cutscene",
-            SuggestedFileName = "cutscene.cutscene.runtime",
-            DefaultExtension = "runtime",
-            FileTypeChoices = [new FilePickerFileType("Compiled cutscene") { Patterns = ["*.cutscene.runtime"] }]
+            Title = cbor ? "Build CBOR game cutscene" : "Build game cutscene",
+            SuggestedFileName = cbor ? "cutscene.cbor" : "cutscene.cutscene.runtime",
+            DefaultExtension = cbor ? "cbor" : "runtime",
+            FileTypeChoices = [new FilePickerFileType(cbor ? "CBOR cutscene" : "Compiled cutscene") { Patterns = [cbor ? "*.cbor" : "*.cutscene.runtime"] }]
         });
         if (file is null) return;
         try
         {
             await CutsceneFonts.EnsureAsync(editor.Scene);
-            var bytes = DisplayCompiler.Compile(editor.Scene).ToByteArray();
+            var bytes = cbor ? CborExporter.Compile(editor.Scene) : DisplayCompiler.Compile(editor.Scene).ToByteArray();
             await using var stream = await file.OpenWriteAsync(); if (stream.CanSeek) stream.SetLength(0);
             await stream.WriteAsync(bytes);
         }

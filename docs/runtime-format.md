@@ -61,3 +61,57 @@ dotnet run --project ComicEditor.Cli -c Release -- story.cutscene story.cutscene
 The CLI compiles every frame and every project language. It returns 0 on success, 1 for conversion failure and 2 for invalid arguments. Missing custom system fonts and unresolved Google fonts fail conversion rather than silently substituting a different primary font. The output is replaced only after successful compilation; input and output must be different paths. The desktop release archives include the Native AOT CLI in `compiler/`.
 
 Keep editable projects as source assets and compile them during the game's build. PNG export remains an optional debugging/sharing feature.
+
+## Alternative compiled format: `.cbor`
+
+Use **File → Build CBOR game cutscene…**, or choose a `.cbor` output path:
+
+```sh
+comic-compile story.cutscene story.cbor
+dotnet run --project ComicEditor.Cli -c Release -- story.cutscene story.cbor
+```
+
+The `.cbor` extension is detected case-insensitively; other output extensions retain
+protobuf export. Font resolution, visible-layer composition, text effects,
+per-language placements and missing-translation fallback match protobuf export.
+Both indexed and RGBA sources produce the same CBOR representation.
+
+Version 1 is one CBOR map with text keys and only these seven fields:
+
+| Key | Value |
+| --- | --- |
+| `version` | Unsigned integer `1` (independent of protobuf versions) |
+| `width`, `height` | Canvas dimensions in pixels |
+| `languages` | Array of language tags, sorted ordinally |
+| `fallback_language` | One tag from `languages`; `und` for a project without languages |
+| `frames` | Ordered array of PNG **byte strings**, one flattened base image per frame, with no text |
+| `text` | Flat array of maps: `{frame, language, x, y, png}` |
+
+`frame` is a zero-based frame index; `language` is a tag from `languages`;
+`x` and `y` are integer canvas coordinates of the cropped text image's top-left
+corner. `png` is a PNG byte string with dimensions encoded in its PNG header.
+All images are lossless 8-bit RGBA PNGs with straight (unpremultiplied) alpha.
+Text pixels already contain the ink color and its alpha multiplied by glyph
+coverage. No palette, fonts, source text, object IDs or protobuf schema are needed.
+Maps and arrays have definite lengths; the document has no CBOR tags or trailing data.
+
+Render the base PNG over white (or your chosen background), then draw matching
+text PNGs at `(x,y)` using source-over alpha, in stored order. Text entries are
+ordered by frame, language and source text-object order. Empty/hidden text emits
+no entry. Visible artwork layers are composited in source order; hidden layers
+are excluded. Unknown language tags select `fallback_language`; missing
+translations are already resolved at compile time.
+
+[`examples/render_cbor.py`](../examples/render_cbor.py) parses the file with
+`cbor2`, chooses a language, composites the artwork and text with Pillow, and
+writes a displayed frame as a PNG:
+
+```sh
+uv run examples/render_cbor.py story.cbor es 0 frame-es.png
+```
+
+The example requires no ComicEditor code or protobuf libraries. A comic viewer can
+use the same `render(data, language, frame_index)` function for each page. Readers
+should reject unsupported versions and validate dimensions, frame references,
+language tags and image bounds before uploading textures. Apply file-size and
+allocation limits appropriate to your application when reading untrusted assets.

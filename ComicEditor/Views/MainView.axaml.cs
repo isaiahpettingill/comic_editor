@@ -407,6 +407,11 @@ public partial class MainView : UserControl
         canvas.Width = previous.Width = editor.Scene.Width; canvas.Height = previous.Height = editor.Scene.Height;
         if (inlineTextLayer is not null) { inlineTextLayer.Width = editor.Scene.Width; inlineTextLayer.Height = editor.Scene.Height; }
         if (inlineTextBox is not null && (editor.SelectedTextId != inlineTextObjectId || editor.Language != inlineLanguage || editor.Frame.TextObjects.All(t => t.Id != inlineTextObjectId))) EndInlineTextEdit();
+        if (inlineTextBox is not null && editor.SelectedText is { } inlineObject)
+        {
+            var text = editor.Scene.Text(editor.Language, inlineObject.Key);
+            if (inlineTextBox.Text != text) inlineTextBox.Text = text;
+        }
         canvas.OnionSkin = editor.OnionSkin; canvas.OnionOpacity = editor.OnionOpacity;
         canvas.SelectedTextId = editor.SelectedTextId; canvas.ShowTextBounds = true; canvas.InvalidateVisual();
         if (selection?.Owner != editor.Layer || editor.Tool is not (Tool.Select or Tool.Lasso or Tool.EllipseSelect)) selection = null;

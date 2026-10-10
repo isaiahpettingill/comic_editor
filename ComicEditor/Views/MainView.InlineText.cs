@@ -49,6 +49,11 @@ public partial class MainView
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(placement.X, placement.Y, 0, 0)
         };
+        // Fluent paints the template border directly while focused or hovered.
+        // Keep the artwork visible in every editing state, regardless of UI theme.
+        foreach (var state in new[] { "Focused", "PointerOver", "Disabled" })
+            box.Resources[$"TextControlBackground{state}"] = Brushes.Transparent;
+        box.CaretBrush = box.Foreground;
         inlineTextBox = box;
         void Commit()
         {
@@ -57,6 +62,9 @@ public partial class MainView
             if (editor.Scene.Text(language, obj.Key) == next) return;
             if (!inlineTextCaptured) { editor.BeforeChange(); inlineTextCaptured = true; }
             editor.SetTranslation(language, obj.Key, next);
+            var translation = inspector?.Children.OfType<TextBox>().FirstOrDefault(t => t.Name == "TranslationText");
+            if (translation is not null && translation.Text != next) translation.Text = next;
+            refreshFontWarning?.Invoke();
             canvas?.InvalidateVisual(); RefreshTitle();
         }
         inlineCommit = Commit;

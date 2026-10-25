@@ -82,7 +82,7 @@ public partial class MainView
         previewVariables.IntersectWith(variables);
         var view = new CutsceneCanvas { Name = "PlaybackCanvas", Scene = scene, FrameIndex = 0, Language = editor.Language,
             Width = scene.Width, Height = scene.Height, IsHitTestVisible = false };
-        var display = new Viewbox { Child = view, Stretch = Stretch.Uniform, Height = Math.Min(320, Math.Max(100, Bounds.Height - 250)) };
+        var display = new Viewbox { Child = view, Stretch = Stretch.Uniform, Height = Math.Min(320, Math.Max(100, Bounds.Height - (compact ? 360 : 300))) };
         var caption = Label(""); caption.Name = "PlaybackStatus";
         var audioStatus = Label(scene.Frames.Any(f => f.AudioQoa.Length > 0) ? "Audio preview uses FFplay when installed; QOA audio is always included in export." : "");
         audioStatus.Name = "PlaybackAudioStatus"; audioStatus.TextWrapping = TextWrapping.Wrap;
@@ -91,6 +91,11 @@ public partial class MainView
         var clock = new Stopwatch(); var last = TimeSpan.Zero;
         var play = Button("Play", () => { }); play.Name = "PlaybackPlay";
         var pause = Button("Pause", () => { }); pause.Name = "PlaybackPause"; pause.IsEnabled = false;
+        foreach (var control in new[] { play, pause })
+        {
+            control.Height = compact ? 48 : 40; control.MinWidth = compact ? 96 : 84;
+            control.FontSize = 16; control.Padding = new Thickness(14, 6); control.Margin = new Thickness(0, 0, 4, 4);
+        }
         void Refresh()
         {
             if (player is null || player.Finished)
@@ -127,7 +132,8 @@ public partial class MainView
             playbackTimer.Tick += Tick; playbackTimer.Start(); play.IsEnabled = false; pause.IsEnabled = true;
         };
         pause.Click += (_, _) => { Tick(null, EventArgs.Empty); StopPlayback(releaseAudio: false); clock.Stop(); play.IsEnabled = audioReady; pause.IsEnabled = false; };
-        var restart = Button("Restart", Reset); restart.Name = "PlaybackRestart";
+        var restart = Button("Restart", Reset); restart.Name = "PlaybackRestart"; restart.Margin = new Thickness(0, 0, 4, 4);
+        var transport = new WrapPanel { Orientation = Orientation.Horizontal, Children = { play, pause, restart } };
         var checks = new WrapPanel { Orientation = Orientation.Horizontal };
         foreach (var name in variables)
         {
@@ -135,7 +141,7 @@ public partial class MainView
             check.IsCheckedChanged += (_, _) => { if (check.IsChecked == true) previewVariables.Add(name); else previewVariables.Remove(name); Reset(); };
             checks.Children.Add(check);
         }
-        ShowModal("Cutscene playback", new StackPanel { Spacing = 10, Children = { Label("Set variables"), checks, display, caption, audioStatus, Row(play, pause, restart) } });
+        ShowModal("Cutscene playback", new StackPanel { Spacing = 10, Children = { Label("Set variables"), checks, display, caption, audioStatus, transport } });
         Reset();
         if (!audioReady)
         {

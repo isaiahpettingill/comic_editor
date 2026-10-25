@@ -1,7 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using ComicEditor.Audio;
 using ComicEditor.Format;
 using ComicEditor.Rendering;
@@ -172,6 +174,37 @@ public partial class CanvasTests
             using var cancellation = new CancellationTokenSource();
             typeof(MainView).GetField("audioImport", PrivateInstance)!.SetValue(view, cancellation);
             window.Close(); Assert.True(cancellation.IsCancellationRequested);
+        }, CancellationToken.None);
+    }
+
+    [Theory]
+    [InlineData(false, 1200, 800)]
+    [InlineData(true, 400, 840)]
+    [InlineData(true, 320, 568)]
+    public async Task PlaybackButtonsAreLargerAndFitDesktopAndCompactDialogs(bool compact, int width, int height)
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(touchLayout: compact);
+            var window = new Window { Content = view, Width = width, Height = height }; window.Show();
+            Invoke(view, "PreviewPlayback"); _ = Capture(window);
+            var play = Named<Button>(window, "PlaybackPlay"); var pause = Named<Button>(window, "PlaybackPause");
+            foreach (var button in new[] { play, pause })
+            {
+                Assert.True(button.Bounds.Height >= (compact ? 48 : 40));
+                Assert.True(button.Bounds.Width >= (compact ? 96 : 84)); AssertInside(window, button);
+            }
+            foreach (var button in new[] { play, pause, Named<Button>(window, "PlaybackRestart") })
+            {
+                var viewport = button.GetVisualAncestors().OfType<ScrollViewer>().First();
+                var bottom = button.TranslatePoint(new Avalonia.Point(0, button.Bounds.Height), viewport)!.Value.Y;
+                Assert.InRange(bottom, 0, viewport.Bounds.Height + 1);
+            }
+            SaveCapture(window, compact ? "COMIC_PLAYBACK_COMPACT_SCREENSHOT" : "COMIC_PLAYBACK_LARGE_SCREENSHOT");
+            play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Assert.True(pause.IsEnabled);
+            pause.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Assert.True(play.IsEnabled);
+            Invoke(view, "CloseModal"); window.Close();
         }, CancellationToken.None);
     }
 

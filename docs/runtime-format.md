@@ -193,3 +193,24 @@ per-frame fields. These are additive fields; artwork versions are unchanged.
 Legacy missing/zero duration means 1000 ms; missing/empty `req` means always.
 Older readers can still render artwork but need to implement these fields to
 honor timing and variants. PNG/book exports remain static documents.
+
+
+## Optional frame audio
+
+Editable `Frame.audio_qoa` (Protobuf field 7) and compiled `DisplayFrame.audio_qoa`
+(field 6) contain one complete static QOA file, including the `qoaf` header. CBOR
+frames include the optional `audio_qoa` byte string only when attached. These are
+additive fields; audio-free files and existing versions remain valid. Readers that
+ignore unknown fields keep their existing silent behavior. Preserve these fields
+when round-tripping with newer readers.
+
+QOA sample count is per channel, with 1–8 interleaved channels. The minimum frame
+duration is `ceil(samples_per_channel * 1000 / sample_rate)` milliseconds. Players
+start audio when entering the matching frame, stop it when leaving, and seek by
+the elapsed frame time when resuming. Conditional frames skipped by `req` consume
+neither time nor audio. Exported duration includes any intentionally longer hold.
+
+New editor-created frames default to 4000 ms. A missing/zero legacy Protobuf
+`duration_ms` **still means 1000 ms**, preserving existing playback semantics.
+Audio is lossy QOA encoded from signed 16-bit PCM; sample rate and channel count
+are retained. JSON/base64 aliases are not substituted for the raw byte fields.

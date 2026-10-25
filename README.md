@@ -14,6 +14,15 @@ Download desktop and Android builds from [Releases](https://github.com/isaiahpet
 - **Android arm64:** install `ComicEditor-android-arm64.apk`.
 - **Browser:** open [comic-editor.pages.dev](https://comic-editor.pages.dev).
 
+## Frame timing and audio
+
+- Edit a frame’s seconds directly in the storyboard; Enter commits, Escape restores the value. New frames start at **4 seconds**. Existing durations are preserved.
+- Editing dialogs save with Enter after validation; multiline fields keep Enter for newlines and use Ctrl+Enter (or Cmd+Enter) to save. Shift+Enter never submits.
+- Frame options → **Attach / replace audio…** accepts WAV and QOA without external tools. Desktop imports of MP3, Ogg, FLAC and other formats use **FFmpeg on PATH**. Audio stays local; conversion does not use a service.
+- The document and compiled Protobuf/CBOR exports store real **QOA bytes**, not WAV under a different label. Attaching audio increases a too-short frame to the audio duration (rounded up to the next millisecond); replacing/removing audio never shortens longer timing. Undo restores changes.
+- Audible desktop preview uses optional **FFplay on PATH** (part of FFmpeg); it stops on pause, close, restart, or frame changes and seeks when resuming. Process startup makes audible preview best-effort rather than sample-accurate. Without FFplay, or on mobile/browser, preview is silent with an explanation; audio still exports.
+- Imports are limited to one hour, 256 MiB input/decoded PCM, and 1–8 channels. Cancelled or failed imports leave the frame unchanged. Compressed WAV also needs FFmpeg.
+
 ## Build
 
 Install the .NET SDK version specified in [global.json](global.json), then clone the repository and build the desktop app:
@@ -53,6 +62,7 @@ If you want to change ComicEditor, fork the repository and make your changes the
 
 ComicEditor is licensed under [0BSD](LICENSE).
 
+- QOA audio: [Dominic Szablewski’s reference codec](https://github.com/phoboslab/qoa), [MIT license](licenses/QOA-MIT.txt).
 - Built with [Avalonia](https://avaloniaui.net/).
 - [AvaloniaColorPicker](https://github.com/arklumpus/AvaloniaColorPicker): the LGPL-3.0 compatibility port includes [source, attribution, and rebuild instructions](third_party/AvaloniaColorPicker/README.comic-editor.md).
 - Fonts: [Comic Shanns](licenses/Comic-Shanns-MIT.txt), [Anton](licenses/Anton-OFL.txt), [Permanent Marker](licenses/Permanent-Marker-Apache-2.0.txt), [Noto Sans](licenses/Noto-OFL.txt), and [Noto Color Emoji](licenses/Noto-Color-Emoji-OFL.txt).

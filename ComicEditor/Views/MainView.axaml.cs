@@ -71,7 +71,7 @@ public partial class MainView : UserControl
         AttachedToVisualTree += StartSession;
         DetachedFromVisualTree += (_, _) => { sessionTimer?.Stop(); if (SessionStorage.Flush == FlushSession) SessionStorage.Flush = null; };
         DetachedFromVisualTree += (_, _) => StopUpdates();
-        DetachedFromVisualTree += (_, _) => { StopSpray(); StopPlayback(); };
+        DetachedFromVisualTree += (_, _) => { StopSpray(); StopPlayback(); audioImport?.Cancel(); };
         DetachedFromVisualTree += (_, _) => ResetCanvasNavigation();
         DetachedFromVisualTree += (_, _) => { fontCheck?.Cancel(); fontInstall?.Cancel(); };
     }

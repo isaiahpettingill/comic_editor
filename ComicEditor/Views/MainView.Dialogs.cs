@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using ComicEditor.Format;
 using ComicEditor.Rendering;
 
@@ -58,8 +60,22 @@ public partial class MainView
         var panel = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto"), Margin = new Thickness(18) };
         var heading = Label(title, true); heading.FontSize = 18; heading.Margin = new Thickness(0, 0, 0, 12); panel.Children.Add(heading);
         AddAt(panel, new ScrollViewer { Content = body, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled }, row: 1);
+        void ApplyValidated()
+        {
+            if (apply is null) return;
+            var numbers = body.GetVisualDescendants().OfType<NumericUpDown>().ToList();
+            if (body is NumericUpDown number) numbers.Add(number);
+            foreach (var input in numbers)
+            {
+                if (!decimal.TryParse(input.Text, System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.CurrentCulture, out var value) || value < input.Minimum || value > input.Maximum)
+                { input.Focus(); return; }
+                input.Value = value;
+            }
+            apply();
+        }
         var footer = Row(Button(apply is null ? "Close" : "Cancel", CloseModal)); footer.HorizontalAlignment = HorizontalAlignment.Right; footer.Margin = new Thickness(0, 14, 0, 0);
-        if (apply is not null) { var confirm = Button(applyText, apply, chrome: false); confirm.Name = "ModalApply"; footer.Children.Add(confirm); }
+        if (apply is not null) { var confirm = Button(applyText, ApplyValidated, chrome: false); confirm.Name = "ModalApply"; footer.Children.Add(confirm); }
         AddAt(panel, footer, row: 2);
         var card = new Border
         {
@@ -74,15 +90,36 @@ public partial class MainView
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Center
         };
+        // Use the same validation/save action as the button. Shift+Enter remains a newline.
+        // Handle after text/numeric controls so their current value is committed first.
+        if (apply is not null) card.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.Enter || e.KeyModifiers.HasFlag(KeyModifiers.Shift)) return;
+            var source = e.Source as Visual;
+            var text = source as TextBox ?? source?.GetVisualAncestors().OfType<TextBox>().FirstOrDefault();
+            if (text?.AcceptsReturn == true && !e.KeyModifiers.HasFlag(KeyModifiers.Control) && !e.KeyModifiers.HasFlag(KeyModifiers.Meta)) return;
+            // Explicit buttons retain their own Enter behavior (Cancel, font download, etc.).
+            if (source is Button || source?.GetVisualAncestors().OfType<Button>().Any() == true) return;
+            e.Handled = true;
+            ApplyValidated();
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
         KeyboardNavigation.SetTabNavigation(card, KeyboardNavigationMode.Cycle);
         modal = new Border { Background = Brush("#66000000"), Child = card, Name = "ModalOverlay" };
         shell.Children.Add(modal);
-        Avalonia.Threading.Dispatcher.UIThread.Post(() => footer.Children.OfType<Button>().First().Focus());
+        var shown = modal;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (!ReferenceEquals(modal, shown)) return;
+            var field = body is TextBox or NumericUpDown ? body : body.GetVisualDescendants().OfType<Control>()
+                .FirstOrDefault(c => c.IsEffectivelyEnabled && c is TextBox or NumericUpDown);
+            (field ?? footer.Children.OfType<Button>().Last()).Focus();
+        });
     }
 
     private void CloseModal()
     {
         if (updateInstalling) return;
+        audioImport?.Cancel();
         StopPlayback();
         fontInstall?.Cancel();
         if (modal is not null) shell?.Children.Remove(modal);

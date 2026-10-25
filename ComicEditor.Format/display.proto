@@ -15,6 +15,7 @@ message DisplayCutscene {
   repeated uint32 palette_rgba = 8; // Version 3 only: 0xRRGGBBAA.
 }
 message DisplayFrame {
+  bytes audio_qoa = 6; // Optional complete QOA file; start audio with the frame, stop when leaving it.
   uint32 duration_ms = 4; // Legacy zero means 1000 ms; otherwise 1..3600000.
   string req = 5; // Legacy empty means always; otherwise always, never, VAR or not VAR.
   bytes indexed_artwork = 1; // Row-major, width*height bytes; 0..254, 255 transparent.

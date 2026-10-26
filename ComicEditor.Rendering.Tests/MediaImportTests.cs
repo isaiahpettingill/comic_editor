@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
@@ -9,6 +10,32 @@ namespace ComicEditor.Rendering.Tests;
 
 public partial class CanvasTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MediaDropResolvesFrameGeometryEvenWhenRouteSourceIsWorkspace(bool bottom)
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(); var window = new Window { Content = view, Width = 1280, Height = 900 }; window.Show();
+            var state = State(view); state.AddFrame(false); state.AddFrame(false); Invoke(view, "RefreshAll");
+            if (bottom)
+            {
+                var pane = typeof(MainView).GetNestedType("Pane", System.Reflection.BindingFlags.NonPublic)!;
+                Invoke(view, "MovePane", Enum.Parse(pane, "Storyboard"), 3);
+            }
+            _ = Capture(window);
+            var root = (Grid)typeof(MainView).GetField("rootGrid", PrivateInstance)!.GetValue(view)!;
+            var row = Named<Border>(window, "FrameRow1");
+            var point = row.TranslatePoint(new Point(30, 30), root)!.Value;
+            Assert.Same(state.Scene.Frames[1], Invoke(view, "DropFrameAt", point));
+            var canvas = Named<ComicEditor.Views.DrawingViewport>(window, "CanvasViewport");
+            Assert.Null(Invoke(view, "DropFrameAt", canvas.TranslatePoint(new Point(100, 100), root)!.Value));
+            window.Close();
+        }, CancellationToken.None);
+    }
+
     [Fact]
     public async Task DroppedWavConversionTargetsItsFrameAndKeepsOriginalBytes()
     {

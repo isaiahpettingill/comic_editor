@@ -23,42 +23,56 @@ public partial class MainView
     private void AttachMediaDrop()
     {
         if (rootGrid is null) return;
+        var dropRoot = rootGrid;
         DragDrop.SetAllowDrop(rootGrid, true);
         rootGrid.AddHandler(DragDrop.DragOverEvent, (_, e) =>
         {
             var files = e.DataTransfer.TryGetFiles()?.OfType<IStorageFile>().ToArray();
-            var valid = modal is null && files is { Length: 1 } &&
-                (ImageExtensions.Contains(Path.GetExtension(files[0].Name)) || AudioExtensions.Contains(Path.GetExtension(files[0].Name)) && DropFrame(e.Source) is not null);
+            var target = DropFrameAt(e.GetPosition(dropRoot));
+            var valid = dropRoot == rootGrid && modal is null && files is { Length: 1 } &&
+                (ImageExtensions.Contains(Path.GetExtension(files[0].Name)) && (target is not null || OverCanvas(e)) || AudioExtensions.Contains(Path.GetExtension(files[0].Name)) && target is not null);
             e.DragEffects = valid ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true;
         });
         rootGrid.AddHandler(DragDrop.DropEvent, async (_, e) =>
         {
-            if (modal is not null) return;
+            if (modal is not null || dropRoot != rootGrid) return;
             var files = e.DataTransfer.TryGetFiles()?.OfType<IStorageFile>().ToArray();
             if (files is not { Length: 1 }) { await ShowError("Drop one image, or one audio file onto a frame."); return; }
             var file = files[0]; var extension = Path.GetExtension(file.Name); var scene = editor.Scene;
-            var frame = DropFrame(e.Source) ?? editor.Frame; e.Handled = true;
+            var target = DropFrameAt(e.GetPosition(dropRoot));
+            var frame = target ?? editor.Frame; e.Handled = true;
+            var point = canvas is null || target is not null ? default : e.GetPosition(canvas);
             if (AudioExtensions.Contains(extension))
             {
-                if (DropFrame(e.Source) is null) { await ShowError("Drop audio onto its storyboard frame."); return; }
+                if (target is null) { await ShowError("Drop audio onto its storyboard frame."); return; }
                 await ImportFrameAudio(file, scene, frame); return;
             }
-            if (!ImageExtensions.Contains(extension)) return;
+            if (!ImageExtensions.Contains(extension) || target is null && !OverCanvas(e)) return;
             try
             {
                 await using var stream = await file.OpenReadAsync();
                 var bytes = await ReadImageBytes(stream);
-                var point = canvas is null || DropFrame(e.Source) is not null ? default : e.GetPosition(canvas);
                 await ImportImage(bytes, file.Name, scene, frame, Math.Max(0, (int)point.X), Math.Max(0, (int)point.Y));
             }
             catch (Exception ex) { await ShowError(ex.Message); }
         });
     }
 
-    private Frame? DropFrame(object? source)
+    private bool OverCanvas(DragEventArgs e) => canvasScroll is not null && new Rect(canvasScroll.Bounds.Size).Contains(e.GetPosition(canvasScroll));
+
+    private Frame? DropFrameAt(Point rootPoint)
     {
-        var index = FocusedFrameIndex(source);
-        return index is int value && value < editor.Scene.Frames.Count ? editor.Scene.Frames[value] : null;
+        if (storyboard is null || rootGrid is null) return null;
+        var scroll = storyboard.GetVisualAncestors().OfType<ScrollViewer>().FirstOrDefault();
+        if (scroll is null || rootGrid.TranslatePoint(rootPoint, scroll) is not Point visible || !new Rect(scroll.Bounds.Size).Contains(visible)) return null;
+        // Resolve by geometry, not routed-event Source: some hosts route drops
+        // from the AllowDrop ancestor instead of the thumbnail under the pointer.
+        for (var i = 0; i < storyboard.Children.Count && i < editor.Scene.Frames.Count; i++)
+        {
+            var row = storyboard.Children[i];
+            if (rootGrid.TranslatePoint(rootPoint, row) is Point point && new Rect(row.Bounds.Size).Contains(point)) return editor.Scene.Frames[i];
+        }
+        return null;
     }
 
     private static async Task<byte[]> ReadImageBytes(Stream stream)

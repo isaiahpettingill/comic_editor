@@ -58,6 +58,17 @@ public partial class MainView
         return ReferenceEquals(storyboard.Children[index], row) ? index : null;
     }
 
+    private void CopySelectedFrames()
+    {
+        if (SelectedFrameTarget() is { } target) CopyFrame(editor.Scene.Frames.IndexOf(target));
+    }
+
+    private bool CopyFocusedFrames(object? source)
+    {
+        if (FocusedFrameIndex(source) is null) return false;
+        CopySelectedFrames(); return true;
+    }
+
     private void CopyFrame(int? index = null)
     {
         FinishPath();

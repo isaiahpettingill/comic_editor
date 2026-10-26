@@ -193,13 +193,13 @@ public partial class MainView : UserControl
             ("Tool options…", EditToolOptions), ("Drawing input…", EditDrawingInput)));
         menu.Items.Add(MenuGroup("F_rame", ("Play cutscene…", PreviewPlayback), ("Timing & visibility…|Alt+T", () => FrameSettings(editor.FrameIndex)), ("Add frame|Alt+N", () => { editor.AddFrame(false); RefreshAll(); }
         ),
-            ("Duplicate frame|Alt+D", () => { editor.AddFrame(true); RefreshAll(); }
-        ), ("Copy frame", () => CopyFrame()
-        ), ("Paste frame", () => PasteFrame()
-        ), ("Delete frame", () => { editor.DeleteFrame(); RefreshAll(); }
+            ("Duplicate selected frames|Alt+D", DuplicateSelectedFrames
+        ), ("Copy selected frames|Ctrl+Shift+C", () => CopySelectedFrames()
+        ), ("Paste frame|Ctrl+Shift+V", () => PasteFrame()
+        ), ("Delete selected frames|Alt+Delete", DeleteSelectedFrames
         ),
-            ("Move earlier", () => { editor.MoveFrame(-1); RefreshAll(); }
-        ), ("Move later", () => { editor.MoveFrame(1); RefreshAll(); }
+            ("Move earlier|Alt+Up", () => MoveSelectedFrames(-1)
+        ), ("Move later|Alt+Down", () => MoveSelectedFrames(1)
         )));
         menu.Items.Add(ViewMenu());
         menu.Items.Add(MenuGroup("_Canvas", ("Resize canvas…", ResizeCanvas), ("Convert to RGBA color…", EnableRgbaMode)));

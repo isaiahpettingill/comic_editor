@@ -246,6 +246,111 @@ public partial class CanvasTests
         }, CancellationToken.None);
     }
 
+    [Theory]
+    [InlineData(Key.Delete, KeyModifiers.None)]
+    [InlineData(Key.Delete, KeyModifiers.Alt)]
+    [InlineData(Key.C, KeyModifiers.Control)]
+    [InlineData(Key.X, KeyModifiers.Control)]
+    [InlineData(Key.D, KeyModifiers.Alt)]
+    [InlineData(Key.Down, KeyModifiers.Alt)]
+    public async Task KeyboardUsesSelectedFramesAfterControlClickDeselectsFocusedFrame(Key key, KeyModifiers modifiers)
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(); var state = State(view);
+            for (var i = 0; i < 3; i++) state.AddFrame(false);
+            state.SelectFrame(0);
+            for (var i = 0; i < 4; i++) state.Scene.Frames[i].DurationMs = 4000 + i * 1000;
+            var ids = state.Scene.Frames.Select(f => f.Id).ToArray();
+            var window = new Window { Content = view, Width = 1200, Height = 1400 }; window.Show(); Invoke(view, "RefreshAll"); _ = Capture(window);
+            void Click(int index, RawInputModifiers mods)
+            {
+                var row = Named<Border>(window, "FrameRow" + index);
+                var point = row.TranslatePoint(new Point(10, 10), window)!.Value;
+                window.MouseDown(point, MouseButton.Left, mods); window.MouseUp(point, MouseButton.Left, mods); _ = Capture(window);
+            }
+            Click(0, RawInputModifiers.None); Click(2, RawInputModifiers.Shift); Click(1, RawInputModifiers.Control);
+            var selected = (HashSet<string>)typeof(MainView).GetField("selectedFrameIds", PrivateInstance)!.GetValue(view)!;
+            Assert.Equal(new[] { ids[0], ids[2] }.Order(), selected.Order()); Assert.Equal(1, state.FrameIndex);
+            var focused = Named<Border>(window, "FrameRow1"); focused.Focus();
+            focused.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key, KeyModifiers = modifiers });
+            if (key is Key.Delete or Key.X)
+                Assert.Equal(new[] { ids[1], ids[3] }, state.Scene.Frames.Select(f => f.Id));
+            if (key is Key.C or Key.X)
+            {
+                var before = state.Scene.Frames.Count;
+                Invoke(view, "PasteFrame", before - 1);
+                Assert.Equal(new[] { 4000, 6000 }, state.Scene.Frames.Skip(before).Select(f => f.DurationMs));
+            }
+            if (key == Key.D)
+                Assert.Equal(new[] { 4000, 4000, 5000, 6000, 6000, 7000 }, state.Scene.Frames.Select(f => f.DurationMs));
+            if (key == Key.Down)
+                Assert.Equal(new[] { ids[1], ids[0], ids[3], ids[2] }, state.Scene.Frames.Select(f => f.Id));
+            window.Close();
+        }, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task EmptyFrameSelectionDoesNotDeleteDuplicateMoveOrOverwriteClipboard()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(); var state = State(view); state.AddFrame(false); state.SelectFrame(0);
+            var ids = state.Scene.Frames.Select(f => f.Id).ToArray();
+            var window = new Window { Content = view, Width = 1200, Height = 900 }; window.Show(); Invoke(view, "RefreshAll"); _ = Capture(window);
+            Invoke(view, "CopySelectedFrames");
+            var clipboard = typeof(MainView).GetField("clipboardFrames", PrivateInstance)!.GetValue(view);
+            Invoke(view, "SelectListItem", 0, true, KeyModifiers.Control, (Action)(() => state.SelectFrame(0)));
+            foreach (var (key, mods) in new[] { (Key.Delete, KeyModifiers.None), (Key.Delete, KeyModifiers.Alt),
+                (Key.D, KeyModifiers.Alt), (Key.Down, KeyModifiers.Alt), (Key.C, KeyModifiers.Control), (Key.X, KeyModifiers.Control) })
+            {
+                var row = Named<Border>(window, "FrameRow0"); row.Focus();
+                row.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key, KeyModifiers = mods });
+                Assert.Equal(ids, state.Scene.Frames.Select(f => f.Id));
+                Assert.Same(clipboard, typeof(MainView).GetField("clipboardFrames", PrivateInstance)!.GetValue(view));
+            }
+            window.Close();
+        }, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task KeyboardDeleteUsesLayerAndTextSetsNotTheirDeselectedFocus()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(); var state = State(view);
+            state.Frame.Layers.Add(ArtworkLayer.Create("Middle", state.Scene.Width, state.Scene.Height));
+            state.Frame.Layers.Add(ArtworkLayer.Create("Top", state.Scene.Width, state.Scene.Height));
+            var keptLayerId = state.Frame.Layers[1].Id;
+            var texts = Enumerable.Range(0, 3).Select(_ => state.CreateText()).ToArray(); state.Frame.TextObjects.AddRange(texts);
+            var window = new Window { Content = view, Width = 1200, Height = 1000 }; window.Show(); Invoke(view, "RefreshAll");
+            void Layer(int index, KeyModifiers mods) => Invoke(view, "SelectListItem", index, false, mods, (Action)(() => state.LayerIndex = index));
+            Layer(2, KeyModifiers.None); Layer(0, KeyModifiers.Shift); Layer(1, KeyModifiers.Control);
+            _ = Capture(window);
+            var focusedLayer = Named<Border>(window, "LayerItem1"); focusedLayer.Focus();
+            focusedLayer.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Delete });
+            Assert.Equal(keptLayerId, Assert.Single(state.Frame.Layers).Id);
+            Invoke(view, "SelectTextItem", texts[0], KeyModifiers.None);
+            Invoke(view, "SelectTextItem", texts[2], KeyModifiers.Shift);
+            Invoke(view, "SelectTextItem", texts[1], KeyModifiers.Control);
+            _ = Capture(window);
+            var focusedText = Named<Button>(window, "TextSelect_" + texts[1].Id); focusedText.Focus();
+            focusedText.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Delete });
+            Assert.Equal(texts[1].Id, Assert.Single(state.Frame.TextObjects).Id);
+            // A focused but explicitly deselected final text must not fall through to canvas deletion.
+            Invoke(view, "SelectTextItem", texts[1], KeyModifiers.None);
+            Invoke(view, "SelectTextItem", texts[1], KeyModifiers.Control);
+            _ = Capture(window);
+            focusedText = Named<Button>(window, "TextSelect_" + texts[1].Id); focusedText.Focus();
+            focusedText.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Delete });
+            Assert.Single(state.Frame.TextObjects);
+            window.Close();
+        }, CancellationToken.None);
+    }
+
     private static void MenuAction(ContextMenu menu, string name) => menu.Items.OfType<MenuItem>().Single(i => i.Name == name)
         .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
 }

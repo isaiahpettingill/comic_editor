@@ -103,7 +103,7 @@ public partial class MainView
             {
                 if (e.Key == Key.Z) { if (shift) Redo(); else Undo(); }
                 else if (e.Key == Key.Y) Redo();
-                else if (e.Key == Key.C) { if (FocusedFrameIndex(e.Source) is int index) CopyFrame(index); else if (shift) CopyFrame(); else CopySelection(false); }
+                else if (e.Key == Key.C) { if (!CopyFocusedFrames(e.Source)) { if (shift) CopySelectedFrames(); else CopySelection(false); } }
                 else if (e.Key == Key.X) { if (!CutFocusedFrames(e.Source)) CopySelection(true); }
                 else if (e.Key == Key.V) { if (shift) PasteFrame(); else PasteClipboard(); }
                 else if (e.Key == Key.A) { if (shift) Deselect(); else if (!SelectAllFocusedItems(e.Source)) SelectAllArtwork(); }
@@ -129,11 +129,11 @@ public partial class MainView
             {
                 case Key.N: FinishPath(); editor.AddFrame(false); RefreshAll(); break;
                 case Key.D: FinishPath(); DuplicateSelectedFrames(); break;
-                case Key.Delete: FinishPath(); DeleteFrames(editor.Frame); break;
+                case Key.Delete: FinishPath(); DeleteSelectedFrames(); break;
                 case Key.Left: SelectFrame(editor.FrameIndex - 1); break;
                 case Key.Right: SelectFrame(editor.FrameIndex + 1); break;
-                case Key.Up: FinishPath(); MoveFrames(editor.Frame, -1); break;
-                case Key.Down: FinishPath(); MoveFrames(editor.Frame, 1); break;
+                case Key.Up: FinishPath(); MoveSelectedFrames(-1); break;
+                case Key.Down: FinishPath(); MoveSelectedFrames(1); break;
                 case Key.T: FrameSettings(editor.FrameIndex); break;
                 default: return;
             }

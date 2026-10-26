@@ -127,7 +127,28 @@ public partial class MainView
         selectedFrameIds.Clear(); selectedFrameIds.UnionWith(inserted.Select(f => f.Id)); frameAnchor = inserted[0].Id; RefreshAll();
     }
 
-    private void DuplicateSelectedFrames() => DuplicateFrames(editor.Frame);
+    // Keyboard commands act on selection, not the separately focused/active item.
+    // Keep the clicked-item fallbacks in FrameTargets/LayerTargets for context menus.
+    private Frame? SelectedFrameTarget()
+    {
+        SyncItemSelection();
+        return editor.Scene.Frames.FirstOrDefault(f => selectedFrameIds.Contains(f.Id));
+    }
+
+    private void DuplicateSelectedFrames()
+    {
+        if (SelectedFrameTarget() is { } target) DuplicateFrames(target);
+    }
+
+    private void DeleteSelectedFrames()
+    {
+        if (SelectedFrameTarget() is { } target) DeleteFrames(target);
+    }
+
+    private void MoveSelectedFrames(int delta)
+    {
+        if (SelectedFrameTarget() is { } target) MoveFrames(target, delta);
+    }
 
     private void MoveFrames(Frame clicked, int delta)
     {
@@ -198,10 +219,10 @@ public partial class MainView
 
     private bool CutFocusedFrames(object? source)
     {
-        if (FocusedFrameIndex(source) is not int index) return false;
-        var clicked = editor.Scene.Frames[index];
-        if (FrameTargets(clicked).Count >= editor.Scene.Frames.Count) return true;
-        CopyFrame(index); DeleteFrames(clicked); return true;
+        if (FocusedFrameIndex(source) is null) return false;
+        var target = SelectedFrameTarget();
+        if (target is null || FrameTargets(target).Count >= editor.Scene.Frames.Count) return true;
+        CopyFrame(editor.Scene.Frames.IndexOf(target)); DeleteFrames(target); return true;
     }
 
     private bool NavigateFocusedItems(KeyEventArgs e)
@@ -265,9 +286,17 @@ public partial class MainView
         var row = parents.FirstOrDefault(c => c.Name?.StartsWith("FrameRow", StringComparison.Ordinal) == true ||
             c.Name?.StartsWith("LayerRow", StringComparison.Ordinal) == true || c.Name?.StartsWith("TextRow_", StringComparison.Ordinal) == true);
         if (row?.Name is not string name) return false;
-        if (name.StartsWith("FrameRow") && int.TryParse(name[8..], out var f) && f < editor.Scene.Frames.Count) DeleteFrames(editor.Scene.Frames[f]);
-        else if (name.StartsWith("LayerRow") && int.TryParse(name[8..], out var l) && l < editor.Frame.Layers.Count) DeleteLayers(editor.Frame.Layers[l]);
-        else if (name.StartsWith("TextRow_") && editor.Frame.TextObjects.FirstOrDefault(t => t.Id == name[8..]) is { } text) DeleteTextObjects(text);
+        SyncItemSelection();
+        if (name.StartsWith("FrameRow") && int.TryParse(name[8..], out var f) && f >= 0 && f < editor.Scene.Frames.Count)
+            DeleteSelectedFrames();
+        else if (name.StartsWith("LayerRow") && int.TryParse(name[8..], out var l) && l >= 0 && l < editor.Frame.Layers.Count)
+        {
+            if (editor.Frame.Layers.FirstOrDefault(layer => selectedLayerIds.Contains(layer.Id)) is { } target) DeleteLayers(target);
+        }
+        else if (name.StartsWith("TextRow_") && editor.Frame.TextObjects.Any(t => t.Id == name[8..]))
+        {
+            if (editor.Frame.TextObjects.FirstOrDefault(text => selectedTextIds.Contains(text.Id)) is { } target) DeleteTextObjects(target);
+        }
         else return false;
         return true;
     }

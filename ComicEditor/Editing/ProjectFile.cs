@@ -16,8 +16,16 @@ public sealed class ProjectFile(IStorageFile file, string? diskHash)
     }
     public async Task Write(byte[] bytes, bool checkExternalChanges)
     {
-        if (checkExternalChanges && (DiskHash is null || Hash(await Read()) != DiskHash))
-            throw new IOException("The file changed outside ComicEditor. Reopen it, or use Save as to keep your edits in another file.");
+        var writtenHash = await Task.Run(() => Hash(bytes));
+        if (checkExternalChanges)
+        {
+            var existing = await Read();
+            if (DiskHash is null || await Task.Run(() => Hash(existing)) != DiskHash)
+                throw new IOException("The file changed outside ComicEditor. Reopen it, or use Save as to keep your edits in another file.");
+            // Repeated Ctrl+S still checks for an external edit, but doesn't
+            // replace an already-identical document or trigger file watchers.
+            if (writtenHash == DiskHash) return;
+        }
         var path = File.TryGetLocalPath();
         if (path is not null && !OperatingSystem.IsAndroid() && !OperatingSystem.IsBrowser())
         {
@@ -36,6 +44,6 @@ public sealed class ProjectFile(IStorageFile file, string? diskHash)
             if (stream.CanSeek) stream.SetLength(0);
             await stream.WriteAsync(bytes); await stream.FlushAsync();
         }
-        DiskHash = Hash(bytes);
+        DiskHash = writtenHash;
     }
 }

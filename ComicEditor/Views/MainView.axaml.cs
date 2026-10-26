@@ -14,7 +14,7 @@ namespace ComicEditor.Views;
 
 public partial class MainView : UserControl
 {
-    private enum Pane { Storyboard, Canvas, Inspector }
+    private enum Pane { Storyboard, Canvas, Inspector, Palette }
     private EditorState editor = new(PreferencesStorage.Load());
     private CutsceneCanvas? canvas, previous;
     private StackPanel? storyboard, inspector, palette, toolRail, toolOptions;
@@ -30,7 +30,7 @@ public partial class MainView : UserControl
     private bool compactSingleRow;
     private double paletteHeight = 150;
     private bool paletteResized;
-    private readonly Pane[] paneOrder = [Pane.Storyboard, Pane.Canvas, Pane.Inspector];
+    private readonly Pane[] paneOrder = [Pane.Storyboard, Pane.Canvas, Pane.Inspector, Pane.Palette];
     private readonly GridLength[] paneWidths = [new(190), new(1, GridUnitType.Star), new(300)];
     private Pane? draggingPane;
     private Point paneDragStart;
@@ -44,6 +44,7 @@ public partial class MainView : UserControl
     public MainView(bool touchLayout)
     {
         this.touchLayout = touchLayout;
+        RestorePaneLayout();
         activeTab = new ProjectTab(editor); tabs.Add(activeTab);
         Styles.Add(new ComicEditor.Styles.EditorScrolling(touchLayout));
         editor.FinishPendingEdit = () => FinishPath();
@@ -136,43 +137,6 @@ public partial class MainView : UserControl
         return group;
     }
 
-    private Border PaneHeader(Pane pane, string caption)
-    {
-        var header = new Border
-        {
-            Name = pane + "Header",
-            Background = Brush(UiTheme.Header),
-            Padding = new Thickness(8, 5),
-            Child = compact ? Label(caption, true) : Row(new PackIconMaterial { Kind = PackIconMaterialKind.Drag, Width = 16, Height = 16 }, Label(caption, true)),
-            Cursor = new Cursor(compact ? StandardCursorType.Arrow : StandardCursorType.SizeAll)
-        };
-        if (!compact) ToolTip.SetTip(header, "Drag onto another pane to swap positions");
-        header.PointerPressed += (_, e) =>
-        {
-            if (compact || desktopWorkspace is null) return;
-            draggingPane = pane; paneDragStart = e.GetPosition(desktopWorkspace); e.Pointer.Capture(header);
-            header.Background = Brush(UiTheme.Selection);
-        };
-        header.PointerReleased += (_, e) =>
-        {
-            var source = draggingPane; var workspace = desktopWorkspace;
-            var x = workspace is null ? -1 : e.GetPosition(workspace).X;
-            draggingPane = null; e.Pointer.Capture(null); header.Background = Brush(UiTheme.Header);
-            if (source is null || workspace is null || x < 0 || x > workspace.Bounds.Width || Math.Abs(x - paneDragStart.X) < 12) return;
-            var edge = 0.0; var destination = 2;
-            for (var i = 0; i < 3; i++)
-            {
-                edge += workspace.ColumnDefinitions[i * 2].ActualWidth;
-                if (x < edge) { destination = i; break; }
-                edge += 5;
-            }
-            var from = Array.IndexOf(paneOrder, source.Value);
-            if (from == destination) return;
-            (paneOrder[from], paneOrder[destination]) = (paneOrder[destination], paneOrder[from]); Build(false);
-        };
-        return header;
-    }
-
     private static SolidColorBrush Brush(string hex)
     {
         if (hex.Length == 9 && RgbaColor.IsHex(hex))
@@ -185,6 +149,7 @@ public partial class MainView : UserControl
 
     private void Build(bool small)
     {
+        CancelPaneDrag();
         StopPlayback();
         EndInlineTextEdit();
         ResetCanvasNavigation();
@@ -204,17 +169,17 @@ public partial class MainView : UserControl
         root.RowDefinitions[4].MinHeight = small ? 0 : 90;
         root.SizeChanged += (_, _) =>
         {
-            if (!compact && !paletteResized)
+            if (!compact && !paletteResized && paneOrder[3] == Pane.Palette)
             {
                 var columns = Math.Max(1, (int)((root.Bounds.Width - 16) / 28));
-                root.RowDefinitions[4].Height = new GridLength(Math.Min(240, 48 + Math.Ceiling(editor.Scene.Palette.Count / (double)columns) * 28));
+                root.RowDefinitions[4].Height = new GridLength(Math.Min(270, 78 + Math.Ceiling(editor.Scene.Palette.Count / (double)columns) * 28));
             }
         };
         var menu = new Menu { Height = small ? 44 : 30, HorizontalAlignment = HorizontalAlignment.Stretch };
         var header = new StackPanel { Spacing = 0 }; AddAt(root, header);
         menu.Items.Add(MenuGroup("_File", ("_New|Ctrl+N", New), ("New indexed cutscene", () => NewWithMode(false)), ("New RGBA cutscene", () => NewWithMode(true)), ("_Open…|Ctrl+O", () => _ = Open()),
-            ("_Save|Ctrl+S", () => _ = Save()), ("Save _as…", () => _ = SaveAs()), ("Build game cutscene…", () => _ = ExportDisplay()), ("Build CBOR game cutscene…", () => _ = ExportDisplay(cbor: true)),
-            ("Export frame PNG…", () => _ = Export(false)), ("Export all PNGs…", () => _ = Export(true)),
+            ("_Save|Ctrl+S", () => _ = Save()), ("Save _as…|Ctrl+Shift+S", () => _ = SaveAs()), ("Build game cutscene…", () => _ = ExportDisplay()), ("Build CBOR game cutscene…", () => _ = ExportDisplay(cbor: true)),
+            ("Print current frame…|Ctrl+P", () => _ = PrintCurrentFrame()), ("Export frame PNG…", () => _ = Export(false)), ("Export all PNGs…", () => _ = Export(true)),
             ("Export PDF…", () => ExportBook(BookFormat.Pdf)), ("Export EPUB…", () => ExportBook(BookFormat.Epub)),
             ("Export CBZ…", () => ExportBook(BookFormat.Cbz))));
         autosaveMenu = new MenuItem { Header = "Autosave & recovery…" };
@@ -224,9 +189,9 @@ public partial class MainView : UserControl
             ("Paste artwork|Ctrl+V", PasteSelection), ("Select all artwork|Ctrl+A", SelectAllArtwork),
             ("Delete selected artwork", DeleteSelection), ("Deselect", Deselect),
             ("Tool options…", EditToolOptions), ("Drawing input…", EditDrawingInput)));
-        menu.Items.Add(MenuGroup("F_rame", ("Play cutscene…", PreviewPlayback), ("Timing & visibility…", () => FrameSettings(editor.FrameIndex)), ("Add frame", () => { editor.AddFrame(false); RefreshAll(); }
+        menu.Items.Add(MenuGroup("F_rame", ("Play cutscene…", PreviewPlayback), ("Timing & visibility…|Alt+T", () => FrameSettings(editor.FrameIndex)), ("Add frame|Alt+N", () => { editor.AddFrame(false); RefreshAll(); }
         ),
-            ("Duplicate frame", () => { editor.AddFrame(true); RefreshAll(); }
+            ("Duplicate frame|Alt+D", () => { editor.AddFrame(true); RefreshAll(); }
         ), ("Copy frame", () => CopyFrame()
         ), ("Paste frame", () => PasteFrame()
         ), ("Delete frame", () => { editor.DeleteFrame(); RefreshAll(); }
@@ -296,18 +261,14 @@ public partial class MainView : UserControl
             for (var i = 0; i < 5; i++) workspace.ColumnDefinitions.Add(new ColumnDefinition(i % 2 == 0 ? paneWidths[i / 2] : new GridLength(5))
             { MinWidth = i % 2 == 0 ? paneOrder[i / 2] switch { Pane.Canvas => 360, Pane.Inspector => 280, _ => 180 } : 5 });
         }
-        storyboard = new StackPanel { Margin = new Thickness(6), Spacing = 5 };
+        storyboard = new StackPanel { Margin = new Thickness(6), Spacing = 5, Orientation = !small && paneOrder[3] == Pane.Storyboard ? Orientation.Horizontal : Orientation.Vertical };
         var story = new DockPanel();
         var storyHeader = new StackPanel { Spacing = 6 };
         storyHeader.Children.Add(PaneHeader(Pane.Storyboard, "Storyboard"));
         var storyPlay = Icon(PackIconMaterialKind.Play, "Play cutscene", PreviewPlayback);
         storyPlay.Name = "StoryboardPlay"; storyPlay.Height = compact ? 48 : 40;
         if (storyPlay.Content is PackIconMaterial playGlyph) playGlyph.Width = playGlyph.Height = compact ? 26 : 22;
-        var storyActions = new UniformGrid { Name = "StoryboardActions", Columns = 6, Children = { storyPlay, Icon(PackIconMaterialKind.Plus, "Add frame", () => { editor.AddFrame(false); RefreshAll(); }),
-            Icon(PackIconMaterialKind.ContentCopy, "Duplicate frame", () => { editor.AddFrame(true); RefreshAll(); }),
-            Icon(PackIconMaterialKind.DeleteOutline, "Delete frame", () => { editor.DeleteFrame(); RefreshAll(); }),
-            Icon(PackIconMaterialKind.ArrowUp, "Move earlier", () => { editor.MoveFrame(-1); RefreshAll(); }),
-            Icon(PackIconMaterialKind.ArrowDown, "Move later", () => { editor.MoveFrame(1); RefreshAll(); }) } };
+        var storyActions = new UniformGrid { Name = "StoryboardActions", Columns = 2, HorizontalAlignment = HorizontalAlignment.Left, Width = compact ? 100 : 96, Children = { storyPlay, Icon(PackIconMaterialKind.Plus, "Add frame (Alt+N)", () => { editor.AddFrame(false); RefreshAll(); }) } };
         foreach (var action in storyActions.Children.OfType<Button>())
         {
             action.Width = double.NaN; action.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -323,7 +284,7 @@ public partial class MainView : UserControl
             var nextFrame = Button("Next frame", () => SelectFrame(editor.FrameIndex + 1));
             storyHeader.Children.Add(Row(previousFrame, nextFrame));
         }
-        story.Children.Add(new ScrollViewer { Content = storyboard, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        story.Children.Add(new ScrollViewer { Content = storyboard, HorizontalScrollBarVisibility = storyboard.Orientation == Orientation.Horizontal ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = storyboard.Orientation == Orientation.Horizontal ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto });
 
         var center = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
         if (!small) center.Children.Add(PaneHeader(Pane.Canvas, "Canvas"));
@@ -359,15 +320,9 @@ public partial class MainView : UserControl
         var inspectorPane = new DockPanel(); var inspectorHeader = PaneHeader(Pane.Inspector, "Layers & text");
         DockPanel.SetDock(inspectorHeader, Dock.Top); inspectorPane.Children.Add(inspectorHeader);
         inspectorPane.Children.Add(new ScrollViewer { Content = inspector, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
-        if (!small)
-        {
-            var panes = new Dictionary<Pane, Control> { [Pane.Storyboard] = story, [Pane.Canvas] = center, [Pane.Inspector] = inspectorPane };
-            for (var i = 0; i < 3; i++) AddAt(workspace, panes[paneOrder[i]], i * 2);
-            for (var i = 0; i < 2; i++) AddAt(workspace, new GridSplitter { ResizeDirection = GridResizeDirection.Columns, Background = Brush(UiTheme.Border) }, i * 2 + 1);
-        }
         AddAt(root, workspace, row: 2);
         var paletteDivider = new GridSplitter { ResizeDirection = GridResizeDirection.Rows, Background = Brush(UiTheme.Border) };
-        paletteDivider.AddHandler(PointerReleasedEvent, (_, _) => paletteResized = true, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        paletteDivider.AddHandler(PointerReleasedEvent, (_, _) => { paletteResized = true; PersistPaneLayout(); }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
         if (!small) AddAt(root, paletteDivider, row: 3);
         palette = new StackPanel { Margin = new Thickness(8, 5), Spacing = 5 };
         var palettePane = new ScrollViewer { Content = palette, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
@@ -379,8 +334,27 @@ public partial class MainView : UserControl
             else AddAt(root, toolOptions, row: 1);
             AddCompactWorkspace(root, workspace, center, story, inspectorPane, palettePane);
         }
-        else AddAt(root, palettePane, row: 4);
-        shell.Children.Add(root); Content = shell; RefreshAll(); RefreshTools();
+        else
+        {
+            var dockedPalette = new DockPanel();
+            var paletteHeader = PaneHeader(Pane.Palette, "Palette");
+            DockPanel.SetDock(paletteHeader, Dock.Top); dockedPalette.Children.Add(paletteHeader); dockedPalette.Children.Add(palettePane);
+            var panes = new Dictionary<Pane, Control> { [Pane.Storyboard] = story, [Pane.Canvas] = center, [Pane.Inspector] = inspectorPane, [Pane.Palette] = dockedPalette };
+            paneHosts.Clear();
+            for (var i = 0; i < 4; i++)
+            {
+                var host = new Border { Name = $"PaneSlot{i}", Child = panes[paneOrder[i]], ClipToBounds = true };
+                paneHosts.Add(host);
+                if (i < 3) AddAt(workspace, host, i * 2); else AddAt(root, host, row: 4);
+            }
+            for (var i = 0; i < 2; i++)
+            {
+                var divider = new GridSplitter { ResizeDirection = GridResizeDirection.Columns, Background = Brush(UiTheme.Border) };
+                divider.AddHandler(PointerReleasedEvent, (_, _) => PersistPaneLayout(), Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+                AddAt(workspace, divider, i * 2 + 1);
+            }
+        }
+        shell.Children.Add(root); Content = shell; AttachMediaDrop(); RefreshAll(); RefreshTools();
     }
 
     private void SyncLanguages()
@@ -518,39 +492,5 @@ public partial class MainView : UserControl
         e.Handled = true;
     }
 
-    private void OnKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (modal is not null) { if (e.Key == Key.Escape) { CloseModal(); e.Handled = true; } return; }
-        var typing = e.Source is Visual visual && (visual is TextBox || visual.GetVisualAncestors().Any(v => v is TextBox or NumericUpDown));
-        if (!typing && e.Key == Key.Escape) { FinishPath(cancel: true); selection = null; RefreshCanvas(); e.Handled = true; return; }
-        if (!typing && e.Key == Key.Enter && pathBase is not null) { FinishPath(); e.Handled = true; return; }
-        if (!typing && e.Key == Key.F2 && editor.SelectedText is not null) { BeginInlineTextEdit(); e.Handled = true; return; }
-        if (!typing && editor.SelectedText is not null && FontStep(e, out var fontDelta))
-        {
-            BeginInlineTextEdit(); ChangeInlineFontSize(fontDelta); e.Handled = true; return;
-        }
-        if (!typing && e.Key == Key.Delete && selection is not null) { DeleteSelection(); e.Handled = true; return; }
-        if (!typing && e.Key == Key.Delete && editor.SelectedText is { } selected)
-        {
-            editor.BeforeChange(); editor.Frame.TextObjects.Remove(selected); editor.SelectedTextId = null;
-            RefreshAll(); e.Handled = true; return;
-        }
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta))
-        {
-            if (e.Key == Key.S) { _ = Save(); e.Handled = true; }
-            else if (e.Key == Key.O) { _ = Open(); e.Handled = true; }
-            else if (e.Key == Key.N) { New(); e.Handled = true; }
-            else if (!typing && e.Key == Key.Z) { if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) Redo(); else Undo(); e.Handled = true; }
-            else if (!typing && e.Key == Key.Y) { Redo(); e.Handled = true; }
-            else if (!typing && e.Key == Key.C) { if (FocusedFrameIndex(e.Source) is int index) CopyFrame(index); else CopySelection(false); e.Handled = true; }
-            else if (!typing && e.Key == Key.X) { CopySelection(true); e.Handled = true; }
-            else if (!typing && e.Key == Key.V) { PasteClipboard(); e.Handled = true; }
-            else if (!typing && e.Key == Key.A) { SelectAllArtwork(); e.Handled = true; }
-        }
-        else if (!typing && (e.KeyModifiers.HasFlag(KeyModifiers.Alt) || e.Source == canvas))
-        {
-            if (e.Key == Key.Left) { SelectFrame(editor.FrameIndex - 1); e.Handled = true; }
-            else if (e.Key == Key.Right) { SelectFrame(editor.FrameIndex + 1); e.Handled = true; }
-        }
-    }
+
 }

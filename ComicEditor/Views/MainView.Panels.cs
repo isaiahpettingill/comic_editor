@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ComicEditor.Editing;
@@ -21,12 +22,13 @@ public partial class MainView
     private readonly HashSet<int> thumbnailPendingFrames = [];
     private DispatcherTimer? thumbnailTimer;
     private bool thumbnailRefreshAll;
-    private readonly List<(TextBox Timing, TextBlock Condition)> frameBadges = [];
+    private readonly List<(TextBox Timing, Button Readout, TextBlock Condition)> frameBadges = [];
 
     private void RefreshFrameBadge(int index)
     {
         var frame = editor.Scene.Frames[index]; var badge = frameBadges[index];
         if (!badge.Timing.IsKeyboardFocusWithin) badge.Timing.Text = (frame.DurationMs / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        badge.Readout.Content = (frame.DurationMs / 1000m).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " s";
         badge.Condition.Text = (frame.AudioQoa.Length > 0 ? "♫ " : "") + (frame.Requirement switch { "always" => "✓", "never" => "⊘", _ when frame.Requirement.StartsWith("not ", StringComparison.Ordinal) => "!" + frame.Requirement[4..], _ => frame.Requirement });
         ToolTip.SetTip(badge.Timing, $"Duration in seconds (minimum {frame.MinimumDurationMs / 1000.0:0.###}s). Enter to save; Escape to cancel.");
         ToolTip.SetTip(badge.Condition, "Show: " + frame.Requirement + (frame.AudioQoa.Length > 0 ? $" · QOA audio: {frame.MinimumDurationMs} ms" : ""));
@@ -57,6 +59,7 @@ public partial class MainView
     private void RefreshStoryboard()
     {
         if (storyboard is null) return;
+        SyncItemSelection();
         var ids = editor.Scene.Frames.Select(frame => frame.Id).ToArray();
         if (renderedStoryboard == storyboard && ReferenceEquals(thumbnailScene, editor.Scene) && ids.SequenceEqual(thumbnailFrameIds))
         {
@@ -72,7 +75,7 @@ public partial class MainView
                 thumbnailCanvases[i].Language = editor.Language;
                 thumbnailCanvases[i].Width = editor.Scene.Width;
                 thumbnailCanvases[i].Height = editor.Scene.Height;
-                thumbnailCards[i].Background = Brush(i == editor.FrameIndex ? UiTheme.Selection : UiTheme.Surface);
+                thumbnailCards[i].Background = Brush(selectedFrameIds.Contains(editor.Scene.Frames[i].Id) ? UiTheme.Selection : UiTheme.Surface);
                 thumbnailCards[i].BorderBrush = Brush(i == editor.FrameIndex ? UiTheme.Accent : UiTheme.Border);
             }
             QueueThumbnailRefresh(changedScene || changedLanguage || changedDimensions);
@@ -102,32 +105,32 @@ public partial class MainView
             {
                 Name = $"FramePreview{i}",
                 Stretch = Stretch.Uniform,
-                MaxHeight = compact ? 260 : 220,
+                MaxHeight = compact ? 260 : storyboard.Orientation == Orientation.Horizontal ? 120 : 220,
                 Child = thumbnail
             });
             var number = Label((i + 1).ToString("D3"), true); number.FontSize = 12;
             var timing = InlineFrameDuration(i);
             var condition = Label(""); condition.Name = $"FrameRequirement{i}"; condition.FontSize = 11; condition.TextWrapping = TextWrapping.NoWrap; condition.TextTrimming = TextTrimming.CharacterEllipsis;
-            frameBadges.Add((timing, condition)); RefreshFrameBadge(i);
+            frameBadges.Add((timing.Children.OfType<TextBox>().Single(), timing.Children.OfType<Button>().Single(), condition)); RefreshFrameBadge(i);
             var details = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto") };
             timing.Margin = new Thickness(3, 0, 0, 0);
             condition.Margin = new Thickness(3, 0);
-            var timingWithUnit = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Children = { timing, Label("s") } };
-            AddAt(details, number); AddAt(details, timingWithUnit, 1); AddAt(details, condition, 2); AddAt(details, FrameOptions(index), 3);
+            AddAt(details, number); AddAt(details, timing, 1); AddAt(details, condition, 2); AddAt(details, FrameOptions(index), 3);
             row.Children.Add(details);
             var card = new Border
             {
                 Name = $"FrameRow{i}",
+                Width = storyboard.Orientation == Orientation.Horizontal ? 200 : double.NaN,
                 Child = row,
                 Padding = new Thickness(4),
                 Focusable = true,
-                Background = Brush(i == editor.FrameIndex ? UiTheme.Selection : UiTheme.Surface),
+                Background = Brush(selectedFrameIds.Contains(editor.Scene.Frames[i].Id) ? UiTheme.Selection : UiTheme.Surface),
                 BorderBrush = Brush(i == editor.FrameIndex ? UiTheme.Accent : UiTheme.Border),
                 // Reserve the selection border so selecting a frame never
                 // resizes its preview or shifts the rows below it.
                 BorderThickness = new Thickness(2)
             };
-            ToolTip.SetTip(card, "Click to open; drag to reorder");
+            ToolTip.SetTip(card, "Click to open; Ctrl-click to toggle; Shift-click for a range; drag to reorder");
             thumbnailCards.Add(card);
             AttachFrameClipboardMenu(card, index);
             AttachReorder(card, storyboard, index, true, () => { SelectFrame(index); if (compact) ShowCompactPage(CompactPage.Draw); });
@@ -147,7 +150,10 @@ public partial class MainView
         palette.Children.Clear();
         var slot = new NumericUpDown { Name = "CurrentPaletteSlot", Minimum = 0, Maximum = editor.Scene.Palette.Count - 1, Value = editor.Color, Width = 100 };
         slot.ValueChanged += (_, _) => { if (slot.Value is null || (int)slot.Value == editor.Color) return; editor.Color = (int)slot.Value; RefreshPalette(); };
-        var heading = Row(Label("Palette", true), slot, Label(editor.Scene.Palette[editor.Color]), Button("Edit palette…", EditPalette));
+        var heading = new WrapPanel { Orientation = Orientation.Horizontal };
+        if (compact) heading.Children.Add(Label("Palette", true));
+        foreach (var control in new Control[] { slot, Label(editor.Scene.Palette[editor.Color]), Button("Edit palette…", EditPalette) })
+        { control.Margin = new Thickness(0, 0, 4, 3); heading.Children.Add(control); }
         palette.Children.Add(heading);
         var colors = new WrapPanel { Name = "PaletteSwatches", Orientation = Orientation.Horizontal };
         var first = editor.Color / 256 * 256;
@@ -178,21 +184,23 @@ public partial class MainView
     {
         refreshFontWarning = null;
         if (inspector is null) return;
+        SyncItemSelection();
         inspector.Children.Clear();
         inspector.Children.Add(Label("Layers", true));
         var rows = new StackPanel { Spacing = 1 };
         void LayerRow(string name, bool visible, bool selected, Action select, Action toggle, Action? rename, int? layerIndex = null)
         {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions(compact ? "44,*" : "32,*") };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions(compact ? "44,*,44" : "32,*,32") };
             var eye = Icon(visible ? PackIconMaterialKind.EyeOutline : PackIconMaterialKind.EyeOffOutline, visible ? "Hide " + name : "Show " + name, toggle);
             eye.Background = Brushes.Transparent; eye.BorderThickness = default; row.Children.Add(eye);
             if (layerIndex is int index)
             {
-                var item = new Border { Child = Label(name), Height = compact ? 44 : 32, Padding = new Thickness(7, 4), Focusable = true, Background = Brushes.Transparent };
-                ToolTip.SetTip(item, "Click to select; drag to reorder; double-click to rename");
+                var item = new Border { Name = $"LayerItem{index}", Child = Label(name), Height = compact ? 44 : 32, Padding = new Thickness(7, 4), Focusable = true, Background = Brushes.Transparent };
+                ToolTip.SetTip(item, "Click to select; Ctrl-click to toggle; Shift-click for a range; drag to reorder; double-click to rename");
                 item.DoubleTapped += (_, _) => rename?.Invoke();
-                var renameItem = new MenuItem { Header = "Rename…" }; renameItem.Click += (_, _) => rename?.Invoke();
-                item.ContextMenu = new ContextMenu { Items = { renameItem } };
+                var options = LayerOptions(index);
+                item.ContextMenu = options.ContextMenu;
+                AddAt(row, options, 2);
                 AttachReorder(item, rows, index, false, select);
                 AddAt(row, item, 1);
                 rows.Children.Add(new Border { Name = $"LayerRow{index}", Child = row, Background = selected ? Brush(UiTheme.Selection) : Brush(UiTheme.Surface) });
@@ -211,7 +219,7 @@ public partial class MainView
         for (var i = editor.Frame.Layers.Count - 1; i >= 0; i--)
         {
             var index = i; var layer = editor.Frame.Layers[i];
-            LayerRow(layer.Name, layer.Visible, editor.Tool != Tool.Text && editor.LayerIndex == i,
+            LayerRow(layer.Name, layer.Visible, selectedLayerIds.Contains(layer.Id),
                 () =>
                 {
                     if (editor.LayerIndex == index && editor.Tool != Tool.Text) return;
@@ -221,51 +229,36 @@ public partial class MainView
                 () => { editor.BeforeChange(); layer.Visible = !layer.Visible; RefreshAll(); }, () => RenameLayer(layer), index);
         }
         inspector.Children.Add(new ScrollViewer { Content = rows, MaxHeight = compact ? 180 : 140 });
-        var layerActions = Row(Icon(PackIconMaterialKind.Plus, "Add artwork layer", () =>
-            {
-                editor.BeforeChange(); editor.Frame.Layers.Add(ArtworkLayer.Create($"Layer {editor.Frame.Layers.Count + 1}", editor.Scene.Width, editor.Scene.Height, editor.Scene.IsRgba));
-                editor.LayerIndex = editor.Frame.Layers.Count - 1; editor.Tool = Tool.Pixel; RefreshTools(); RefreshAll();
-            }),
-            Icon(PackIconMaterialKind.DeleteOutline, "Delete selected artwork layer", () =>
-            {
-                if (editor.Frame.Layers.Count <= 1 || editor.Tool == Tool.Text) return; editor.BeforeChange(); editor.Frame.Layers.RemoveAt(editor.LayerIndex);
-                editor.LayerIndex = Math.Max(0, editor.LayerIndex - 1); RefreshAll();
-            }),
-            Icon(PackIconMaterialKind.ArrowUp, "Raise artwork layer", () => MoveLayer(1)),
-            Icon(PackIconMaterialKind.ArrowDown, "Lower artwork layer", () => MoveLayer(-1)),
-            Icon(PackIconMaterialKind.Pencil, "Rename artwork layer", () => RenameLayer(editor.Layer)));
-        layerActions.Children[1].IsEnabled = editor.Tool != Tool.Text && editor.Frame.Layers.Count > 1;
-        layerActions.Children[2].IsEnabled = editor.Tool != Tool.Text && editor.LayerIndex < editor.Frame.Layers.Count - 1;
-        layerActions.Children[3].IsEnabled = editor.Tool != Tool.Text && editor.LayerIndex > 0;
-        layerActions.Children[4].IsEnabled = editor.Tool != Tool.Text;
-        inspector.Children.Add(layerActions); inspector.Children.Add(new Separator());
+        inspector.Children.Add(Icon(PackIconMaterialKind.Plus, "Add artwork layer", () =>
+        {
+            editor.BeforeChange(); editor.Frame.Layers.Add(ArtworkLayer.Create($"Layer {editor.Frame.Layers.Count + 1}", editor.Scene.Width, editor.Scene.Height, editor.Scene.IsRgba));
+            editor.LayerIndex = editor.Frame.Layers.Count - 1; editor.Tool = Tool.Pixel; RefreshTools(); RefreshAll();
+        }));
+        inspector.Children.Add(new Separator());
 
-        var textHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto") };
+        var textHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         textHeader.Children.Add(Label("Text & localization", true));
         AddAt(textHeader, Icon(PackIconMaterialKind.Plus, "Add text object", AddText), 1);
         var obj = editor.SelectedText;
-        var remove = Icon(PackIconMaterialKind.DeleteOutline, "Delete selected text object", () =>
-        { if (obj is null) return; editor.BeforeChange(); editor.Frame.TextObjects.Remove(obj); editor.SelectedTextId = null; RefreshAll(); });
-        remove.IsEnabled = obj is not null; AddAt(textHeader, remove, 2); inspector.Children.Add(textHeader);
+        inspector.Children.Add(textHeader);
         if (editor.Frame.TextObjects.Count > 0)
         {
-            var objects = editor.Frame.TextObjects.ToArray();
-            var selector = new ComboBox
+            var textRows = new StackPanel { Name = "TextObjectList", Spacing = 2 };
+            foreach (var textObject in editor.Frame.TextObjects)
             {
-                Name = "TextObjectSelector",
-                ItemsSource = objects.Select(t => t.Key).ToArray(),
-                SelectedIndex = Array.FindIndex(objects, t => t.Id == editor.SelectedTextId),
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                PlaceholderText = "Select text object…",
-                Height = compact ? 44 : 32,
-                MinHeight = compact ? 44 : 32
-            };
-            selector.SelectionChanged += (_, _) =>
-            {
-                if (selector.SelectedIndex < 0) return; editor.SelectedTextId = objects[selector.SelectedIndex].Id;
-                editor.Tool = Tool.Text; RefreshTools(); RefreshInspector(); RefreshCanvas();
-            };
-            inspector.Children.Add(selector);
+                var capturedObject = textObject;
+                var row = new Grid { Name = "TextRow_" + textObject.Id, ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+                var modifiers = KeyModifiers.None;
+                var select = Button(textObject.Key, () => SelectTextItem(capturedObject, modifiers));
+                select.Name = "TextSelect_" + textObject.Id;
+                select.PointerPressed += (_, e) => modifiers = e.KeyModifiers;
+                select.KeyDown += (_, e) => modifiers = e.KeyModifiers;
+                select.HorizontalAlignment = HorizontalAlignment.Stretch;
+                select.HorizontalContentAlignment = HorizontalAlignment.Left;
+                select.Background = Brush(selectedTextIds.Contains(textObject.Id) ? UiTheme.Selection : UiTheme.Surface);
+                row.Children.Add(select); AddAt(row, TextObjectOptions(textObject), 1); textRows.Children.Add(row);
+            }
+            inspector.Children.Add(new ScrollViewer { Content = textRows, MaxHeight = compact ? 180 : 140 });
         }
         if (obj is null)
         {
@@ -345,6 +338,56 @@ public partial class MainView
         var installFonts = Button("Install missing fonts…", () => _ = CheckFontsAsync(CancellationToken.None, explicitlyRequested: true));
         installFonts.Name = "InstallMissingFonts";
         inspector.Children.Add(installFonts);
+    }
+
+    private Button LayerOptions(int index)
+    {
+        var scene = editor.Scene; var frame = editor.Frame; var layer = frame.Layers[index];
+        bool Current() => ReferenceEquals(editor.Scene, scene) && ReferenceEquals(editor.Frame, frame) && frame.Layers.Contains(layer);
+        var button = Button("…", () => { }); button.Name = $"LayerOptions{index}";
+        Avalonia.Automation.AutomationProperties.SetName(button, $"Options for layer {layer.Name}");
+        ToolTip.SetTip(button, "Layer options");
+        MenuItem Item(string title, string name, Action action)
+        {
+            var item = new MenuItem { Header = title, Name = name + index };
+            item.Click += (_, _) => { if (!Current()) return; FinishPath(); EndInlineTextEdit(); action(); };
+            return item;
+        }
+        var rename = Item("Rename…", "LayerRename", () => RenameLayer(layer));
+        var raise = Item("Raise layer", "LayerRaise", () => MoveLayers(layer, 1));
+        var lower = Item("Lower layer", "LayerLower", () => MoveLayers(layer, -1));
+        var delete = Item("Delete layer(s)", "LayerDelete", () => DeleteLayers(layer));
+        button.ContextMenu = new ContextMenu { Items = { rename, raise, lower, new Separator(), delete } };
+        button.ContextMenu.Opened += (_, _) =>
+        {
+            var i = Current() ? frame.Layers.IndexOf(layer) : -1;
+            var targets = Current() ? LayerTargets(layer) : [];
+            delete.Header = targets.Count > 1 ? $"Delete {targets.Count} layers" : "Delete layer";
+            raise.IsEnabled = i >= 0 && !targets.Contains(frame.Layers[^1]);
+            lower.IsEnabled = i >= 0 && !targets.Contains(frame.Layers[0]);
+            delete.IsEnabled = i >= 0 && targets.Count < frame.Layers.Count;
+        };
+        button.Click += (_, _) => button.ContextMenu.Open(button); return button;
+    }
+
+    private Button TextObjectOptions(TextObject obj)
+    {
+        var scene = editor.Scene; var frame = editor.Frame;
+        bool Current() => ReferenceEquals(editor.Scene, scene) && ReferenceEquals(editor.Frame, frame) && frame.TextObjects.Contains(obj);
+        var button = Button("…", () => { }); button.Name = "TextOptions_" + obj.Id;
+        Avalonia.Automation.AutomationProperties.SetName(button, $"Options for text {obj.Key}");
+        ToolTip.SetTip(button, "Text options");
+        var edit = new MenuItem { Header = "Layout & style…", Name = "TextEdit_" + obj.Id };
+        edit.Click += (_, _) => { if (Current()) EditTextProperties(obj); };
+        var delete = new MenuItem { Header = "Delete text object", Name = "TextDelete_" + obj.Id };
+        delete.Click += (_, _) => { if (Current()) DeleteTextObjects(obj); };
+        button.ContextMenu = new ContextMenu { Items = { edit, delete } };
+        button.ContextMenu.Opened += (_, _) =>
+        {
+            SyncItemSelection(); var count = selectedTextIds.Contains(obj.Id) ? selectedTextIds.Count : 1;
+            delete.Header = count > 1 ? $"Delete {count} text objects" : "Delete text object";
+        };
+        button.Click += (_, _) => button.ContextMenu.Open(button); return button;
     }
 
     private void MoveLayer(int delta)

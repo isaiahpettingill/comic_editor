@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Buffers;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -59,57 +60,67 @@ public sealed class CutsceneCanvas : Control
         return new Point(Math.Clamp((int)(p.X / scale), 0, Scene.Width - 1), Math.Clamp((int)(p.Y / scale), 0, Scene.Height - 1));
     }
 
+    internal static void CompositeArtworkRow(Cutscene scene, Frame frame, int y, ReadOnlySpan<uint> colors,
+        Span<byte> output, Span<byte> indices, Span<uint> rgba, Span<uint> composite)
+    {
+        output.Clear(); composite.Clear();
+        foreach (var layer in frame.Layers)
+        {
+            if (!layer.Visible) continue;
+            if (scene.IsRgba) layer.ReadRgbaRow(y, rgba);
+            else layer.ReadIndexedRow(y, indices);
+            for (var x = 0; x < scene.Width; x++)
+            {
+                if (scene.IsRgba) composite[x] = RgbaColor.Blend(rgba[x], composite[x]);
+                else
+                {
+                    var index = indices[x]; if (index == 255) continue;
+                    var color = colors[index]; var offset = x * 4;
+                    output[offset] = (byte)(color >> 8); output[offset + 1] = (byte)(color >> 16);
+                    output[offset + 2] = (byte)(color >> 24); output[offset + 3] = 255;
+                }
+            }
+        }
+        if (!scene.IsRgba) return;
+        for (var x = 0; x < scene.Width; x++)
+        {
+            var color = RgbaColor.Blend(composite[x], 0xffffffff); var offset = x * 4;
+            output[offset] = (byte)(color >> 8); output[offset + 1] = (byte)(color >> 16);
+            output[offset + 2] = (byte)(color >> 24); output[offset + 3] = 255;
+        }
+    }
+
     public static void RenderFrame(DrawingContext context, Cutscene scene, int frameIndex, string language,
         bool textVisible = true, bool showBounds = false, string? selectedId = null, bool onionBackground = false, string? hiddenTextId = null)
     {
         var frame = scene.Frames[frameIndex];
-        var brushes = scene.Palette.Select(hex => { var c = RgbaColor.Parse(hex); return new SolidColorBrush(Color.FromArgb((byte)c, (byte)(c >> 24), (byte)(c >> 16), (byte)(c >> 8))); }).ToArray();
-        // Composite indices before scaling. Adjacent antialiased rectangles leave seams
-        // at fractional zoom; a single nearest-neighbor bitmap preserves solid pixels.
-        var pixels = new byte[scene.Width * scene.Height * 4];
+        // Composite one scanline at a time from packed artwork. Reuse pooled row
+        // buffers instead of allocating full-frame byte/uint arrays and decoding
+        // immutable hex strings for every layer on every repaint.
         var colors = scene.Palette.Select(RgbaColor.Parse).ToArray();
-        var composite = scene.IsRgba ? new uint[scene.Width * scene.Height] : null;
-        foreach (var layer in frame.Layers.Where(l => l.Visible))
+        var pixels = ArrayPool<byte>.Shared.Rent(checked(scene.Width * 4));
+        var indices = ArrayPool<byte>.Shared.Rent(scene.Width);
+        var rgba = ArrayPool<uint>.Shared.Rent(scene.Width);
+        var composite = ArrayPool<uint>.Shared.Rent(scene.Width);
+        try
         {
-            for (var y = 0; y < scene.Height; y++)
-            {
-                var row = Convert.FromHexString(layer.Rows[y]);
-                for (var x = 0; x < scene.Width; x++)
-                {
-                    var color = scene.IsRgba ? 0 : row[x];
-                    if (!scene.IsRgba && color == 255) continue;
-                    var offset = (y * scene.Width + x) * 4;
-                    var rgba = scene.IsRgba ?
-                        ((uint)row[x * 4] << 24) | ((uint)row[x * 4 + 1] << 16) | ((uint)row[x * 4 + 2] << 8) | row[x * 4 + 3]
-                        : colors[color];
-                    if (scene.IsRgba)
-                    {
-                        var pixelIndex = y * scene.Width + x;
-                        composite![pixelIndex] = RgbaColor.Blend(rgba, composite[pixelIndex]);
-                    }
-                    else
-                    {
-                        pixels[offset] = (byte)(rgba >> 8); pixels[offset + 1] = (byte)(rgba >> 16);
-                        pixels[offset + 2] = (byte)(rgba >> 24); pixels[offset + 3] = 255;
-                    }
-                }
-            }
-        }
-        if (scene.IsRgba)
-            for (var i = 0; i < composite!.Length; i++)
-            {
-                var rgba = RgbaColor.Blend(composite[i], 0xffffffff);
-                pixels[i * 4] = (byte)(rgba >> 8); pixels[i * 4 + 1] = (byte)(rgba >> 16);
-                pixels[i * 4 + 2] = (byte)(rgba >> 24); pixels[i * 4 + 3] = 255;
-            }
-        using (var bitmap = new WriteableBitmap(new PixelSize(scene.Width, scene.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul))
-        {
+            using var bitmap = new WriteableBitmap(new PixelSize(scene.Width, scene.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
             using (var buffer = bitmap.Lock())
                 for (var y = 0; y < scene.Height; y++)
-                    Marshal.Copy(pixels, y * scene.Width * 4, buffer.Address + y * buffer.RowBytes, scene.Width * 4);
+                {
+                    CompositeArtworkRow(scene, frame, y, colors, pixels.AsSpan(0, scene.Width * 4),
+                        indices.AsSpan(0, scene.Width), rgba.AsSpan(0, scene.Width), composite.AsSpan(0, scene.Width));
+                    Marshal.Copy(pixels, 0, buffer.Address + y * buffer.RowBytes, scene.Width * 4);
+                }
             context.DrawImage(bitmap, new Rect(0, 0, scene.Width, scene.Height));
         }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(pixels); ArrayPool<byte>.Shared.Return(indices);
+            ArrayPool<uint>.Shared.Return(rgba); ArrayPool<uint>.Shared.Return(composite);
+        }
         if (!textVisible || !frame.TextVisible) return;
+        var brushes = colors.Select(c => new SolidColorBrush(Color.FromArgb((byte)c, (byte)(c >> 24), (byte)(c >> 16), (byte)(c >> 8)))).ToArray();
         foreach (var obj in frame.TextObjects)
         {
             if (obj.Id == hiddenTextId) continue;

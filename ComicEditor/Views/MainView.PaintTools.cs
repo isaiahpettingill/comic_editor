@@ -34,7 +34,7 @@ public partial class MainView
     {
         var chosen = RememberedTool(group);
         var suppressClick = false;
-        var button = Icon(ToolIcon(chosen), $"{ToolName(chosen)} — {ToolHelp(chosen)}" + (group.Tools.Length > 1 ? " Hold or right-click to choose another tool." : ""), () =>
+        var button = Icon(ToolIcon(chosen), $"{ToolName(chosen)} ({ToolShortcut(group)}) — {ToolHelp(chosen)}" + (group.Tools.Length > 1 ? " Hold or right-click to choose another tool." : ""), () =>
         {
             if (suppressClick) { suppressClick = false; return; }
             ChooseTool(RememberedTool(group));
@@ -55,7 +55,7 @@ public partial class MainView
             var menu = new ContextMenu();
             foreach (var tool in group.Tools)
             {
-                var item = new MenuItem { Header = Row(new PackIconMaterial { Kind = ToolIcon(tool), Width = 18, Height = 18 }, Label(ToolName(tool))) };
+                var item = new MenuItem { Header = Row(new PackIconMaterial { Kind = ToolIcon(tool), Width = 18, Height = 18 }, Label(ToolName(tool) + " — " + ToolShortcut(group))) };
                 item.Click += (_, _) => ChooseTool(tool);
                 menu.Items.Add(item);
             }
@@ -99,11 +99,11 @@ public partial class MainView
     private ArtworkSelection? selection;
     private ArtworkClipboard? clipboardArtwork;
     private FrameClipboard? clipboardFrame;
-    private List<string>? selectionBase;
+    private ArtworkLayer? selectionBase;
     private bool movingSelection;
     private int selectionX, selectionY;
     private readonly List<(double X, double Y)> lasso = [];
-    private List<string>? pathBase;
+    private ArtworkLayer? pathBase;
     private ArtworkLayer? pathLayer;
     private Tool pathTool;
     private readonly List<(double X, double Y)> path = [];
@@ -210,9 +210,9 @@ public partial class MainView
             if (selectionBase is null)
             {
                 if (x == startX && y == startY) return;
-                editor.BeforeChange(); selection.Clear(); selectionBase = editor.Layer.Rows.ToList();
+                editor.BeforeChange(); selection.Clear(); selectionBase = editor.Layer.Snapshot();
             }
-            editor.Layer.Rows = selectionBase.ToList();
+            editor.Layer.RestorePixels(selectionBase);
             selection.X = Math.Clamp(selectionX + x - startX, 0, Math.Max(0, editor.Scene.Width - selection.Width));
             selection.Y = Math.Clamp(selectionY + y - startY, 0, Math.Max(0, editor.Scene.Height - selection.Height));
             selection.Paste();
@@ -246,6 +246,7 @@ public partial class MainView
     {
         FinishPath();
         if (selection?.Owner != editor.Layer) return;
+        _ = MarkInternalClipboard();
         clipboardArtwork = new ArtworkClipboard(selection, editor.Scene); clipboardFrame = null;
         if (cut) DeleteSelection();
     }
@@ -281,7 +282,7 @@ public partial class MainView
     {
         if (pathBase is null)
         {
-            pathBase = editor.Layer.Rows.ToList(); pathLayer = editor.Layer; pathTool = editor.Tool;
+            pathBase = editor.Layer.Snapshot(); pathLayer = editor.Layer; pathTool = editor.Tool;
             path.Clear(); path.Add((x, y)); curveStage = 0; curveEnd = curveControl1 = curveControl2 = (x, y);
         }
         else if (editor.Tool == Tool.Polygon)
@@ -295,7 +296,7 @@ public partial class MainView
     private void DrawPath(int x, int y)
     {
         if (pathBase is null || pathLayer != editor.Layer) return;
-        editor.Layer.Rows = pathBase.ToList();
+        editor.Layer.RestorePixels(pathBase);
         if (pathTool == Tool.Polygon)
         {
             var preview = path.ToList(); if (preview[^1] != (x, y)) preview.Add((x, y));
@@ -313,11 +314,11 @@ public partial class MainView
     {
         if (pathBase is null || pathLayer is null) return;
         if (!cancel && pathTool == Tool.Polygon)
-        { pathLayer.Rows = pathBase.ToList(); PaintRaster.Polygon(pathLayer, path, editor.Color, editor.BrushSize, editor.Paint.Fill, palette: editor.Scene.Palette, opacity: editor.Paint.Opacity); }
+        { pathLayer.RestorePixels(pathBase); PaintRaster.Polygon(pathLayer, path, editor.Color, editor.BrushSize, editor.Paint.Fill, palette: editor.Scene.Palette, opacity: editor.Paint.Opacity); }
         var owner = pathLayer; var original = pathBase;
-        var result = owner.Rows.ToList(); owner.Rows = original;
+        var result = owner.Snapshot(); owner.RestorePixels(original);
         pathBase = null; pathLayer = null; path.Clear();
-        if (!cancel && !result.SequenceEqual(original)) { editor.BeforeChange(); owner.Rows = result; }
+        if (!cancel && !result.PixelsEqual(original)) { editor.BeforeChange(); owner.RestorePixels(result); }
         RefreshAll(); RefreshTools();
     }
     private void StopSpray() { sprayTimer?.Stop(); sprayTimer = null; }

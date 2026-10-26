@@ -6,6 +6,9 @@ namespace ComicEditor.Editing;
 
 public sealed class EditorPreferences
 {
+    public string[]? PaneLayout { get; set; }
+    public double[]? PaneWidths { get; set; }
+    public double BottomPaneHeight { get; set; } = 150;
     public string Theme { get; set; } = Styles.EditorThemes.Default;
     public int CanvasWidth { get; set; } = 320;
     public int CanvasHeight { get; set; } = 180;

@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Layout;
 using Avalonia.VisualTree;
 
 namespace ComicEditor.Views;
@@ -14,6 +15,7 @@ public partial class MainView
     private bool listDragFrame, listDragActive;
     private int listDragIndex, listDropInsertion;
     private Point listDragStart;
+    private KeyModifiers listSelectModifiers;
     private IBrush? markerBrush;
     private Thickness markerThickness;
 
@@ -25,6 +27,7 @@ public partial class MainView
             if (listDragPointer is not null || e.Pointer.Type == PointerType.Touch ||
                 !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed) return;
             row.Focus();
+            listSelectModifiers = e.KeyModifiers;
             listDragPointer = e.Pointer; listDragSource = row; listDragRows = rows;
             listDragIndex = index; listDragFrame = frame; listDragActive = false;
             listDragStart = e.GetPosition(rows);
@@ -34,19 +37,23 @@ public partial class MainView
         row.PointerMoved += (_, e) =>
         {
             if (e.Pointer != listDragPointer || listDragRows != rows) return;
+            if ((listSelectModifiers & (KeyModifiers.Control | KeyModifiers.Meta | KeyModifiers.Shift)) != 0) return;
             if (!listDragActive && ((Vector)(e.GetPosition(rows) - listDragStart)).Length < 5) return;
             listDragActive = true;
+            var horizontal = rows.Orientation == Orientation.Horizontal;
             var scroll = rows.GetVisualAncestors().OfType<ScrollViewer>().FirstOrDefault();
             if (scroll is not null)
             {
-                var y = e.GetPosition(scroll).Y;
-                if (y < 24) scroll.Offset -= new Vector(0, 16);
-                else if (y > scroll.Bounds.Height - 24) scroll.Offset += new Vector(0, 16);
+                var point = e.GetPosition(scroll); var edge = horizontal ? point.X : point.Y;
+                var extent = horizontal ? scroll.Bounds.Width : scroll.Bounds.Height;
+                var step = horizontal ? new Vector(16, 0) : new Vector(0, 16);
+                if (edge < 24) scroll.Offset -= step;
+                else if (edge > extent - 24) scroll.Offset += step;
             }
             var items = rows.Children.OfType<Border>().ToArray();
-            var position = e.GetPosition(rows).Y;
+            var position = horizontal ? e.GetPosition(rows).X : e.GetPosition(rows).Y;
             var insertion = 0;
-            while (insertion < items.Length && position >= items[insertion].Bounds.Center.Y) insertion++;
+            while (insertion < items.Length && position >= (horizontal ? items[insertion].Bounds.Center.X : items[insertion].Bounds.Center.Y)) insertion++;
             ShowListDrop(items, insertion);
             e.Handled = true;
         };
@@ -58,28 +65,18 @@ public partial class MainView
             ClearListDrag(); e.Pointer.Capture(null);
             if (moved)
             {
-                var count = wasFrame ? editor.Scene.Frames.Count : editor.Frame.Layers.Count;
-                var visualFrom = wasFrame ? from : count - 1 - from;
-                var visualTarget = insertion > visualFrom ? insertion - 1 : insertion;
-                var target = wasFrame ? visualTarget : count - 1 - visualTarget;
-                if (wasFrame) editor.ReorderFrame(from, target);
-                else
-                {
-                    editor.ReorderLayer(from, target);
-                    if (editor.Tool == Editing.Tool.Text) editor.Tool = Editing.Tool.Pixel;
-                }
-                if (target == from) activate();
+                ReorderSelectedItems(from, insertion, wasFrame);
                 RefreshAll(); RefreshTools();
             }
-            else activate();
+            else SelectListItem(index, frame, listSelectModifiers, activate);
             e.Handled = true;
         };
         row.PointerCaptureLost += (_, e) => { if (e.Pointer == listDragPointer) ClearListDrag(); };
-        row.Tapped += (_, e) => { if (e.Source is Visual v && (v is TextBox or Avalonia.Controls.Button || v.GetVisualAncestors().Any(a => a is TextBox or Avalonia.Controls.Button))) return; if (e.Pointer.Type == PointerType.Touch) activate(); };
+        row.Tapped += (_, e) => { if (e.Source is Visual v && (v is TextBox or Avalonia.Controls.Button || v.GetVisualAncestors().Any(a => a is TextBox or Avalonia.Controls.Button))) return; if (e.Pointer.Type == PointerType.Touch) SelectListItem(index, frame, e.KeyModifiers, activate); };
         row.KeyDown += (_, e) =>
         {
             if (e.Source != row) return;
-            if (e.Key is Key.Enter or Key.Space) { activate(); e.Handled = true; }
+            if (e.Key is Key.Enter or Key.Space) { SelectListItem(index, frame, e.KeyModifiers, activate); e.Handled = true; }
         };
     }
 
@@ -92,7 +89,9 @@ public partial class MainView
         var marker = rows[Math.Min(insertion, rows.Length - 1)];
         listDropMarker = marker; markerBrush = marker.BorderBrush; markerThickness = marker.BorderThickness;
         marker.BorderBrush = Brush(UiTheme.Accent);
-        marker.BorderThickness = insertion == rows.Length ? new Thickness(0, 0, 0, 3) : new Thickness(0, 3, 0, 0);
+        marker.BorderThickness = listDragRows?.Orientation == Orientation.Horizontal
+            ? insertion == rows.Length ? new Thickness(0, 0, 3, 0) : new Thickness(3, 0, 0, 0)
+            : insertion == rows.Length ? new Thickness(0, 0, 0, 3) : new Thickness(0, 3, 0, 0);
     }
 
     private void RestoreListMarker()

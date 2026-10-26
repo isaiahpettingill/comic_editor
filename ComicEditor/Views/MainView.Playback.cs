@@ -58,18 +58,46 @@ public partial class MainView
 
     private Button FrameOptions(int index)
     {
+        var scene = editor.Scene; var frame = scene.Frames[index];
+        int CurrentIndex() => ReferenceEquals(editor.Scene, scene) ? scene.Frames.IndexOf(frame) : -1;
+        void Act(Action<int> action)
+        {
+            var current = CurrentIndex(); if (current < 0) return;
+            FinishPath(); EndInlineTextEdit(); action(current);
+        }
         var button = Button("…", () => { }); button.Name = $"FrameOptions{index}";
         button.Padding = new Thickness(3, 0); button.Width = compact ? 44 : 28; button.Height = compact ? 44 : 24;
         Avalonia.Automation.AutomationProperties.SetName(button, $"Frame {index + 1} options");
         ToolTip.SetTip(button, "Frame options");
-        var settings = new MenuItem { Header = "Timing & visibility…", Name = $"FrameSettings{index}" };
-        settings.Click += (_, _) => FrameSettings(index);
-        var attach = new MenuItem { Header = "Attach / replace audio…", Name = $"FrameAttachAudio{index}" };
-        attach.Click += async (_, _) => await AttachFrameAudio(index);
-        var remove = new MenuItem { Header = "Remove audio", Name = $"FrameRemoveAudio{index}" };
-        remove.Click += (_, _) => RemoveFrameAudio(index);
-        button.ContextMenu = new ContextMenu { Items = { settings, attach, remove } };
-        button.ContextMenu.Opened += (_, _) => remove.IsEnabled = editor.Scene.Frames[index].AudioQoa.Length != 0;
+        MenuItem Item(string title, string name, Action<int> action)
+        {
+            var item = new MenuItem { Header = title, Name = name + index };
+            item.Click += (_, _) => Act(action); return item;
+        }
+        var duplicate = Item("Duplicate frame", "FrameDuplicate", i => DuplicateFrames(scene.Frames[i]));
+        var delete = Item("Delete frame", "FrameDelete", i => DeleteFrames(scene.Frames[i]));
+        var earlier = Item("Move earlier", "FrameEarlier", i => MoveFrames(scene.Frames[i], -1));
+        var later = Item("Move later", "FrameLater", i => MoveFrames(scene.Frames[i], 1));
+        var copy = Item("Copy frame", "FrameCopy", i => CopyFrame(i));
+        var paste = Item("Paste frame after this", "FramePaste", i => PasteFrame(i));
+        var settings = Item("Timing & visibility…", "FrameSettings", FrameSettings);
+        var attach = Item("Attach / replace audio…", "FrameAttachAudio", i => _ = AttachFrameAudio(i));
+        var remove = Item("Remove audio", "FrameRemoveAudio", RemoveFrameAudio);
+        button.ContextMenu = new ContextMenu { Items = { duplicate, delete, earlier, later, new Separator(), copy, paste,
+            new Separator(), settings, attach, remove } };
+        button.ContextMenu.Opened += (_, _) =>
+        {
+            var current = CurrentIndex();
+            var targets = current >= 0 ? FrameTargets(frame) : [];
+            duplicate.Header = targets.Count > 1 ? $"Duplicate {targets.Count} frames" : "Duplicate frame";
+            delete.Header = targets.Count > 1 ? $"Delete {targets.Count} frames" : "Delete frame";
+            copy.Header = targets.Count > 1 ? $"Copy {targets.Count} frames" : "Copy frame";
+            delete.IsEnabled = current >= 0 && targets.Count < scene.Frames.Count;
+            earlier.IsEnabled = current >= 0 && !targets.Contains(scene.Frames[0]);
+            later.IsEnabled = current >= 0 && !targets.Contains(scene.Frames[^1]);
+            paste.IsEnabled = current >= 0 && clipboardFrame is not null;
+            remove.IsEnabled = current >= 0 && frame.AudioQoa.Length != 0;
+        };
         button.Click += (_, _) => button.ContextMenu.Open(button);
         return button;
     }

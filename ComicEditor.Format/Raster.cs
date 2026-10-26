@@ -4,7 +4,7 @@ public static class Raster
 {
     public static void Dot(ArtworkLayer layer, int x, int y, int color, int radius = 0)
     {
-        var height = layer.Rows.Count;
+        var height = layer.Height;
         var width = layer.Width;
         for (var py = Math.Max(0, y - radius); py <= Math.Min(height - 1, y + radius); py++)
             for (var px = Math.Max(0, x - radius); px <= Math.Min(width - 1, x + radius); px++)
@@ -53,7 +53,7 @@ public static class Raster
 
     public static void Fill(ArtworkLayer layer, int x, int y, int color, IReadOnlyList<string>? palette = null, int opacity = 255)
     {
-        var width = layer.Width; var height = layer.Rows.Count;
+        var width = layer.Width; var height = layer.Height;
         if (x < 0 || y < 0 || x >= width || y >= height) return;
         if (layer.IsRgba)
         {
@@ -69,11 +69,7 @@ public static class Raster
                     if (nx >= 0 && ny >= 0 && nx < width && ny < height && pixels[ny * width + nx] == sourceRgba)
                     { pixels[ny * width + nx] = targetRgba; queueRgba.Enqueue((nx, ny)); }
             for (var py = 0; py < height; py++)
-            {
-                var row = new char[width * 8];
-                for (var px = 0; px < width; px++) RgbaColor.Hex(pixels[py * width + px]).AsSpan(1).CopyTo(row.AsSpan(px * 8, 8));
-                layer.Rows[py] = new string(row);
-            }
+                for (var px = 0; px < width; px++) layer.SetRgbaPixel(px, py, pixels[py * width + px]);
             return;
         }
         var source = layer.Pixel(x, y);

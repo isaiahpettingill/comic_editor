@@ -15,7 +15,7 @@ public partial class MainView
     private int textHandle = -1;
     private Avalonia.Rect originalTextBounds;
     private int startX, startY, lastX, lastY;
-    private List<string>? shapeStart;
+    private ArtworkLayer? shapeStart;
 
     private void CanvasPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -87,7 +87,7 @@ public partial class MainView
             { var p = t.Placement(editor.Language, editor.Scene.FallbackLanguage); return startX >= p.X && startY >= p.Y && startX < p.X + p.Width && startY < p.Y + p.Height; });
             if (hit is not null && e.ClickCount > 1)
             {
-                editor.SelectedTextId = hit.Id; RefreshInspector(); RefreshCanvas(); BeginInlineTextEdit(); return;
+                editor.SelectedTextId = hit.Id; RefreshInspector(); RefreshCanvas(); BeginInlineTextEditAt(point); return;
             }
             textMoveUndo = false;
             creatingText = hit is null;
@@ -97,7 +97,7 @@ public partial class MainView
         editor.BeforeChange(); dragging = true; e.Pointer.Capture(canvas);
         var color = editor.Tool == Tool.Eraser ? -1 : editor.Color;
         if (editor.Tool == Tool.Fill) { Raster.Fill(editor.Layer, startX, startY, color, editor.Scene.Palette, editor.Paint.Opacity); dragging = false; e.Pointer.Capture(null); RefreshAfterArtworkEdit(); return; }
-        if (editor.Tool is Tool.Line or Tool.Rectangle or Tool.Ellipse or Tool.RoundedRectangle) shapeStart = editor.Layer.Rows.ToList();
+        if (editor.Tool is Tool.Line or Tool.Rectangle or Tool.Ellipse or Tool.RoundedRectangle) shapeStart = editor.Layer.Snapshot();
         else if (editor.Tool == Tool.Spray) StartSpray();
         else if (editor.Tool == Tool.Dither) PaintRaster.Dither(editor.Layer, startX, startY, startX, startY, color, editor.BrushSize, editor.Paint.DitherDensity, editor.Scene.Palette, editor.Paint.Opacity);
         else if (editor.Tool == Tool.Scramble) PaintRaster.Scramble(editor.Layer, startX, startY, startX, startY, editor.BrushSize, Random.Shared);
@@ -149,7 +149,7 @@ public partial class MainView
         }
         else if (shapeStart is not null)
         {
-            editor.Layer.Rows = shapeStart.ToList();
+            editor.Layer.RestorePixels(shapeStart);
             if (editor.Tool == Tool.Line) PaintRaster.Stroke(editor.Layer, startX, startY, x, y, editor.Color, editor.BrushSize, BrushTip.Round, editor.Scene.Palette, editor.Paint.Opacity);
             else PaintRaster.Polygon(editor.Layer, PaintRaster.Shape(editor.Tool.ToString(), startX, startY, x, y), editor.Color, editor.BrushSize, editor.Paint.Fill, palette: editor.Scene.Palette, opacity: editor.Paint.Opacity);
         }

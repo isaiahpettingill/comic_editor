@@ -3,11 +3,16 @@ namespace ComicEditor.Format;
 /// <summary>Straight-alpha color packed as 0xRRGGBBAA.</summary>
 public static class RgbaColor
 {
-    public static bool IsHex(string? value) => value is { Length: 7 or 9 } && value[0] == '#' && value[1..].All(Uri.IsHexDigit);
+    public static bool IsHex(string? value)
+    {
+        if (value is not { Length: 7 or 9 } || value[0] != '#') return false;
+        foreach (var c in value.AsSpan(1)) if (!char.IsAsciiHexDigit(c)) return false;
+        return true;
+    }
     public static uint Parse(string value)
     {
         if (!IsHex(value)) throw new FormatException("Expected #RRGGBB or #RRGGBBAA.");
-        var rgb = Convert.ToUInt32(value[1..], 16);
+        var rgb = uint.Parse(value.AsSpan(1), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture);
         return value.Length == 7 ? rgb << 8 | 255 : rgb;
     }
     public static string Hex(uint value) => $"#{value:X8}";

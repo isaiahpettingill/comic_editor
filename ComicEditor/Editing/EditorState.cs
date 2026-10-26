@@ -143,16 +143,11 @@ public sealed class EditorState
             {
                 foreach (var layer in frame.Layers.Where(_ => !Scene.IsRgba))
                     for (var y = 0; y < Scene.Height; y++)
-                    {
-                        var row = layer.Rows[y].ToCharArray();
                         for (var x = 0; x < Scene.Width; x++)
                         {
                             var index = layer.Pixel(x, y);
-                            if (index < copy.Count) continue;
-                            var hex = map[index].ToString("X2"); row[x * 2] = hex[0]; row[x * 2 + 1] = hex[1];
+                            if (index >= 0) layer.SetPixel(x, y, map[index]);
                         }
-                        layer.Rows[y] = new string(row);
-                    }
                 foreach (var obj in frame.TextObjects) obj.Color = map[obj.Color];
             }
         var selected = map[Color]; Scene.Palette = copy; Color = selected; RememberPalette();
@@ -181,6 +176,10 @@ public sealed class EditorState
         foreach (var obj in Scene.Frames.SelectMany(frame => frame.TextObjects).Where(obj => obj.Key == key))
             obj.RetargetStyles(language, previous, value);
         entries[key] = value;
+        // A text-focus session has one undo checkpoint but many mutations.
+        // Saving halfway through must not let subsequent typing reuse that save
+        // or appear clean merely because BeforeChange was already captured.
+        Revision++; Changed?.Invoke();
     }
 
     public string NewTextKey()

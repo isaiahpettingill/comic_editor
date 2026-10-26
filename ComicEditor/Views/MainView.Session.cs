@@ -13,6 +13,8 @@ public partial class MainView
     private ProjectFile? currentFile;
     private string? currentBookmark;
     private readonly SemaphoreSlim sessionLock = new(1, 1);
+    private readonly SemaphoreSlim fileSaveLock = new(1, 1);
+    private readonly ProjectSnapshotCache projectSnapshots = new();
     private DispatcherTimer? sessionTimer;
     private DispatcherTimer? idleSaveTimer;
     private bool sessionStarted, sessionReady, sessionRestored, fileBusy, autoSavePaused, closingAfterRecovery;
@@ -22,6 +24,9 @@ public partial class MainView
     private string saveMessage = "Crash recovery keeps a copy every 5 seconds while you work.";
     private TextBlock? autosaveStatus;
     private MenuItem? autosaveMenu;
+
+    private ProjectSnapshotCache.Capture CaptureProject(EditorState state) => projectSnapshots.Get(state,
+        state != editor || !dragging && pathBase is null && cancelTouchEdit is null && inlineTextBox is null);
 
     private void TrackEditor(EditorState state)
     {
@@ -175,18 +180,19 @@ public partial class MainView
             var captures = tabs.Select(tab =>
             {
                 var state = tab.Editor;
-                return (Scene: state.Scene.Snapshot(), Saved: state.SavedProject,
+                return (Project: CaptureProject(state), Saved: state.SavedProject,
                     state.FileName, Frame: state.FrameIndex, Bookmark: tab == activeTab ? currentBookmark : tab.Bookmark,
                     LocalPath: (tab == activeTab ? currentFile : tab.File)?.File.TryGetLocalPath(),
                     DiskHash: (tab == activeTab ? currentFile : tab.File)?.DiskHash);
             }).ToArray();
             var activeIndex = tabs.IndexOf(activeTab);
+            await Task.WhenAll(captures.Select(capture => capture.Project.Bytes));
             var json = await Task.Run(() =>
             {
                 SessionSnapshot Capture(int index)
                 {
                     var capture = captures[index];
-                    var bytes = CutsceneFile.Write(capture.Scene);
+                    var bytes = capture.Project.Bytes.GetAwaiter().GetResult();
                     return new SessionSnapshot
                     {
                         Project = bytes,
@@ -233,15 +239,22 @@ public partial class MainView
 
     private async Task AutoSaveTab(ProjectTab tab)
     {
+        await fileSaveLock.WaitAsync();
+        try { await AutoSaveTabCore(tab); }
+        finally { fileSaveLock.Release(); }
+    }
+
+    private async Task AutoSaveTabCore(ProjectTab tab)
+    {
         if (tab.File is null || tab.AutoSavePaused || DateTimeOffset.UtcNow - tab.LastAutoSave < TimeSpan.FromMinutes(editor.Preferences.AutoSaveMinutes)) return;
-        var state = tab.Editor; var scene = state.Scene; var snapshot = scene.Snapshot(); var revision = state.Revision;
+        var state = tab.Editor; var capture = CaptureProject(state); var scene = capture.Scene; var revision = capture.Revision;
         fileBusy = true;
         try
         {
-            var bytes = await Task.Run(() => CutsceneFile.Write(snapshot));
+            var bytes = await capture.Bytes;
             if (!state.DiffersFromSaved(bytes)) { tab.LastAutoSave = DateTimeOffset.UtcNow; return; }
             await tab.File.Write(bytes, checkExternalChanges: true);
-            if (ReferenceEquals(state.Scene, scene)) state.MarkSaved(bytes, revision);
+            if (ReferenceEquals(state.Scene, scene)) state.MarkSaved(bytes, capture.Stable ? revision : long.MinValue);
             tab.Dirty = state.FastDirty; tab.LastAutoSave = DateTimeOffset.UtcNow;
         }
         catch (Exception ex) { tab.AutoSavePaused = true; tab.Dirty = true; SetSaveMessage($"Autosave paused for {tab.Editor.FileName}: {ex.Message}", true); }
@@ -250,29 +263,36 @@ public partial class MainView
 
     private async Task SaveCurrent(bool automatic)
     {
+        await fileSaveLock.WaitAsync();
+        try { await SaveCurrentCore(automatic); }
+        finally { fileSaveLock.Release(); }
+    }
+
+    private async Task SaveCurrentCore(bool automatic)
+    {
         if (currentFile is null || fileBusy) return;
         var file = currentFile; var state = editor; var scene = state.Scene;
-        var snapshot = scene.Snapshot(); var revision = state.Revision;
+        var capture = CaptureProject(state); var revision = capture.Revision;
         fileBusy = true;
         try
         {
-            var bytes = await Task.Run(() => CutsceneFile.Write(snapshot));
+            var bytes = await capture.Bytes;
             if (automatic && !state.DiffersFromSaved(bytes))
             {
                 lastAutoSave = DateTimeOffset.UtcNow;
                 activeTab.LastAutoSave = lastAutoSave;
-                await SaveSessionSafely();
+                _ = SaveSessionSafely();
                 return;
             }
-            // Recovery and the project file have independent destinations.
-            var recovery = SaveSessionSafely();
-            try { await file.Write(bytes, checkExternalChanges: true); }
-            finally { await recovery; }
-            if (ReferenceEquals(editor, state) && ReferenceEquals(state.Scene, scene) && ReferenceEquals(currentFile, file)) state.MarkSaved(bytes, revision);
+            await file.Write(bytes, checkExternalChanges: true);
+            if (ReferenceEquals(editor, state) && ReferenceEquals(state.Scene, scene) && ReferenceEquals(currentFile, file)) state.MarkSaved(bytes, capture.Stable ? revision : long.MinValue);
             lastAutoSave = DateTimeOffset.UtcNow; autoSavePaused = false;
             activeTab.LastAutoSave = lastAutoSave; activeTab.AutoSavePaused = false; activeTab.Dirty = state.FastDirty;
             SetSaveMessage($"{(automatic ? "Autosaved" : "Saved")} {file.File.Name} at {DateTime.Now:t}.");
-            RefreshTitle(); // The periodic recovery tick will mark this snapshot clean.
+            RefreshTitle();
+            // Recovery is independently serialized by sessionLock. It must not keep
+            // keyboard saves or document navigation blocked after the file is safe.
+            _ = SaveSessionSafely();
         }
         catch (Exception ex)
         {
@@ -322,7 +342,22 @@ public partial class MainView
         args.Cancel = true;
         FinishPath(); StopSpray();
         IsEnabled = false;
-        await SaveSessionSafely();
+        // Finish any explicit/automatic project write before the host can exit.
+        await fileSaveLock.WaitAsync();
+        try
+        {
+            if (recoveryBlocked && tabs.Any(tab => tab.Editor.FastDirty))
+                throw new IOException("Recovery is unavailable. Save your edited documents before closing.");
+            await SaveSession();
+        }
+        catch (Exception ex)
+        {
+            IsEnabled = true;
+            SetSaveMessage("The window was kept open because recovery could not be saved: " + ex.Message, true);
+            await ShowError("Your edits are still open. Save them to a project file before closing. " + ex.Message);
+            return;
+        }
+        finally { fileSaveLock.Release(); }
         closingAfterRecovery = true; window.Close();
     }
 }

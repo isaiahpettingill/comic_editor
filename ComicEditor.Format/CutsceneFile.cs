@@ -1,3 +1,4 @@
+using System.Buffers;
 using Google.Protobuf;
 using Wire = ComicEditor.Wire;
 
@@ -26,16 +27,26 @@ public static class CutsceneFile
             {
                 if (scene.IsRgba)
                 {
-                    var rgba = new uint[scene.Width * scene.Height];
-                    for (var y = 0; y < scene.Height; y++)
-                        for (var x = 0; x < scene.Width; x++) rgba[y * scene.Width + x] = layer.RgbaPixel(x, y);
-                    target.Layers.Add(new Wire.ArtworkLayer { Id = layer.Id, Name = layer.Name, Visible = layer.Visible, RgbaPng = ByteString.CopyFrom(RgbaPng.Encode(scene.Width, scene.Height, rgba)) });
+                    var count = scene.Width * scene.Height;
+                    var rgba = ArrayPool<uint>.Shared.Rent(count);
+                    try
+                    {
+                        for (var y = 0; y < scene.Height; y++)
+                            layer.ReadRgbaRow(y, rgba.AsSpan(y * scene.Width, scene.Width));
+                        target.Layers.Add(new Wire.ArtworkLayer { Id = layer.Id, Name = layer.Name, Visible = layer.Visible, RgbaPng = ByteString.CopyFrom(RgbaPng.Encode(scene.Width, scene.Height, rgba.AsSpan(0, count))) });
+                    }
+                    finally { ArrayPool<uint>.Shared.Return(rgba); }
                     continue;
                 }
-                var pixels = new byte[scene.Width * scene.Height];
-                for (var y = 0; y < scene.Height; y++)
-                    Convert.FromHexString(layer.Rows[y].AsSpan(), pixels.AsSpan(y * scene.Width, scene.Width), out _, out _);
-                target.Layers.Add(new Wire.ArtworkLayer { Id = layer.Id, Name = layer.Name, Visible = layer.Visible, Pixels = ByteString.CopyFrom(pixels) });
+                var length = scene.Width * scene.Height;
+                var pixels = ArrayPool<byte>.Shared.Rent(length);
+                try
+                {
+                    for (var y = 0; y < scene.Height; y++)
+                        layer.ReadIndexedRow(y, pixels.AsSpan(y * scene.Width, scene.Width));
+                    target.Layers.Add(new Wire.ArtworkLayer { Id = layer.Id, Name = layer.Name, Visible = layer.Visible, Pixels = ByteString.CopyFrom(pixels, 0, length) });
+                }
+                finally { ArrayPool<byte>.Shared.Return(pixels); }
             }
             foreach (var obj in frame.TextObjects)
             {
@@ -116,14 +127,7 @@ public static class CutsceneFile
                 DurationMs = frame.DurationMs == 0 ? FramePlayback.LegacyDurationMs : checked((int)frame.DurationMs),
                 AudioQoa = frame.AudioQoa.ToByteArray(),
                 Requirement = frame.Req.Length == 0 ? "always" : frame.Req,
-                Layers = frame.Layers.Select(layer => new ArtworkLayer
-                {
-                    Id = layer.Id,
-                    Name = layer.Name,
-                    Visible = layer.Visible,
-                    IsRgba = document.Version == 4,
-                    Rows = document.Version == 4 ? DecodeRgbaRows(layer.RgbaPng, (int)document.CanvasWidth, (int)document.CanvasHeight) : DecodeRows(layer.Pixels, (int)document.CanvasWidth, (int)document.CanvasHeight, document.PaletteRgb.Count)
-                }).ToList(),
+                Layers = frame.Layers.Select(layer => DecodeLayer(layer, document)).ToList(),
                 TextObjects = frame.TextObjects.Select(obj => new TextObject
                 {
                     Id = obj.Id,
@@ -157,35 +161,29 @@ public static class CutsceneFile
         return scene;
     }
 
-    private static List<string> DecodeRows(ByteString bytes, int width, int height, int paletteSize)
+    private static ArtworkLayer DecodeLayer(Wire.ArtworkLayer source, Wire.CutsceneDocument document)
     {
-        if (bytes.Length != width * height) throw new InvalidDataException("Indexed layer has an invalid pixel count.");
-        var rows = new List<string>(height);
-        for (var y = 0; y < height; y++)
+        var width = (int)document.CanvasWidth; var height = (int)document.CanvasHeight;
+        var layer = ArtworkLayer.Create(source.Name, width, height, document.Version == 4);
+        layer.Id = source.Id; layer.Visible = source.Visible;
+        if (layer.IsRgba)
         {
-            var row = new char[width * 2];
-            for (var x = 0; x < width; x++)
-            {
-                var index = bytes[y * width + x];
-                if (index != 255 && index >= paletteSize) throw new InvalidDataException("Indexed pixel exceeds the palette.");
-                row[x * 2] = "0123456789ABCDEF"[index >> 4];
-                row[x * 2 + 1] = "0123456789ABCDEF"[index & 15];
-            }
-            rows.Add(new string(row));
+            var pixels = RgbaPng.Decode(source.RgbaPng.Span, width, height);
+            for (var y = 0; y < height; y++)
+                for (var x = 0; x < width; x++) layer.SetRgbaPixel(x, y, pixels[y * width + x]);
         }
-        return rows;
-    }
-
-    private static List<string> DecodeRgbaRows(ByteString bytes, int width, int height)
-    {
-        var pixels = RgbaPng.Decode(bytes.Span, width, height);
-        var rows = new List<string>(height);
-        for (var y = 0; y < height; y++)
+        else
         {
-            var row = new char[width * 8];
-            for (var x = 0; x < width; x++) RgbaColor.Hex(pixels[y * width + x]).AsSpan(1).CopyTo(row.AsSpan(x * 8, 8));
-            rows.Add(new string(row));
+            var bytes = source.Pixels.Span;
+            if (bytes.Length != width * height) throw new InvalidDataException("Indexed layer has an invalid pixel count.");
+            for (var y = 0; y < height; y++)
+                for (var x = 0; x < width; x++)
+                {
+                    var index = bytes[y * width + x];
+                    if (index != 255 && index >= document.PaletteRgb.Count) throw new InvalidDataException("Indexed pixel exceeds the palette.");
+                    layer.SetPixel(x, y, index == 255 ? -1 : index);
+                }
         }
-        return rows;
+        return layer;
     }
 }

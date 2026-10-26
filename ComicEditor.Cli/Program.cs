@@ -5,13 +5,15 @@ using ComicEditor.Rendering;
 using Google.Protobuf;
 
 var downloadFonts = args.Contains("--download-fonts");
-args = args.Where(a => a != "--download-fonts").ToArray();
+var offline = args.Contains("--offline");
+if (offline && downloadFonts) { Console.Error.WriteLine("--offline cannot be combined with --download-fonts."); return 2; }
+args = args.Where(a => a != "--download-fonts" && a != "--offline").ToArray();
 if (args.Length == 1 && args[0] is "--help" or "-h")
 {
-    Console.WriteLine("Usage: comic-compile [--download-fonts] INPUT.cutscene OUTPUT.cutscene.runtime|OUTPUT.cbor\nResolves font references, flattens artwork and rasterizes all languages.\n--download-fonts permits downloading missing language fonts from Google Fonts; cached fonts work offline.");
+    Console.WriteLine("Usage: comic-compile [--offline | --download-fonts] INPUT.cutscene OUTPUT.cutscene.runtime|OUTPUT.cbor\nResolves font references, flattens artwork and rasterizes all languages.\n--offline permits only bundled, installed and cached fonts; missing required fonts fail without network access.\n--download-fonts additionally downloads missing language fallback fonts from Google Fonts. Without --offline, explicit Google font references may download.");
     return 0;
 }
-if (args.Length != 2) { Console.Error.WriteLine("Usage: comic-compile [--download-fonts] INPUT.cutscene OUTPUT.cutscene.runtime|OUTPUT.cbor"); return 2; }
+if (args.Length != 2) { Console.Error.WriteLine("Usage: comic-compile [--offline | --download-fonts] INPUT.cutscene OUTPUT.cutscene.runtime|OUTPUT.cbor"); return 2; }
 try
 {
     if (Path.GetFullPath(args[0]).Equals(Path.GetFullPath(args[1]), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
@@ -21,7 +23,8 @@ try
     AppBuilder.Configure<Application>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
     SynchronizationContext.SetSynchronizationContext(null);
     Console.Error.WriteLine("Resolving fonts...");
-    CutsceneFonts.EnsureAsync(scene).GetAwaiter().GetResult();
+    if (offline) CutsceneFonts.EnsureOfflineAsync(scene).GetAwaiter().GetResult();
+    else CutsceneFonts.EnsureAsync(scene).GetAwaiter().GetResult();
     if (downloadFonts)
         foreach (var font in CutsceneFonts.Missing(scene).Where(f => f.Family.Length > 0))
         {

@@ -150,8 +150,8 @@ public partial class MainView
             var folder = Directory.CreateTempSubdirectory("comic-print-"); var path = Path.Combine(folder.FullName, "frame.html");
             var html = "<!doctype html><html><head><title>ComicEditor — Print frame</title><style>img{max-width:100%;max-height:95vh}button{margin:1em}@media print{button{display:none}}</style></head><body><button onclick='window.print()'>Print frame</button><br><img alt='Current cutscene frame' src='data:image/png;base64," + Convert.ToBase64String(png.ToArray()) + "' onload='window.print()'></body></html>";
             await File.WriteAllTextAsync(path, html);
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-            SetSaveMessage("Opened the rendered PNG in your browser’s print dialog. Nothing prints until you confirm.");
+            await ComicEditor.Printing.PrintPreviewLauncher.OpenAsync(path);
+            SetSaveMessage("Sent the frame preview to your browser. Choose Print frame if no dialog appears; nothing prints until you confirm.");
         }
         catch (Exception ex) { await ShowError("Could not open printing. Use File → Export frame PNG instead. " + ex.Message); }
     }

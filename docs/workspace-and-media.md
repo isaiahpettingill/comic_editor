@@ -8,11 +8,17 @@
 
 ## Bringing in media
 
-Drop one PNG/JPEG/WebP/BMP/GIF onto the canvas or a storyboard frame. It becomes a new, undoable artwork layer; oversized images are cropped to the canvas. Clipboard bitmap paste (Ctrl/Cmd+V) uses the platform's image clipboard formats. Existing internal frame/artwork copy remains available; typing in a text box never triggers image import. In indexed documents partial alpha is approximated against white and colors map into the palette; RGBA documents preserve alpha.
+Drop one PNG/JPEG/WebP/BMP/GIF onto the canvas or a storyboard frame. GIF imports its first image. It becomes a new, undoable artwork layer; oversized images are cropped to the canvas. Clipboard bitmap paste (Ctrl/Cmd+V) uses the platform's image clipboard formats. Existing internal frame/artwork copy remains available; typing in a text box never triggers image import. In indexed documents partial alpha is approximated against white and colors map into the palette; RGBA documents preserve alpha.
 
 Drop one WAV, QOA, MP3, Ogg, FLAC, AAC/M4A, Opus, AIFF, or WebM audio file onto its storyboard frame. PCM WAV and QOA work directly. Other formats need **FFmpeg on the desktop PATH**, using the same bounded conversion path as the frame audio picker. The original input is never changed. Stored frame bytes are QOA; attaching audio cannot shorten the frame below the sound duration. Browser/mobile imports support PCM WAV and QOA, not a desktop FFmpeg installation.
 
-**Ctrl/Cmd+P** renders the current frame into a PNG embedded in a temporary local print page, then opens the system's HTML viewer/browser print dialog. Nothing is sent to a printer until confirmed. If printing is unavailable, export the frame PNG and print it from an image viewer. Browser/mobile use PNG export as this fallback. The print page is local; it is not uploaded.
+**Ctrl/Cmd+P** renders the current frame into a PNG embedded in a temporary local print page. Desktop launches a browser explicitly rather than the system's `.html` file handler (which may be a text editor):
+
+- **Linux:** queries the registered default web browser with `xdg-settings`, then launches its validated desktop ID through `gtk-launch`. Both utilities must be installed; helper operations time out after eight seconds.
+- **Windows:** launches Microsoft Edge from its registered App Paths executable. Edge must be registered.
+- **macOS:** opens the local page in Safari with `/usr/bin/open -a Safari`.
+
+The page requests the browser's print dialog and also provides a **Print frame** button if automatic dialogs are blocked. Launching the browser does not confirm that a dialog appeared. Nothing is sent to a printer until you confirm it. Missing helpers/browser registration or a failed launch show an error directing you to **File → Export frame PNG**; print that PNG from your preferred image viewer. Browser/mobile use PNG export directly. The print page stays local and is not uploaded; no file-association or default-browser settings are changed.
 
 Clipboard support depends on the OS/browser and permission settings. An image that the platform doesn't expose as a bitmap can still be imported by dropping its file. File input is bounded (images 64 MiB/16 megapixels; audio 256 MiB with existing decoder duration limits).
 

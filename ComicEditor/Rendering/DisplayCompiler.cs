@@ -42,7 +42,7 @@ public static class DisplayCompiler
                             var offset = y * scene.Width + x;
                             pixels[offset] = RgbaColor.Blend(layer.RgbaPixel(x, y), pixels[offset]);
                         }
-                var rgbaFrame = new DisplayFrame { DurationMs = (uint)frame.DurationMs, Req = frame.Requirement, RgbaArtworkPng = ByteString.CopyFrom(RgbaPng.Encode(scene.Width, scene.Height, pixels)) };
+                var rgbaFrame = new DisplayFrame { AudioQoa = ByteString.CopyFrom(frame.AudioQoa), DurationMs = (uint)frame.DurationMs, Req = frame.Requirement, RgbaArtworkPng = ByteString.CopyFrom(RgbaPng.Encode(scene.Width, scene.Height, pixels)) };
                 AddText(rgbaFrame, frame, scene, result.Languages);
                 result.Frames.Add(rgbaFrame);
                 continue;
@@ -52,7 +52,7 @@ public static class DisplayCompiler
                 for (var y = 0; y < scene.Height; y++)
                     for (var x = 0; x < scene.Width; x++)
                     { var index = layer.Pixel(x, y); if (index >= 0) art[y * scene.Width + x] = (byte)index; }
-            var output = new DisplayFrame { DurationMs = (uint)frame.DurationMs, Req = frame.Requirement, IndexedArtwork = ByteString.CopyFrom(art) };
+            var output = new DisplayFrame { AudioQoa = ByteString.CopyFrom(frame.AudioQoa), DurationMs = (uint)frame.DurationMs, Req = frame.Requirement, IndexedArtwork = ByteString.CopyFrom(art) };
             AddText(output, frame, scene, result.Languages);
             result.Frames.Add(output);
         }

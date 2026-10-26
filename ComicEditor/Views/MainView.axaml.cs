@@ -71,7 +71,7 @@ public partial class MainView : UserControl
         AttachedToVisualTree += StartSession;
         DetachedFromVisualTree += (_, _) => { sessionTimer?.Stop(); if (SessionStorage.Flush == FlushSession) SessionStorage.Flush = null; };
         DetachedFromVisualTree += (_, _) => StopUpdates();
-        DetachedFromVisualTree += (_, _) => { StopSpray(); StopPlayback(); };
+        DetachedFromVisualTree += (_, _) => { StopSpray(); StopPlayback(); audioImport?.Cancel(); };
         DetachedFromVisualTree += (_, _) => ResetCanvasNavigation();
         DetachedFromVisualTree += (_, _) => { fontCheck?.Cancel(); fontInstall?.Cancel(); };
     }
@@ -300,7 +300,10 @@ public partial class MainView : UserControl
         var story = new DockPanel();
         var storyHeader = new StackPanel { Spacing = 6 };
         storyHeader.Children.Add(PaneHeader(Pane.Storyboard, "Storyboard"));
-        var storyActions = new UniformGrid { Name = "StoryboardActions", Columns = 6, Children = { Icon(PackIconMaterialKind.Play, "Play cutscene", PreviewPlayback), Icon(PackIconMaterialKind.Plus, "Add frame", () => { editor.AddFrame(false); RefreshAll(); }),
+        var storyPlay = Icon(PackIconMaterialKind.Play, "Play cutscene", PreviewPlayback);
+        storyPlay.Name = "StoryboardPlay"; storyPlay.Height = compact ? 48 : 40;
+        if (storyPlay.Content is PackIconMaterial playGlyph) playGlyph.Width = playGlyph.Height = compact ? 26 : 22;
+        var storyActions = new UniformGrid { Name = "StoryboardActions", Columns = 6, Children = { storyPlay, Icon(PackIconMaterialKind.Plus, "Add frame", () => { editor.AddFrame(false); RefreshAll(); }),
             Icon(PackIconMaterialKind.ContentCopy, "Duplicate frame", () => { editor.AddFrame(true); RefreshAll(); }),
             Icon(PackIconMaterialKind.DeleteOutline, "Delete frame", () => { editor.DeleteFrame(); RefreshAll(); }),
             Icon(PackIconMaterialKind.ArrowUp, "Move earlier", () => { editor.MoveFrame(-1); RefreshAll(); }),
@@ -310,6 +313,8 @@ public partial class MainView : UserControl
             action.Width = double.NaN; action.HorizontalAlignment = HorizontalAlignment.Stretch;
             action.Margin = new Thickness(1); action.Padding = new Thickness(3);
         }
+        // Larger play glyph without widening the narrow storyboard or crowding adjacent actions.
+        storyPlay.Padding = new Thickness(1);
         storyActions.Margin = new Thickness(6, 0, 6, 4);
         storyHeader.Children.Add(storyActions); DockPanel.SetDock(storyHeader, Dock.Top); story.Children.Add(storyHeader);
         if (small)

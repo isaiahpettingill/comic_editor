@@ -159,6 +159,8 @@ public sealed class Cutscene
         {
             if (frame.DurationMs is < 1 or > FramePlayback.MaximumDurationMs || !FramePlayback.IsRequirement(frame.Requirement))
                 throw new InvalidDataException("Frame duration must be 1..3600000 ms and requirement must be always, never, VAR or not VAR.");
+            if (frame.DurationMs < frame.MinimumDurationMs)
+                throw new InvalidDataException("Frame duration cannot be shorter than its audio.");
             if (frame.Layers.Count == 0) throw new InvalidDataException("Every frame needs an artwork layer.");
             foreach (var layer in frame.Layers)
             {
@@ -211,6 +213,19 @@ public sealed class Cutscene
 
 public sealed class Frame
 {
+    public byte[] AudioQoa { get; set; } = [];
+    public int MinimumDurationMs => AudioQoa.Length == 0 ? 1 : QoaAudio.ReadInfo(AudioQoa).DurationMs;
+
+    public void AttachAudio(byte[] qoa)
+    {
+        var duration = QoaAudio.ReadInfo(qoa).DurationMs;
+        AudioQoa = qoa.ToArray();
+        DurationMs = Math.Max(DurationMs, duration);
+    }
+
+    // Removing/replacing audio never shortens a manually chosen duration.
+    public void RemoveAudio() => AudioQoa = [];
+
     public int DurationMs { get; set; } = FramePlayback.DefaultDurationMs;
     public string Requirement { get; set; } = "always";
     public bool TextVisible { get; set; } = true;
@@ -220,6 +235,7 @@ public sealed class Frame
 
     public Frame Snapshot() => new()
     {
+        AudioQoa = AudioQoa.ToArray(),
         DurationMs = DurationMs,
         Requirement = Requirement,
         TextVisible = TextVisible,

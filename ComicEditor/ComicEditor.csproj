@@ -8,6 +8,7 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="..\signing\desktop-public.pem" LogicalName="ComicEditor.DesktopSigningKey" />
+    <EmbeddedResource Include="..\licenses\QOA-MIT.txt" LogicalName="ComicEditor.QOA" />
     <EmbeddedResource Include="..\third_party\AvaloniaColorPicker\LICENSE" LogicalName="ComicEditor.LGPL" />
     <EmbeddedResource Include="..\third_party\AvaloniaColorPicker\LICENSE.GPL" LogicalName="ComicEditor.GPL" />
     <InternalsVisibleTo Include="ComicEditor.Rendering.Tests" />

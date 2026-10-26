@@ -35,7 +35,8 @@ public partial class CanvasTests
             Assert.InRange(card.Bounds.Height - preview.Bounds.Height, 39, 41);
             AssertInside(window, Named<Button>(window, "FrameOptions0"));
             var actions = Named<Avalonia.Controls.Primitives.UniformGrid>(window, "StoryboardActions");
-            Assert.InRange(actions.Bounds.Height, 33, 35);
+            Assert.InRange(actions.Bounds.Height, 41, 43);
+            Assert.InRange(Named<Button>(window, "StoryboardPlay").Bounds.Height, 39, 41);
             Assert.All(actions.Children, action => AssertInside(window, action));
             window.Close();
         }, CancellationToken.None);

@@ -18,6 +18,7 @@ message CutsceneDocument {
 }
 
 message Frame {
+  bytes audio_qoa = 7; // Optional complete QOA file, starts with qoaf. Duration covers all samples.
   string id = 1;
   repeated ArtworkLayer layers = 2; // Ordered bottom to top.
   repeated TextObject text_objects = 3; // Drawn above artwork.

@@ -21,15 +21,15 @@ public partial class MainView
     private readonly HashSet<int> thumbnailPendingFrames = [];
     private DispatcherTimer? thumbnailTimer;
     private bool thumbnailRefreshAll;
-    private readonly List<(TextBlock Timing, TextBlock Condition)> frameBadges = [];
+    private readonly List<(TextBox Timing, TextBlock Condition)> frameBadges = [];
 
     private void RefreshFrameBadge(int index)
     {
         var frame = editor.Scene.Frames[index]; var badge = frameBadges[index];
-        badge.Timing.Text = "◷ " + (frame.DurationMs / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "s";
-        badge.Condition.Text = frame.Requirement switch { "always" => "✓", "never" => "⊘", _ when frame.Requirement.StartsWith("not ", StringComparison.Ordinal) => "!" + frame.Requirement[4..], _ => frame.Requirement };
-        ToolTip.SetTip(badge.Timing, $"Duration: {frame.DurationMs} ms");
-        ToolTip.SetTip(badge.Condition, "Show: " + frame.Requirement);
+        if (!badge.Timing.IsKeyboardFocusWithin) badge.Timing.Text = (frame.DurationMs / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        badge.Condition.Text = (frame.AudioQoa.Length > 0 ? "♫ " : "") + (frame.Requirement switch { "always" => "✓", "never" => "⊘", _ when frame.Requirement.StartsWith("not ", StringComparison.Ordinal) => "!" + frame.Requirement[4..], _ => frame.Requirement });
+        ToolTip.SetTip(badge.Timing, $"Duration in seconds (minimum {frame.MinimumDurationMs / 1000.0:0.###}s). Enter to save; Escape to cancel.");
+        ToolTip.SetTip(badge.Condition, "Show: " + frame.Requirement + (frame.AudioQoa.Length > 0 ? $" · QOA audio: {frame.MinimumDurationMs} ms" : ""));
     }
 
     private void QueueThumbnailRefresh(bool all = false)
@@ -58,7 +58,7 @@ public partial class MainView
     {
         if (storyboard is null) return;
         var ids = editor.Scene.Frames.Select(frame => frame.Id).ToArray();
-        if (renderedStoryboard == storyboard && ids.SequenceEqual(thumbnailFrameIds))
+        if (renderedStoryboard == storyboard && ReferenceEquals(thumbnailScene, editor.Scene) && ids.SequenceEqual(thumbnailFrameIds))
         {
             var changedScene = !ReferenceEquals(thumbnailScene, editor.Scene);
             var changedLanguage = thumbnailCanvases.Count > 0 && thumbnailCanvases[0].Language != editor.Language;
@@ -106,13 +106,14 @@ public partial class MainView
                 Child = thumbnail
             });
             var number = Label((i + 1).ToString("D3"), true); number.FontSize = 12;
-            var timing = Label(""); timing.Name = $"FrameTiming{i}"; timing.FontSize = 11;
+            var timing = InlineFrameDuration(i);
             var condition = Label(""); condition.Name = $"FrameRequirement{i}"; condition.FontSize = 11; condition.TextWrapping = TextWrapping.NoWrap; condition.TextTrimming = TextTrimming.CharacterEllipsis;
             frameBadges.Add((timing, condition)); RefreshFrameBadge(i);
             var details = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto") };
-            timing.Margin = new Thickness(6, 0, 0, 0);
-            condition.Margin = new Thickness(6, 0);
-            AddAt(details, number); AddAt(details, timing, 1); AddAt(details, condition, 2); AddAt(details, FrameOptions(index), 3);
+            timing.Margin = new Thickness(3, 0, 0, 0);
+            condition.Margin = new Thickness(3, 0);
+            var timingWithUnit = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Children = { timing, Label("s") } };
+            AddAt(details, number); AddAt(details, timingWithUnit, 1); AddAt(details, condition, 2); AddAt(details, FrameOptions(index), 3);
             row.Children.Add(details);
             var card = new Border
             {

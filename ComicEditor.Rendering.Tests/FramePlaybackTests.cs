@@ -28,12 +28,12 @@ public partial class CanvasTests
             SaveCapture(window, "COMIC_FRAME_BADGES_SCREENSHOT");
             Assert.Equal(80, state.Scene.Frames[1].DurationMs); Assert.Equal("PLAYER_A", state.Scene.Frames[1].Requirement);
             Assert.Equal(0, state.FrameIndex);
-            Assert.Equal("◷ 0.08s", Named<TextBlock>(window, "FrameTiming1").Text);
+            Assert.Equal("0.08", Named<TextBox>(window, "FrameTiming1").Text);
             Assert.Equal("PLAYER_A", Named<TextBlock>(window, "FrameRequirement1").Text);
             var compiled = DisplayCompiler.Compile(state.Scene);
             Assert.Equal(new[] { "PLAYER_A" }, compiled.Vars);
             Assert.Equal(80u, compiled.Frames[1].DurationMs); Assert.Equal("PLAYER_A", compiled.Frames[1].Req);
-            state.Undo(); Assert.Equal(1000, state.Scene.Frames[1].DurationMs);
+            state.Undo(); Assert.Equal(4000, state.Scene.Frames[1].DurationMs);
             state.Redo(); Assert.Equal(80, state.Scene.Frames[1].DurationMs);
             Invoke(view, "PreviewPlayback"); _ = Capture(window);
             var check = Named<CheckBox>(window, "PlaybackVar_PLAYER_A"); check.IsChecked = true;
@@ -60,6 +60,6 @@ public partial class CanvasTests
         var frames = (List<object>)root["frames"]; Assert.Equal(2, frames.Count);
         var first = (Dictionary<string, object>)frames[0]; var second = (Dictionary<string, object>)frames[1];
         Assert.Equal(80u, first["duration_ms"]); Assert.Equal("not B", first["req"]);
-        Assert.Equal("A", second["req"]); Assert.Equal(1000u, second["duration_ms"]);
+        Assert.Equal("A", second["req"]); Assert.Equal(4000u, second["duration_ms"]);
     }
 }

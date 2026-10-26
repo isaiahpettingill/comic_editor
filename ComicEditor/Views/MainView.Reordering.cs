@@ -21,7 +21,7 @@ public partial class MainView
     {
         row.PointerPressed += (_, e) =>
         {
-            if (e.Source is Avalonia.Visual visual && (visual is Button || visual.GetVisualAncestors().OfType<Button>().Any())) return;
+            if (e.Source is Avalonia.Visual visual && (visual is Avalonia.Controls.Button or TextBox or NumericUpDown || visual.GetVisualAncestors().Any(v => v is Avalonia.Controls.Button or TextBox or NumericUpDown))) return;
             if (listDragPointer is not null || e.Pointer.Type == PointerType.Touch ||
                 !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed) return;
             row.Focus();
@@ -75,9 +75,10 @@ public partial class MainView
             e.Handled = true;
         };
         row.PointerCaptureLost += (_, e) => { if (e.Pointer == listDragPointer) ClearListDrag(); };
-        row.Tapped += (_, e) => { if (e.Pointer.Type == PointerType.Touch) activate(); };
+        row.Tapped += (_, e) => { if (e.Source is Visual v && (v is TextBox or Avalonia.Controls.Button || v.GetVisualAncestors().Any(a => a is TextBox or Avalonia.Controls.Button))) return; if (e.Pointer.Type == PointerType.Touch) activate(); };
         row.KeyDown += (_, e) =>
         {
+            if (e.Source != row) return;
             if (e.Key is Key.Enter or Key.Space) { activate(); e.Handled = true; }
         };
     }

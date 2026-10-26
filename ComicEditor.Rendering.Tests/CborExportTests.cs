@@ -36,7 +36,7 @@ public partial class CanvasTests
             Assert.Equal("en", root["fallback_language"]);
             Assert.Equal(new object[] { "en", "es", "fr" }, (List<object>)root["languages"]);
             var exportedFrame = (Dictionary<string, object>)Assert.Single((List<object>)root["frames"]);
-            Assert.Equal(1000u, exportedFrame["duration_ms"]); Assert.Equal("always", exportedFrame["req"]);
+            Assert.Equal(4000u, exportedFrame["duration_ms"]); Assert.Equal("always", exportedFrame["req"]);
             Assert.Empty((List<object>)root["vars"]);
             var png = (byte[])exportedFrame["png"];
             var art = RgbaPng.Decode(png, 160, 80);

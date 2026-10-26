@@ -6,6 +6,7 @@ public sealed class FramePlayer
     private readonly (int Index, int Duration)[] frames;
     private int position;
     private double elapsedMs;
+    public TimeSpan ElapsedInFrame => TimeSpan.FromMilliseconds(elapsedMs);
     public bool Finished => position >= frames.Length;
     public int FrameIndex => Finished ? -1 : frames[position].Index;
 

@@ -3,7 +3,8 @@ namespace ComicEditor.Format;
 /// <summary>Case-sensitive, single-variable conditions, with preprocessor-style defined/undefined semantics.</summary>
 public static class FramePlayback
 {
-    public const int DefaultDurationMs = 1000;
+    public const int DefaultDurationMs = 4000;
+    public const int LegacyDurationMs = 1000;
     public const int MaximumDurationMs = 3_600_000;
 
     public static bool IsVariable(string value) => value.Length is > 0 and <= 64 &&

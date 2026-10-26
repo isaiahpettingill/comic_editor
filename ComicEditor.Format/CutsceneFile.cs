@@ -21,7 +21,7 @@ public static class CutsceneFile
         document.FallbackFontIds.Add(scene.FallbackFontIds);
         foreach (var frame in scene.Frames)
         {
-            var target = new Wire.Frame { Id = frame.Id, TextHidden = !frame.TextVisible, DurationMs = (uint)frame.DurationMs, Req = frame.Requirement };
+            var target = new Wire.Frame { Id = frame.Id, AudioQoa = ByteString.CopyFrom(frame.AudioQoa), TextHidden = !frame.TextVisible, DurationMs = (uint)frame.DurationMs, Req = frame.Requirement };
             foreach (var layer in frame.Layers)
             {
                 if (scene.IsRgba)
@@ -113,7 +113,8 @@ public static class CutsceneFile
             {
                 Id = frame.Id,
                 TextVisible = !frame.TextHidden,
-                DurationMs = frame.DurationMs == 0 ? FramePlayback.DefaultDurationMs : checked((int)frame.DurationMs),
+                DurationMs = frame.DurationMs == 0 ? FramePlayback.LegacyDurationMs : checked((int)frame.DurationMs),
+                AudioQoa = frame.AudioQoa.ToByteArray(),
                 Requirement = frame.Req.Length == 0 ? "always" : frame.Req,
                 Layers = frame.Layers.Select(layer => new ArtworkLayer
                 {

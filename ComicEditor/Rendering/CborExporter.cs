@@ -24,7 +24,8 @@ public static class CborExporter
         writer.Text("frames"); writer.Array(display.Frames.Count);
         foreach (var frame in display.Frames)
         {
-            writer.Map(3);
+            writer.Map(frame.AudioQoa.IsEmpty ? 3 : 4);
+            if (!frame.AudioQoa.IsEmpty) { writer.Text("audio_qoa"); writer.Bytes(frame.AudioQoa.Span); }
             writer.Text("duration_ms"); writer.Number(frame.DurationMs);
             writer.Text("req"); writer.Text(frame.Req);
             writer.Text("png");

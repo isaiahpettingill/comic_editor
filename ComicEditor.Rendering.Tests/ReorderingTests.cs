@@ -58,7 +58,7 @@ public partial class CanvasTests
             Invoke(view, "RefreshAll");
             _ = Capture(window);
 
-            var source = Named<Border>(window, "LayerRow2").GetVisualDescendants().OfType<Border>().Single();
+            var source = Named<Border>(window, "LayerItem2");
             var target = Named<Border>(window, "LayerRow0");
             var start = source.TranslatePoint(new Point(20, source.Bounds.Height / 2), window)!.Value;
             var end = target.TranslatePoint(new Point(20, target.Bounds.Height * .75), window)!.Value;

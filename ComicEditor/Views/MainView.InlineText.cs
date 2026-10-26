@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
+using Avalonia.VisualTree;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -18,7 +20,9 @@ public partial class MainView
     private Action? inlineCommit;
     private int inlineSelectionStart, inlineSelectionEnd;
 
-    private void BeginInlineTextEdit()
+    private void BeginInlineTextEdit() => BeginInlineTextEditAt(null);
+
+    private void BeginInlineTextEditAt(Point? canvasPoint)
     {
         var obj = editor.SelectedText;
         if (obj is null || inlineTextLayer is null) return;
@@ -86,6 +90,19 @@ public partial class MainView
         if (compact) ShowCompactPage(CompactPage.Draw);
         RefreshInlineTextToolbar();
         box.Focus(); box.CaretIndex = box.Text?.Length ?? 0;
+        if (canvasPoint is Point point)
+        {
+            // This editor is created after the canvas received the double-click.
+            // Forward its position through the actual text presenter layout instead
+            // of placing every edit at the end (including wrapped/multiline text).
+            box.UpdateLayout();
+            var presenter = box.GetVisualDescendants().OfType<TextPresenter>().FirstOrDefault();
+            if (presenter is not null && canvas.TranslatePoint(point, presenter) is Point local)
+            {
+                box.CaretIndex = presenter.TextLayout.HitTestPoint(local).TextPosition;
+                box.SelectionStart = box.SelectionEnd = box.CaretIndex;
+            }
+        }
     }
 
     private void EndInlineTextEdit()

@@ -156,7 +156,7 @@ public partial class MainView
     private Action CaptureTouchEdit()
     {
         var owner = editor.Scene; var restore = editor.CaptureProvisionalEdit();
-        var priorBase = pathBase?.ToList(); var priorPoints = path.ToArray(); var priorTool = pathTool;
+        var priorBase = pathBase?.Snapshot(); var priorPoints = path.ToArray(); var priorTool = pathTool;
         var stage = curveStage; var end = curveEnd; var control1 = curveControl1; var control2 = curveControl2;
         return () =>
         {

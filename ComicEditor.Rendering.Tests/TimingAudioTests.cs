@@ -23,13 +23,14 @@ public partial class CanvasTests
             state.Frame.AttachAudio(QoaAudio.Encode(new short[8001], 1, 8000));
             var window = new Window { Content = view, Width = 1200, Height = 800 }; window.Show(); Invoke(view, "RefreshAll"); _ = Capture(window);
             SaveCapture(window, "COMIC_TIMING_AUDIO_SCREENSHOT");
+            Click(window, Named<Button>(window, "FrameTimingDisplay0"));
             var timing = Named<TextBox>(window, "FrameTiming0"); timing.Focus(); timing.Text = "1";
             timing.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
             Assert.Equal(4000, state.Frame.DurationMs);
             timing.Text = "1.001"; timing.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
             Assert.Equal(1001, state.Frame.DurationMs); Assert.True(state.Undo()); Assert.Equal(4000, state.Frame.DurationMs);
             Assert.True(state.Redo()); Assert.Equal(1001, state.Frame.DurationMs);
-            Invoke(view, "RefreshAll"); _ = Capture(window); timing = Named<TextBox>(window, "FrameTiming0");
+            Invoke(view, "RefreshAll"); _ = Capture(window); Click(window, Named<Button>(window, "FrameTimingDisplay0")); timing = Named<TextBox>(window, "FrameTiming0");
             timing.Text = "broken"; timing.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
             Assert.Equal("1.001", timing.Text);
             Invoke(view, "RemoveFrameAudio", 0); Assert.Empty(state.Frame.AudioQoa); Assert.Equal(1001, state.Frame.DurationMs);
@@ -137,6 +138,7 @@ public partial class CanvasTests
             state.Scene.Frames.Add(Frame.Create(state.Scene.Width, state.Scene.Height));
             var removed = state.Scene.Frames[1];
             var window = new Window { Content = view, Width = 1200, Height = 800 }; window.Show(); Invoke(view, "RefreshAll"); _ = Capture(window);
+            Click(window, Named<Button>(window, "FrameTimingDisplay1"));
             var input = Named<TextBox>(window, "FrameTiming1"); input.Text = "2";
             state.Scene.Frames.Remove(removed);
             input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });

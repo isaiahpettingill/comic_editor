@@ -7,6 +7,7 @@ namespace ComicEditor.Views;
 
 public partial class MainView
 {
+    private List<FrameClipboard>? clipboardFrames;
     private MenuItem? canvasCopyItem, canvasCutItem, canvasPasteItem;
     private ContextMenu? canvasClipboardMenu;
     private Point canvasContextPoint;
@@ -57,27 +58,50 @@ public partial class MainView
         return ReferenceEquals(storyboard.Children[index], row) ? index : null;
     }
 
+    private void CopySelectedFrames()
+    {
+        if (SelectedFrameTarget() is { } target) CopyFrame(editor.Scene.Frames.IndexOf(target));
+    }
+
+    private bool CopyFocusedFrames(object? source)
+    {
+        if (FocusedFrameIndex(source) is null) return false;
+        CopySelectedFrames(); return true;
+    }
+
     private void CopyFrame(int? index = null)
     {
         FinishPath();
+        _ = MarkInternalClipboard();
         var selected = index ?? editor.FrameIndex;
         if (selected < 0 || selected >= editor.Scene.Frames.Count) return;
-        clipboardFrame = new FrameClipboard(editor.Scene, selected); clipboardArtwork = null;
+        var targets = FrameTargets(editor.Scene.Frames[selected]);
+        clipboardFrames = targets.Select(frame => new FrameClipboard(editor.Scene, editor.Scene.Frames.IndexOf(frame))).ToList();
+        clipboardFrame = clipboardFrames.FirstOrDefault(); clipboardArtwork = null;
     }
 
     private void PasteFrame(int? afterIndex = null)
     {
         if (clipboardFrame is null) return;
         FinishPath(); editor.BeforeChange();
-        var copy = clipboardFrame.Paste(editor.Scene, out var paletteChanged);
         var insertion = Math.Clamp((afterIndex ?? editor.FrameIndex) + 1, 0, editor.Scene.Frames.Count);
-        editor.Scene.Frames.Insert(insertion, copy); editor.SelectFrame(insertion);
+        var first = insertion; var paletteChanged = false;
+        var copies = clipboardFrames is { Count: > 0 } ? clipboardFrames : [clipboardFrame];
+        var insertedIds = new List<string>();
+        foreach (var copied in copies)
+        {
+            var frame = copied.Paste(editor.Scene, out var changed); paletteChanged |= changed;
+            editor.Scene.Frames.Insert(insertion++, frame); insertedIds.Add(frame.Id);
+        }
+        editor.SelectFrame(first); selectionPrimaryFrame = editor.Frame.Id;
+        selectedFrameIds.Clear(); selectedFrameIds.UnionWith(insertedIds); frameAnchor = editor.Frame.Id;
         if (paletteChanged) editor.RememberPalette();
         RefreshAll(); RefreshTools();
     }
 
-    private void PasteClipboard()
+    private async void PasteClipboard()
     {
+        if (await TryPasteExternalImage()) return;
         if (clipboardFrame is not null) PasteFrame();
         else PasteSelection();
     }

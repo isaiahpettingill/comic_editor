@@ -164,20 +164,8 @@ public sealed class Cutscene
             if (frame.Layers.Count == 0) throw new InvalidDataException("Every frame needs an artwork layer.");
             foreach (var layer in frame.Layers)
             {
-                if (layer.IsRgba != IsRgba || layer.Rows.Count != Height)
-                    throw new InvalidDataException("Artwork must contain one valid palette byte per pixel.");
-                foreach (var row in layer.Rows)
-                {
-                    if (row.Length != Width * layer.PixelStride) throw new InvalidDataException("Artwork has an invalid pixel count.");
-                    if (IsRgba) { if (!row.All(Uri.IsHexDigit)) throw new InvalidDataException("Artwork contains invalid RGBA pixels."); continue; }
-                    for (var x = 0; x < Width; x++)
-                    {
-                        var high = HexDigit(row[x * 2]); var low = HexDigit(row[x * 2 + 1]);
-                        var index = high * 16 + low;
-                        if (high < 0 || low < 0 || index != 255 && index >= Palette.Count)
-                            throw new InvalidDataException("Artwork must contain one valid palette byte per pixel.");
-                    }
-                }
+                if (layer.IsRgba != IsRgba || layer.Width != Width || layer.Height != Height || !layer.HasValidPalette(Palette.Count))
+                    throw new InvalidDataException("Artwork must contain one valid pixel per canvas position.");
             }
             foreach (var obj in frame.TextObjects)
             {
@@ -240,14 +228,7 @@ public sealed class Frame
         Requirement = Requirement,
         TextVisible = TextVisible,
         Id = Id,
-        Layers = Layers.Select(layer => new ArtworkLayer
-        {
-            Id = layer.Id,
-            Name = layer.Name,
-            Visible = layer.Visible,
-            IsRgba = layer.IsRgba,
-            Rows = layer.Rows.ToList()
-        }).ToList(),
+        Layers = Layers.Select(layer => layer.Snapshot()).ToList(),
         TextObjects = TextObjects.Select(text => text.Snapshot()).ToList()
     };
 
@@ -255,48 +236,6 @@ public sealed class Frame
     {
         Layers = [ArtworkLayer.Create("Artwork", width, height, rgba)]
     };
-}
-
-public sealed class ArtworkLayer
-{
-    public string Id { get; set; } = Guid.NewGuid().ToString("N");
-    public string Name { get; set; } = "Artwork";
-    public bool Visible { get; set; } = true;
-    public List<string> Rows { get; set; } = [];
-    public bool IsRgba { get; set; }
-    public int PixelStride => IsRgba ? 8 : 2;
-    public int Width => Rows.Count == 0 ? 0 : Rows[0].Length / PixelStride;
-
-    public static ArtworkLayer Create(string name, int width, int height, bool rgba = false) => new()
-    {
-        Name = name,
-        IsRgba = rgba,
-        Rows = Enumerable.Repeat(rgba ? new string('0', width * 8) : string.Concat(Enumerable.Repeat("FF", width)), height).ToList()
-    };
-
-    public int Pixel(int x, int y)
-    {
-        if (IsRgba) throw new InvalidOperationException("Use RgbaPixel for RGBA artwork.");
-        var index = Convert.ToInt32(Rows[y].Substring(x * 2, 2), 16);
-        return index == 255 ? -1 : index;
-    }
-
-    public void SetPixel(int x, int y, int color)
-    {
-        if (IsRgba) throw new InvalidOperationException("Use SetRgbaPixel for RGBA artwork.");
-        var row = Rows[y].ToCharArray();
-        var pair = color < 0 ? "FF" : color.ToString("X2");
-        row[x * 2] = pair[0]; row[x * 2 + 1] = pair[1];
-        Rows[y] = new string(row);
-    }
-
-    public uint RgbaPixel(int x, int y) => Convert.ToUInt32(Rows[y].Substring(x * 8, 8), 16);
-    public void SetRgbaPixel(int x, int y, uint color)
-    {
-        var row = Rows[y].ToCharArray();
-        RgbaColor.Hex(color).AsSpan(1).CopyTo(row.AsSpan(x * 8, 8));
-        Rows[y] = new string(row);
-    }
 }
 
 public sealed class TextObject

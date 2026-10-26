@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia" />
+    <!-- Match Avalonia desktop/native Skia; browser host selects its own WASM version. -->
+    <PackageReference Include="SkiaSharp" VersionOverride="3.119.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Avalonia.Fonts.Inter" />
     <PackageReference Include="IconPacks.Avalonia.Material" />

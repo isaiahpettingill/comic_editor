@@ -49,6 +49,7 @@ public class NativeCompilerTests
                 var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("COMIC_TEST_COMPILER")!)
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
                 start.Environment["COMIC_EDITOR_FONT_CACHE"] = cache;
+                start.ArgumentList.Add("--offline");
                 start.ArgumentList.Add(input); start.ArgumentList.Add(output);
                 using var process = Process.Start(start)!;
                 var stderrTask = process.StandardError.ReadToEndAsync();
@@ -78,4 +79,39 @@ public class NativeCompilerTests
         }
         finally { folder.Delete(recursive: true); }
     }
+    [NativeCompilerFact]
+    public void OfflineCompilerRejectsMissingFontsWithoutReplacingExistingOutput()
+    {
+        var folder = Directory.CreateTempSubdirectory("comic offline compiler ");
+        try
+        {
+            var scene = Cutscene.Create(32, 32);
+            scene.Frames[0].TextObjects.Add(new TextObject { Key = "line", FontId = "google:ComicEditor Uncached Offline Test", Width = 32, Height = 32 });
+            scene.Translations["en"]["line"] = "Hello";
+            var input = Path.Combine(folder.FullName, "source.ctsc");
+            var output = Path.Combine(folder.FullName, "output.cbor");
+            File.WriteAllBytes(input, CutsceneFile.Write(scene));
+            File.WriteAllText(output, "previous valid output");
+            var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("COMIC_TEST_COMPILER")!)
+            { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
+            start.Environment["COMIC_EDITOR_FONT_CACHE"] = Path.Combine(folder.FullName, "empty-cache");
+            start.ArgumentList.Add("--offline"); start.ArgumentList.Add(input); start.ArgumentList.Add(output);
+            using var process = Process.Start(start)!;
+            var error = process.StandardError.ReadToEndAsync();
+            var text = process.StandardOutput.ReadToEndAsync();
+            if (!process.WaitForExit(15_000))
+            {
+                process.Kill(entireProcessTree: true); process.WaitForExit();
+                Assert.Fail("Offline font lookup must not wait for a network request.");
+            }
+            Assert.Equal(1, process.ExitCode);
+            var stderr = error.GetAwaiter().GetResult();
+            Assert.Contains("Required Google Fonts are unavailable", stderr);
+            Assert.DoesNotContain("Downloading", stderr);
+            Assert.DoesNotContain("Downloading", text.GetAwaiter().GetResult());
+            Assert.Equal("previous valid output", File.ReadAllText(output));
+        }
+        finally { folder.Delete(recursive: true); }
+    }
+
 }

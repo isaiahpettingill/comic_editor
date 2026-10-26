@@ -60,43 +60,67 @@ public partial class MainView
         finally { fileBusy = false; }
     }
 
-    private async Task Save()
-    {
-        if (fileBusy) return;
-        FinishPath();
-        if (currentFile is not null && !OperatingSystem.IsBrowser()) { await SaveCurrent(automatic: false); return; }
-        await SaveAs();
-    }
+    private bool savePickerOpen, saveAsQueued;
 
-    private async Task SaveAs()
+    private Task Save() => QueueManualSave(saveAs: false);
+
+    private Task SaveAs() => QueueManualSave(saveAs: true);
+
+    private async Task QueueManualSave(bool saveAs)
     {
-        if (fileBusy) return;
-        FinishPath();
-        var storage = TopLevel.GetTopLevel(this)?.StorageProvider; if (storage is null) return;
-        var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
-        {
-            Title = "Save cutscene",
-            SuggestedFileName = editor.FileName ?? "cutscene.ctsc",
-            DefaultExtension = editor.FileName is { } name && Path.GetExtension(name).Equals(".cutscene", StringComparison.OrdinalIgnoreCase) ? "cutscene" : "ctsc",
-            FileTypeChoices = [ProjectTypes.Editable]
-        });
-        if (file is null) return;
-        fileBusy = true;
+        if (savePickerOpen) return;
+        var needsPicker = saveAs || currentFile is null || OperatingSystem.IsBrowser();
+        if (needsPicker && saveAsQueued) return;
+        if (needsPicker) saveAsQueued = true;
+        var requestedTab = activeTab;
+        await fileSaveLock.WaitAsync();
         try
         {
-            var scene = editor.Scene; var revision = editor.Revision; var snapshot = scene.Snapshot();
-            var bytes = await Task.Run(() => CutsceneFile.Write(snapshot));
-            var recovery = SaveSessionSafely();
-            try { await new ProjectFile(file, null).Write(bytes, checkExternalChanges: false); }
-            finally { await recovery; }
-            if (ReferenceEquals(editor.Scene, scene))
+            // Don't save a different document if another operation replaced it
+            // while this keyboard request was waiting for the previous write.
+            if (fileBusy || activeTab != requestedTab) return;
+            FinishPath();
+            if (!saveAs && currentFile is not null && !OperatingSystem.IsBrowser())
+                await SaveCurrentCore(automatic: false);
+            else await SaveAsCore();
+        }
+        finally
+        {
+            if (needsPicker) saveAsQueued = false;
+            fileSaveLock.Release();
+        }
+    }
+
+    private async Task SaveAsCore()
+    {
+        var storage = TopLevel.GetTopLevel(this)?.StorageProvider; if (storage is null) return;
+        // Reserve the document before awaiting the picker, not after it. Cancel
+        // leaves the old file binding and saved revision untouched.
+        fileBusy = true; savePickerOpen = true;
+        var state = editor;
+        try
+        {
+            var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                await BindFile(file, bytes); editor.FileName = file.Name; editor.MarkSaved(bytes, revision);
+                Title = "Save cutscene",
+                SuggestedFileName = state.FileName ?? "cutscene.ctsc",
+                DefaultExtension = state.FileName is { } name && Path.GetExtension(name).Equals(".cutscene", StringComparison.OrdinalIgnoreCase) ? "cutscene" : "ctsc",
+                FileTypeChoices = [ProjectTypes.Editable]
+            });
+            savePickerOpen = false;
+            if (file is null) return;
+            var capture = CaptureProject(state);
+            var bytes = await capture.Bytes;
+            await new ProjectFile(file, null).Write(bytes, checkExternalChanges: false);
+            if (ReferenceEquals(editor, state) && ReferenceEquals(state.Scene, capture.Scene))
+            {
+                await BindFile(file, bytes); state.FileName = file.Name; state.MarkSaved(bytes, capture.Stable ? capture.Revision : long.MinValue);
                 SetSaveMessage($"Saved {file.Name} at {DateTime.Now:t}."); RefreshTitle();
             }
+            _ = SaveSessionSafely();
         }
         catch (Exception ex) { await ShowError(ex.Message); }
-        finally { fileBusy = false; }
+        finally { fileBusy = false; savePickerOpen = false; }
     }
 
     private async Task ExportDisplay(bool cbor = false)

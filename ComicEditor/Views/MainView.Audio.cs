@@ -25,12 +25,19 @@ public partial class MainView
         catch (Exception ex) { if (editor.Scene == scene && modal is null) await ShowError(ex.Message); return; }
         finally { choosingAudio = false; }
         if (files.Count == 0 || editor.Scene != scene || !scene.Frames.Contains(frame)) return;
+        await ImportFrameAudio(files[0], scene, frame);
+    }
+
+    private async Task ImportFrameAudio(IStorageFile file, Cutscene scene, Frame frame)
+    {
+        if (audioImport is not null || editor.Scene != scene || !scene.Frames.Contains(frame)) return;
+        var previous = frame.AudioQoa;
         using var cancellation = new CancellationTokenSource(); audioImport = cancellation;
         ShowModal("Importing frame audio", Label("Encoding QOA audio… Close or Escape cancels without changing the frame."));
         var progress = modal;
         try
         {
-            await using var stream = await files[0].OpenReadAsync();
+            await using var stream = await file.OpenReadAsync();
             using var buffer = new MemoryStream(); var chunk = new byte[81920]; int read;
             while ((read = await stream.ReadAsync(chunk, cancellation.Token)) > 0)
             {

@@ -37,10 +37,12 @@ public partial class MainView
         var reset = new MenuItem { Header = "Reset pane layout" };
         reset.Click += (_, _) =>
         {
-            desktopWorkspace = null; paneOrder[0] = Pane.Storyboard; paneOrder[1] = Pane.Canvas; paneOrder[2] = Pane.Inspector;
-            paneWidths[0] = new(190); paneWidths[1] = new(1, GridUnitType.Star); paneWidths[2] = new(300); Build(compact);
+            desktopWorkspace = null; rootGrid = null;
+            paneOrder[0] = Pane.Storyboard; paneOrder[1] = Pane.Canvas; paneOrder[2] = Pane.Inspector; paneOrder[3] = Pane.Palette;
+            paneWidths[0] = new(190); paneWidths[1] = new(1, GridUnitType.Star); paneWidths[2] = new(300);
+            paletteHeight = 150; paletteResized = false; PersistPaneLayout(); Build(compact);
         };
-        foreach (var item in new Control[] { onion, opacity, compare, new Separator(), reset, ThemeMenu() }) view.Items.Add(item);
+        foreach (var item in new Control[] { onion, opacity, compare, new Separator(), reset, KeyboardShortcutsMenu(), ThemeMenu() }) view.Items.Add(item);
         return view;
     }
 

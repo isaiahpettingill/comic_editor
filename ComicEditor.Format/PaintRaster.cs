@@ -5,27 +5,27 @@ public enum ShapeFill { Outline, Solid }
 
 public static class PaintRaster
 {
-    // Batch edits by row: storing hex rows should not allocate a whole row for every pixel.
+    // Packed copy-on-write tiles let a brush update pixels without allocating
+    // strings or row dictionaries for every pointer event.
     private sealed class Surface(ArtworkLayer layer, IReadOnlyList<string>? palette = null, int opacity = 255) : IDisposable
     {
-        private readonly Dictionary<int, char[]> rows = new();
+        private int sourceIndex = int.MinValue;
+        private uint sourceColor;
         public void Pixel(int x, int y, int color)
         {
-            if (y < 0 || y >= layer.Rows.Count || x < 0 || x >= layer.Width) return;
-            if (!rows.TryGetValue(y, out var row)) rows[y] = row = layer.Rows[y].ToCharArray();
+            if (y < 0 || y >= layer.Height || x < 0 || x >= layer.Width) return;
             if (layer.IsRgba)
             {
-                var source = color < 0 ? 0u : RgbaColor.Parse(palette?[color] ?? throw new ArgumentException("RGBA painting requires the palette."));
-                var offset = x * 8;
-                var destination = Convert.ToUInt32(new string(row, offset, 8), 16);
-                var result = color < 0 ? 0u : RgbaColor.Blend(source, destination, opacity);
-                RgbaColor.Hex(result).AsSpan(1).CopyTo(row.AsSpan(offset, 8));
-                return;
+                if (color >= 0 && color != sourceIndex)
+                {
+                    sourceColor = RgbaColor.Parse(palette?[color] ?? throw new ArgumentException("RGBA painting requires the palette."));
+                    sourceIndex = color;
+                }
+                layer.SetRgbaPixel(x, y, color < 0 ? 0u : RgbaColor.Blend(sourceColor, layer.RgbaPixel(x, y), opacity));
             }
-            const string digits = "0123456789ABCDEF"; var index = color < 0 ? 255 : color;
-            row[x * 2] = digits[index >> 4]; row[x * 2 + 1] = digits[index & 15];
+            else layer.SetPixel(x, y, color);
         }
-        public void Dispose() { foreach (var (y, row) in rows) layer.Rows[y] = new string(row); }
+        public void Dispose() { }
     }
     public static void Stamp(ArtworkLayer layer, int x, int y, int color, int size, BrushTip tip, IReadOnlyList<string>? palette = null, int opacity = 255)
     {
@@ -94,7 +94,7 @@ public static class PaintRaster
         if (fill == ShapeFill.Solid && closed && points.Count >= 3)
         {
             var top = Math.Max(0, (int)Math.Floor(points.Min(p => p.Y)));
-            var bottom = Math.Min(layer.Rows.Count - 1, (int)Math.Ceiling(points.Max(p => p.Y)));
+            var bottom = Math.Min(layer.Height - 1, (int)Math.Ceiling(points.Max(p => p.Y)));
             var width = layer.Width;
             // Scanline fill: intersections are computed once per row, not per pixel.
             for (var y = top; y <= bottom; y++)
@@ -181,7 +181,7 @@ public static class PaintRaster
             {
                 var ax = x + random.Next(-radius, radius + 1); var ay = y + random.Next(-radius, radius + 1);
                 var bx = x + random.Next(-radius, radius + 1); var by = y + random.Next(-radius, radius + 1);
-                if (ax < 0 || ay < 0 || bx < 0 || by < 0 || ax >= layer.Width || bx >= layer.Width || ay >= layer.Rows.Count || by >= layer.Rows.Count) continue;
+                if (ax < 0 || ay < 0 || bx < 0 || by < 0 || ax >= layer.Width || bx >= layer.Width || ay >= layer.Height || by >= layer.Height) continue;
                 if (layer.IsRgba)
                 {
                     var first = layer.RgbaPixel(ax, ay); var second = layer.RgbaPixel(bx, by);
@@ -207,13 +207,13 @@ public static class PaintRaster
             var cx = steps == 0 ? x0 : x0 + (x1 - x0) * i / steps;
             var cy = steps == 0 ? y0 : y0 + (y1 - y0) * i / steps;
             var results = new List<(int X, int Y, uint Color)>();
-            for (var y = Math.Max(0, cy - radius); y <= Math.Min(layer.Rows.Count - 1, cy + radius); y++)
+            for (var y = Math.Max(0, cy - radius); y <= Math.Min(layer.Height - 1, cy + radius); y++)
                 for (var x = Math.Max(0, cx - radius); x <= Math.Min(layer.Width - 1, cx + radius); x++)
                 {
                     if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > radius * radius) continue;
                     long red = 0, green = 0, blue = 0, alpha = 0;
                     var count = 0;
-                    for (var sy = Math.Max(0, y - sampleRadius); sy <= Math.Min(layer.Rows.Count - 1, y + sampleRadius); sy++)
+                    for (var sy = Math.Max(0, y - sampleRadius); sy <= Math.Min(layer.Height - 1, y + sampleRadius); sy++)
                         for (var sx = Math.Max(0, x - sampleRadius); sx <= Math.Min(layer.Width - 1, x + sampleRadius); sx++)
                         {
                             var paletteIndex = layer.IsRgba ? -1 : layer.Pixel(sx, sy);

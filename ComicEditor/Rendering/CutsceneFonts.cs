@@ -81,6 +81,20 @@ public static class CutsceneFonts
         await LoadCachedFallbacksAsync(scene);
     }
 
+    /// <summary>Resolve only local fonts; never call the Google Fonts downloader.</summary>
+    public static async Task EnsureOfflineAsync(Cutscene scene)
+    {
+        EnsureManager();
+        await LoadCachedFallbacksAsync(scene);
+        var missingSystem = scene.Frames.Where(f => f.TextVisible).SelectMany(f => f.TextObjects)
+            .SelectMany(t => new[] { t.FontId }.Concat(t.Styles.Select(s => s.FontId)))
+            .Select(Normalize).Where(id => id.StartsWith("system:", StringComparison.Ordinal) && !IsInstalled(id))
+            .Distinct().ToArray();
+        if (missingSystem.Length > 0)
+            throw new InvalidDataException("Offline compiler requires installed system fonts: " + string.Join(", ", missingSystem) + ". Install them or choose a bundled font in ComicEditor.");
+        RequireAvailable(scene);
+    }
+
     public static IReadOnlyList<MissingFont> Missing(string text, string fontId, string language)
     {
         EnsureManager();

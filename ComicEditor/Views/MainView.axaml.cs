@@ -69,6 +69,8 @@ public partial class MainView : UserControl
             catch (Exception ex) { await ShowError("Could not load the remembered font: " + ex.Message); }
         };
         AddHandler(KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+        AttachedToVisualTree += (_, _) => AttachGlobalShortcuts();
+        DetachedFromVisualTree += (_, _) => DetachGlobalShortcuts();
         AttachedToVisualTree += StartSession;
         DetachedFromVisualTree += (_, _) => { sessionTimer?.Stop(); if (SessionStorage.Flush == FlushSession) SessionStorage.Flush = null; };
         DetachedFromVisualTree += (_, _) => StopUpdates();

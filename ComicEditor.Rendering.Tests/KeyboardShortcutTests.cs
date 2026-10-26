@@ -100,4 +100,36 @@ public partial class CanvasTests
         }, CancellationToken.None);
     }
 
+    [Fact]
+    public async Task HostShortcutsWorkWithoutChildFocusAfterRebuildAndDetachCleanly()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(); var editor = State(view);
+            var window = new Window { Content = view, Width = 1280, Height = 800 }; window.Show(); _ = Capture(window);
+            void HostKey(Key key, KeyModifiers modifiers) => window.RaiseEvent(new KeyEventArgs
+            { RoutedEvent = InputElement.KeyDownEvent, Key = key, KeyModifiers = modifiers, Source = window });
+            HostKey(Key.N, KeyModifiers.Alt); Assert.Equal(2, editor.Scene.Frames.Count);
+            var card = Named<Border>(window, "FrameRow1"); card.Focus();
+            // A descendant event passes both host and view: it must execute once.
+            card.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.N, KeyModifiers = KeyModifiers.Alt, Source = card });
+            Assert.Equal(3, editor.Scene.Frames.Count);
+            Invoke(view, "DuplicateSelectedFrames"); _ = Capture(window);
+            var afterDuplicate = editor.Scene.Frames.Count;
+            HostKey(Key.N, KeyModifiers.Alt); Assert.Equal(afterDuplicate + 1, editor.Scene.Frames.Count);
+            // A text field still prevents frame/tool bindings at the host.
+            var duration = Named<Button>(window, "FrameTimingDisplay0");
+            Click(window, duration); _ = Capture(window);
+            var timing = Named<TextBox>(window, "FrameTiming0");
+            timing.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.N, KeyModifiers = KeyModifiers.Alt, Source = timing });
+            Assert.Equal(afterDuplicate + 1, editor.Scene.Frames.Count);
+            window.Content = null;
+            HostKey(Key.N, KeyModifiers.Alt); Assert.Equal(afterDuplicate + 1, editor.Scene.Frames.Count);
+            window.Content = view; _ = Capture(window);
+            HostKey(Key.N, KeyModifiers.Alt); Assert.Equal(afterDuplicate + 2, editor.Scene.Frames.Count);
+            window.Close();
+        }, CancellationToken.None);
+    }
+
 }

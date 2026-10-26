@@ -83,7 +83,7 @@ public partial class MainView
         var settings = Item("Timing & visibility…", "FrameSettings", FrameSettings);
         var attach = Item("Attach / replace audio…", "FrameAttachAudio", i => _ = AttachFrameAudio(i));
         var remove = Item("Remove audio", "FrameRemoveAudio", RemoveFrameAudio);
-        button.ContextMenu = new ContextMenu { Items = { duplicate, delete, earlier, later, new Separator(), copy, paste,
+        button.ContextMenu = new ContextMenu { Placement = PlacementMode.BottomEdgeAlignedRight, Items = { duplicate, delete, earlier, later, new Separator(), copy, paste,
             new Separator(), settings, attach, remove } };
         button.ContextMenu.Opened += (_, _) =>
         {

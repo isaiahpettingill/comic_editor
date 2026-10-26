@@ -228,6 +228,8 @@ public partial class CanvasTests
             var start = palette.TranslatePoint(new Point(40, 10), window)!.Value;
             var end = slot.TranslatePoint(new Point(80, 90), window)!.Value;
             window.MouseDown(start, MouseButton.Left); window.MouseMove(end, RawInputModifiers.LeftMouseButton); window.MouseUp(end, MouseButton.Left); _ = Capture(window);
+            var paletteControls = Named<WrapPanel>(window, "PaletteControls");
+            Assert.All(paletteControls.Children, child => Assert.True(child.Bounds.Right <= paletteControls.Bounds.Width + 1));
             var ids = state.Scene.Frames.Select(f => f.Id).ToArray();
             var first = Named<Border>(window, "FrameRow0"); var last = Named<Border>(window, "FrameRow2");
             start = first.TranslatePoint(new Point(10, 20), window)!.Value;

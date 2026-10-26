@@ -9,6 +9,26 @@ namespace ComicEditor.Views;
 
 public partial class MainView
 {
+    private TopLevel? shortcutHost;
+
+    private void AttachGlobalShortcuts()
+    {
+        DetachGlobalShortcuts();
+        shortcutHost = TopLevel.GetTopLevel(this);
+        // Rebuilding an item list removes the focused row/menu. The next key can
+        // target the window itself, outside this view's routed-event ancestry.
+        // Handle it at the host as well; e.Handled prevents double dispatch when
+        // the normal view route is present. Text inputs still own editing keys.
+        shortcutHost?.AddHandler(KeyDownEvent, OnKeyDown,
+            Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+    }
+
+    private void DetachGlobalShortcuts()
+    {
+        shortcutHost?.RemoveHandler(KeyDownEvent, OnKeyDown);
+        shortcutHost = null;
+    }
+
     // Conventional drawing-tool keys. Shift cycles variants without a menu or long press.
     private static readonly (Key Key, string Group)[] ToolKeys =
     [
@@ -61,7 +81,7 @@ public partial class MainView
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Handled) return;
+        if (e.Handled || !IsEffectivelyEnabled || !IsVisible) return;
         if (e.Key == Key.Escape && draggingPane is not null) { CancelPaneDrag(); e.Handled = true; return; }
         if (modal is not null) { if (e.Key == Key.Escape) { CloseModal(); e.Handled = true; } return; }
         var typing = e.Source is Visual visual && (visual is TextBox or NumericUpDown || visual.GetVisualAncestors().Any(v => v is TextBox or NumericUpDown));

@@ -150,7 +150,7 @@ public partial class MainView
         palette.Children.Clear();
         var slot = new NumericUpDown { Name = "CurrentPaletteSlot", Minimum = 0, Maximum = editor.Scene.Palette.Count - 1, Value = editor.Color, Width = 100 };
         slot.ValueChanged += (_, _) => { if (slot.Value is null || (int)slot.Value == editor.Color) return; editor.Color = (int)slot.Value; RefreshPalette(); };
-        var heading = new WrapPanel { Orientation = Orientation.Horizontal };
+        var heading = new WrapPanel { Name = "PaletteControls", Orientation = Orientation.Horizontal };
         if (compact) heading.Children.Add(Label("Palette", true));
         foreach (var control in new Control[] { slot, Label(editor.Scene.Palette[editor.Color]), Button("Edit palette…", EditPalette) })
         { control.Margin = new Thickness(0, 0, 4, 3); heading.Children.Add(control); }
@@ -357,7 +357,7 @@ public partial class MainView
         var raise = Item("Raise layer", "LayerRaise", () => MoveLayers(layer, 1));
         var lower = Item("Lower layer", "LayerLower", () => MoveLayers(layer, -1));
         var delete = Item("Delete layer(s)", "LayerDelete", () => DeleteLayers(layer));
-        button.ContextMenu = new ContextMenu { Items = { rename, raise, lower, new Separator(), delete } };
+        button.ContextMenu = new ContextMenu { Placement = PlacementMode.BottomEdgeAlignedRight, Items = { rename, raise, lower, new Separator(), delete } };
         button.ContextMenu.Opened += (_, _) =>
         {
             var i = Current() ? frame.Layers.IndexOf(layer) : -1;
@@ -381,7 +381,7 @@ public partial class MainView
         edit.Click += (_, _) => { if (Current()) EditTextProperties(obj); };
         var delete = new MenuItem { Header = "Delete text object", Name = "TextDelete_" + obj.Id };
         delete.Click += (_, _) => { if (Current()) DeleteTextObjects(obj); };
-        button.ContextMenu = new ContextMenu { Items = { edit, delete } };
+        button.ContextMenu = new ContextMenu { Placement = PlacementMode.BottomEdgeAlignedRight, Items = { edit, delete } };
         button.ContextMenu.Opened += (_, _) =>
         {
             SyncItemSelection(); var count = selectedTextIds.Contains(obj.Id) ? selectedTextIds.Count : 1;

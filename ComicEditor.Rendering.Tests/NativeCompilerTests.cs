@@ -4,7 +4,7 @@ using ComicEditor.Format;
 
 namespace ComicEditor.Rendering.Tests;
 
-public class NativeCompilerTests
+public partial class NativeCompilerTests
 {
     private sealed class NativeCompilerFactAttribute : FactAttribute
     {

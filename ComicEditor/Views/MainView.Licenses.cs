@@ -11,7 +11,8 @@ public partial class MainView
         body.Children.Add(Label($"ComicEditor {ReleaseClient.AppVersion.ToString(3)} — 0BSD", true));
         body.Children.Add(Label("Color picker: AvaloniaColorPicker, copyright Giorgio Bianchini, licensed under LGPL-3.0-only. Includes an Avalonia 12 compatibility port. Source and rebuild instructions are included in the repository."));
         body.Children.Add(Label("QOA audio codec: derived from qoa.h by Dominic Szablewski, MIT licensed. FFmpeg/FFplay are optional separately installed tools, not bundled."));
-        foreach (var (title, resource) in new[] { ("Read LGPL v3", "ComicEditor.LGPL"), ("Read GPL v3", "ComicEditor.GPL"), ("Read QOA MIT license", "ComicEditor.QOA") })
+        body.Children.Add(Label("QOI editable-image codec: QoiFu by Piotr Fusik, MIT licensed. Compiled game exports continue using PNG."));
+        foreach (var (title, resource) in new[] { ("Read LGPL v3", "ComicEditor.LGPL"), ("Read GPL v3", "ComicEditor.GPL"), ("Read QOA MIT license", "ComicEditor.QOA"), ("Read QoiFu MIT license", "ComicEditor.QoiFu") })
             body.Children.Add(Button(title, () =>
             {
                 using var stream = typeof(App).Assembly.GetManifestResourceStream(resource)!;

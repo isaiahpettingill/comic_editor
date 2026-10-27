@@ -7,4 +7,5 @@
   </PropertyGroup>
 
   <ItemGroup><PackageReference Include="Google.Protobuf" /><PackageReference Include="Grpc.Tools" PrivateAssets="All" /><Protobuf Include="cutscene.proto" GrpcServices="None" /><Protobuf Include="display.proto" GrpcServices="None" /></ItemGroup>
+  <ItemGroup><Compile Include="../third_party/QoiFu/QOI.cs" Link="ThirdParty/QoiFu/QOI.cs" /><EmbeddedResource Include="../licenses/QoiFu-MIT.txt" LogicalName="ComicEditor.Format.QoiFuLicense" /></ItemGroup>
 </Project>

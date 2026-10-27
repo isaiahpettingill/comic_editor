@@ -5,7 +5,7 @@ namespace ComicEditor.Format.Tests;
 public sealed class RgbaTests
 {
     [Fact]
-    public void RgbaPngAndProjectRoundTripBeyondIndexedPaletteLimit()
+    public void RgbaQoiAndProjectRoundTripBeyondIndexedPaletteLimit()
     {
         var scene = Cutscene.Create(3, 2, rgba: true);
         scene.Palette = Enumerable.Range(0, 300).Select(i => $"#{i:X6}80").ToList();
@@ -15,10 +15,12 @@ public sealed class RgbaTests
         Assert.Equal(192u, layer.RgbaPixel(0, 0) & 255);
         var bytes = CutsceneFile.Write(scene);
         var wire = CutsceneDocument.Parser.ParseFrom(bytes);
-        Assert.Equal(4u, wire.Version);
+        Assert.Equal(5u, wire.Version);
         Assert.Equal(300, wire.PaletteRgba.Count);
-        Assert.Equal(6, wire.Frames[0].Layers[0].RgbaPng.Span[25]);
+        Assert.True(wire.Frames[0].Layers[0].RgbaPng.IsEmpty);
+        Assert.True(wire.Frames[0].Layers[0].RgbaQoi.Span[..4].SequenceEqual("qoif"u8));
         var restored = CutsceneFile.Parse(bytes);
+        Assert.Equal(4, restored.Version); Assert.True(restored.IsRgba);
         Assert.Equal(scene.Palette, restored.Palette);
         Assert.Equal(layer.Rows, restored.Frames[0].Layers[0].Rows);
         restored.ResizeCanvas(5, 4, center: true);

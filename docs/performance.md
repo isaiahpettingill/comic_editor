@@ -1,3 +1,5 @@
+> Historical v0.1.33 sparse-buffer measurements below. For the later source-only QOI change, see [source QOI performance](source-qoi-performance.md); its source wire bytes differ, while compiled assets remain PNG.
+
 # Artwork and save performance
 
 ## Representation and compatibility

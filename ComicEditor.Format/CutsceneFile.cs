@@ -12,7 +12,8 @@ public static class CutsceneFile
         scene.Validate();
         var document = new Wire.CutsceneDocument
         {
-            Version = (uint)scene.Version,
+            // Wire v5 changes RGBA source storage only; the editable model remains v4.
+            Version = scene.IsRgba ? 5u : (uint)scene.Version,
             CanvasWidth = (uint)scene.Width,
             CanvasHeight = (uint)scene.Height,
             FallbackLanguage = scene.FallbackLanguage
@@ -33,7 +34,7 @@ public static class CutsceneFile
                     {
                         for (var y = 0; y < scene.Height; y++)
                             layer.ReadRgbaRow(y, rgba.AsSpan(y * scene.Width, scene.Width));
-                        target.Layers.Add(new Wire.ArtworkLayer { Id = layer.Id, Name = layer.Name, Visible = layer.Visible, RgbaPng = ByteString.CopyFrom(RgbaPng.Encode(scene.Width, scene.Height, rgba.AsSpan(0, count))) });
+                        target.Layers.Add(new Wire.ArtworkLayer { Id = layer.Id, Name = layer.Name, Visible = layer.Visible, RgbaQoi = ByteString.CopyFrom(RgbaQoi.Encode(scene.Width, scene.Height, rgba.AsSpan(0, count))) });
                     }
                     finally { ArrayPool<uint>.Shared.Return(rgba); }
                     continue;
@@ -105,21 +106,21 @@ public static class CutsceneFile
     {
         if (bytes.Length > 512 * 1024 * 1024) throw new InvalidDataException("Cutscene exceeds 512 MiB.");
         var document = Wire.CutsceneDocument.Parser.ParseFrom(bytes);
-        if (document.Version is < 1 or > 4 ||
+        if (document.Version is < 1 or > 5 ||
             (document.Version == 1 && document.PaletteRgb.Count != 16) ||
             (document.Version == 2 && document.PaletteRgb.Count != 128) ||
-            (document.Version == 4 ? document.PaletteRgba.Count is < 2 or > 65535 || document.PaletteRgb.Count != 0 : document.PaletteRgb.Count is < 2 or > 255 || document.PaletteRgba.Count != 0))
+            (document.Version >= 4 ? document.PaletteRgba.Count is < 2 or > 65535 || document.PaletteRgb.Count != 0 : document.PaletteRgb.Count is < 2 or > 255 || document.PaletteRgba.Count != 0))
             throw new InvalidDataException("Unsupported cutscene version or palette size.");
         if (document.CanvasWidth is < 1 or > 2048 || document.CanvasHeight is < 1 or > 2048)
             throw new InvalidDataException("Unsupported canvas dimensions.");
         var scene = new Cutscene
         {
-            Version = document.Version == 4 ? 4 : 3,
+            Version = document.Version >= 4 ? 4 : 3,
             Width = (int)document.CanvasWidth,
             Height = (int)document.CanvasHeight,
             FallbackLanguage = document.FallbackLanguage,
             FallbackFontIds = document.FallbackFontIds.ToList(),
-            Palette = document.Version == 4 ? document.PaletteRgba.Select(RgbaColor.Hex).ToList() : document.PaletteRgb.Select(color => $"#{color:X6}").ToList(),
+            Palette = document.Version >= 4 ? document.PaletteRgba.Select(RgbaColor.Hex).ToList() : document.PaletteRgb.Select(color => $"#{color:X6}").ToList(),
             Frames = document.Frames.Select(frame => new Frame
             {
                 Id = frame.Id,
@@ -164,16 +165,24 @@ public static class CutsceneFile
     private static ArtworkLayer DecodeLayer(Wire.ArtworkLayer source, Wire.CutsceneDocument document)
     {
         var width = (int)document.CanvasWidth; var height = (int)document.CanvasHeight;
-        var layer = ArtworkLayer.Create(source.Name, width, height, document.Version == 4);
+        var layer = ArtworkLayer.Create(source.Name, width, height, document.Version >= 4);
         layer.Id = source.Id; layer.Visible = source.Visible;
         if (layer.IsRgba)
         {
-            var pixels = RgbaPng.Decode(source.RgbaPng.Span, width, height);
+            if (!source.Pixels.IsEmpty || (document.Version == 4
+                ? source.RgbaPng.IsEmpty || !source.RgbaQoi.IsEmpty
+                : source.RgbaQoi.IsEmpty || !source.RgbaPng.IsEmpty))
+                throw new InvalidDataException($"RGBA layer payload does not match cutscene version {document.Version}.");
+            var pixels = document.Version == 4
+                ? RgbaPng.Decode(source.RgbaPng.Span, width, height)
+                : RgbaQoi.Decode(source.RgbaQoi.Span, width, height);
             for (var y = 0; y < height; y++)
                 for (var x = 0; x < width; x++) layer.SetRgbaPixel(x, y, pixels[y * width + x]);
         }
         else
         {
+            if (!source.RgbaPng.IsEmpty || !source.RgbaQoi.IsEmpty)
+                throw new InvalidDataException("Indexed layer must not contain RGBA image payloads.");
             var bytes = source.Pixels.Span;
             if (bytes.Length != width * height) throw new InvalidDataException("Indexed layer has an invalid pixel count.");
             for (var y = 0; y < height; y++)

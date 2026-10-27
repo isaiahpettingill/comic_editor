@@ -63,7 +63,26 @@ public sealed class SavePerformanceTests
     }
 
     [Fact]
-    public void RgbaSerializationMatchesPerPixelReferencePng()
+    public async Task QoiSnapshotAndUndoPreserveCapturedPixelsAcrossLaterEdits()
+    {
+        var state = new EditorState(); state.Load(CutsceneFile.Write(Cutscene.Create(16, 16, rgba: true)));
+        var cache = new ProjectSnapshotCache();
+        state.BeforeChange(); state.Layer.SetRgbaPixel(0, 0, 0xff000080);
+        var first = cache.Get(state);
+        state.BeforeChange(); state.Layer.SetRgbaPixel(0, 0, 0x00ff00ff);
+        var second = cache.Get(state);
+        var firstBytes = await first.Bytes; var secondBytes = await second.Bytes;
+        Assert.Equal(5u, ComicEditor.Wire.CutsceneDocument.Parser.ParseFrom(firstBytes).Version);
+        Assert.Equal(0xff000080u, CutsceneFile.Parse(firstBytes).Frames[0].Layers[0].RgbaPixel(0, 0));
+        Assert.Equal(0x00ff00ffu, CutsceneFile.Parse(secondBytes).Frames[0].Layers[0].RgbaPixel(0, 0));
+        state.MarkSaved(firstBytes, first.Revision); Assert.True(state.FastDirty);
+        Assert.True(state.Undo()); Assert.Equal(0xff000080u, state.Layer.RgbaPixel(0, 0));
+        Assert.Equal(firstBytes, await cache.Get(state).Bytes);
+        Assert.True(state.Redo()); Assert.Equal(secondBytes, await cache.Get(state).Bytes);
+    }
+
+    [Fact]
+    public void RgbaSerializationMatchesPerPixelReferenceQoi()
     {
         var scene = Cutscene.Create(17, 11, rgba: true);
         for (var y = 0; y < scene.Height; y++)
@@ -73,15 +92,25 @@ public sealed class SavePerformanceTests
         var expected = Enumerable.Range(0, scene.Width * scene.Height)
             .Select(i => layer.RgbaPixel(i % scene.Width, i / scene.Width)).ToArray();
         var wire = ComicEditor.Wire.CutsceneDocument.Parser.ParseFrom(CutsceneFile.Write(scene));
-        Assert.Equal(RgbaPng.Encode(scene.Width, scene.Height, expected), wire.Frames[0].Layers[0].RgbaPng.ToByteArray());
+        Assert.Equal(5u, wire.Version);
+        Assert.Empty(wire.Frames[0].Layers[0].RgbaPng);
+        Assert.Equal(expected, RgbaQoi.Decode(wire.Frames[0].Layers[0].RgbaQoi.Span, scene.Width, scene.Height));
         Assert.Equal(layer.Rows, CutsceneFile.Parse(CutsceneFile.Write(scene)).Frames[0].Layers[0].Rows);
     }
 }
 
 public partial class CanvasTests
 {
-    [Fact]
-    public async Task RepeatedKeyboardSavesQueueRatherThanDroppingNewerEdits()
+    private static void PaintSaveTestPixel(EditorState editor, int x, bool rgba)
+    {
+        if (rgba) editor.Layer.SetRgbaPixel(x, 0, x == 0 ? 0xff000080u : 0x00ff00ffu);
+        else editor.Layer.SetPixel(x, 0, x + 1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RepeatedKeyboardSavesQueueRatherThanDroppingNewerEdits(bool rgba)
     {
         using var session = Avalonia.Headless.HeadlessUnitTestSession.StartNew(typeof(TestApp));
         await session.Dispatch(async () =>
@@ -91,15 +120,15 @@ public partial class CanvasTests
             var path = Path.Combine(Path.GetTempPath(), "comic-save-queue-" + Guid.NewGuid().ToString("N") + ".ctsc");
             try
             {
-                var editor = State(view); var original = CutsceneFile.Write(editor.Scene);
+                var editor = State(view); editor.Load(CutsceneFile.Write(Cutscene.Create(16, 16, rgba))); var original = CutsceneFile.Write(editor.Scene);
                 await File.WriteAllBytesAsync(path, original);
                 var file = await window.StorageProvider.TryGetFileFromPathAsync(path);
                 await (Task)Invoke(view, "BindFile", file!, original)!;
                 var gate = (SemaphoreSlim)typeof(ComicEditor.Views.MainView).GetField("fileSaveLock", PrivateInstance)!.GetValue(view)!;
                 await gate.WaitAsync();
-                editor.BeforeChange(); editor.Layer.SetPixel(0, 0, 1);
+                editor.BeforeChange(); PaintSaveTestPixel(editor, 0, rgba);
                 var first = (Task)Invoke(view, "Save")!;
-                editor.BeforeChange(); editor.Layer.SetPixel(1, 0, 2);
+                editor.BeforeChange(); PaintSaveTestPixel(editor, 1, rgba);
                 var second = (Task)Invoke(view, "Save")!;
                 Assert.False(first.IsCompleted); Assert.False(second.IsCompleted);
                 gate.Release(); await Task.WhenAll(first, second);
@@ -110,8 +139,10 @@ public partial class CanvasTests
         }, CancellationToken.None);
     }
 
-    [Fact]
-    public async Task SavingDuringAStrokeCannotMarkLaterPixelsInSameRevisionClean()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SavingDuringAStrokeCannotMarkLaterPixelsInSameRevisionClean(bool rgba)
     {
         using var session = Avalonia.Headless.HeadlessUnitTestSession.StartNew(typeof(TestApp));
         await session.Dispatch(async () =>
@@ -121,19 +152,21 @@ public partial class CanvasTests
             var path = Path.Combine(Path.GetTempPath(), "comic-save-stroke-" + Guid.NewGuid().ToString("N") + ".ctsc");
             try
             {
-                var editor = State(view); var original = CutsceneFile.Write(editor.Scene);
+                var editor = State(view); editor.Load(CutsceneFile.Write(Cutscene.Create(16, 16, rgba))); var original = CutsceneFile.Write(editor.Scene);
                 await File.WriteAllBytesAsync(path, original);
                 var file = await window.StorageProvider.TryGetFileFromPathAsync(path);
                 await (Task)Invoke(view, "BindFile", file!, original)!;
-                editor.BeforeChange(); editor.Layer.SetPixel(0, 0, 1);
+                editor.BeforeChange(); PaintSaveTestPixel(editor, 0, rgba);
                 var draggingField = typeof(ComicEditor.Views.MainView).GetField("dragging", PrivateInstance)!;
                 draggingField.SetValue(view, true);
                 var save = (Task)Invoke(view, "Save")!;
-                editor.Layer.SetPixel(1, 0, 2); // Same stroke/undo revision.
+                PaintSaveTestPixel(editor, 1, rgba); // Same stroke/undo revision.
                 draggingField.SetValue(view, false);
                 await save;
                 Assert.True(editor.FastDirty);
-                Assert.Equal(-1, CutsceneFile.Parse(await File.ReadAllBytesAsync(path)).Frames[0].Layers[0].Pixel(1, 0));
+                var savedLayer = CutsceneFile.Parse(await File.ReadAllBytesAsync(path)).Frames[0].Layers[0];
+                if (rgba) Assert.Equal(0u, savedLayer.RgbaPixel(1, 0));
+                else Assert.Equal(-1, savedLayer.Pixel(1, 0));
                 await (Task)Invoke(view, "Save")!;
                 Assert.False(editor.FastDirty);
                 Assert.Equal(CutsceneFile.Write(editor.Scene), await File.ReadAllBytesAsync(path));

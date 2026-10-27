@@ -13,8 +13,10 @@ foreach (var dense in new[] { false, true }) foreach (var count in new[] { 1, 12
     else for (var x = 0; x < 720; x++) old.Frames[0].Layers[0].SetRgbaPixel(x, 240, 0xff0000ff);
     for (var i = 1; i < count; i++) old.Frames.Add(old.Frames[0].Snapshot());
     var before = Old.CutsceneFile.Write(old); var scene = CutsceneFile.Parse(before);
-    if (!before.AsSpan().SequenceEqual(CutsceneFile.Write(scene))) throw new Exception("Wire bytes differ");
-    Console.WriteLine($"{(dense ? "dense" : "sparse")} {count} frames 720x480 RGBA; byte-identical {before.Length} bytes");
+    var after = CutsceneFile.Write(scene); var roundTrip = CutsceneFile.Parse(after);
+    for (var y = 0; y < 480; y++) for (var x = 0; x < 720; x++)
+        if (old.Frames[0].Layers[0].RgbaPixel(x,y) != roundTrip.Frames[0].Layers[0].RgbaPixel(x,y)) throw new Exception("Pixels differ");
+    Console.WriteLine($"{(dense ? "dense" : "sparse")} {count} frames 720x480 RGBA; identical pixels, old {before.Length}/new {after.Length} bytes");
     Measure("save before", () => Old.CutsceneFile.Write(old));
     Measure("save after", () => CutsceneFile.Write(scene));
     Measure("snapshot before", () => old.Snapshot(), 50);

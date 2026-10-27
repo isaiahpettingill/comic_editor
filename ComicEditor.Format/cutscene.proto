@@ -4,7 +4,9 @@ option csharp_namespace = "ComicEditor.Wire";
 
 // Artwork pixels are row-major palette indexes 0..254. 255 means transparent.
 // Version 1 had 16 palette entries; version 2 had 128; version 3 allows 2..255.
-// A layer has exactly canvas_width * canvas_height bytes.
+// Indexed layers have exactly canvas_width * canvas_height bytes.
+// RGBA source versions 4/5 use PNG/QOI respectively; older readers reject v5.
+// Runtime display and CBOR image formats are independent of this source format.
 message CutsceneDocument {
   uint32 version = 1;
   uint32 canvas_width = 2;
@@ -14,7 +16,7 @@ message CutsceneDocument {
   repeated Language languages = 6;
   string fallback_language = 7; // Missing/blank translations use this language, then blank.
   repeated string fallback_font_ids = 8; // Optional google:<family> references; fonts cached separately.
-  repeated uint32 palette_rgba = 9; // Version 4 only: 0xRRGGBBAA; no byte-index limit.
+  repeated uint32 palette_rgba = 9; // Versions 4/5: 0xRRGGBBAA; no byte-index limit.
 }
 
 message Frame {
@@ -31,8 +33,9 @@ message ArtworkLayer {
   string id = 1;
   string name = 2;
   bool visible = 3;
-  bytes pixels = 4;
+  bytes pixels = 4; // Versions 1..3 only. Exactly one pixel payload is allowed.
   bytes rgba_png = 5; // Version 4 only: lossless 8-bit RGBA PNG.
+  bytes rgba_qoi = 6; // Version 5 only: complete QOI image, matching canvas dimensions.
 }
 
 message TextObject {

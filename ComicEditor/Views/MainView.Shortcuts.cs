@@ -17,10 +17,13 @@ public partial class MainView
         shortcutHost = TopLevel.GetTopLevel(this);
         // Rebuilding an item list removes the focused row/menu. The next key can
         // target the window itself, outside this view's routed-event ancestry.
-        // Handle it at the host as well; e.Handled prevents double dispatch when
-        // the normal view route is present. Text inputs still own editing keys.
+        // Keep this fallback on the bubble route. Avalonia's access-key handler
+        // must see the preview of an Alt chord before we mark it handled; otherwise
+        // releasing Alt opens the menu and steals focus from the editor.
+        // The view's tunnel handler still owns descendant shortcuts, and Handled
+        // prevents double dispatch here. Text inputs keep their editing keys.
         shortcutHost?.AddHandler(KeyDownEvent, OnKeyDown,
-            Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+            Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
     }
 
     private void DetachGlobalShortcuts()

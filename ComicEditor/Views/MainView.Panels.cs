@@ -152,7 +152,10 @@ public partial class MainView
         slot.ValueChanged += (_, _) => { if (slot.Value is null || (int)slot.Value == editor.Color) return; editor.Color = (int)slot.Value; RefreshPalette(); };
         var heading = new WrapPanel { Name = "PaletteControls", Orientation = Orientation.Horizontal };
         if (compact) heading.Children.Add(Label("Palette", true));
-        foreach (var control in new Control[] { slot, Label(editor.Scene.Palette[editor.Color]), Button("Edit palette…", EditPalette) })
+        var mode = Button(editor.Scene.IsRgba ? "Color mode: RGBA…" : "Color mode: Indexed…", ShowColorMode);
+        mode.Name = "ColorModeButton";
+        ToolTip.SetTip(mode, "View the current color mode or convert indexed artwork to RGBA without changing its appearance.");
+        foreach (var control in new Control[] { mode, slot, Label(editor.Scene.Palette[editor.Color]), Button("Edit palette…", EditPalette) })
         { control.Margin = new Thickness(0, 0, 4, 3); heading.Children.Add(control); }
         palette.Children.Add(heading);
         var colors = new WrapPanel { Name = "PaletteSwatches", Orientation = Orientation.Horizontal };

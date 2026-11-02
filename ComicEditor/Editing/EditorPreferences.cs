@@ -12,7 +12,8 @@ public sealed class EditorPreferences
     public string Theme { get; set; } = Styles.EditorThemes.Default;
     public int CanvasWidth { get; set; } = 320;
     public int CanvasHeight { get; set; } = 180;
-    public bool RgbaCanvas { get; set; }
+    // Indexed is the compact fresh-install default; retain explicitly saved mode preferences.
+    public bool RgbaCanvas { get; set; } = false;
     public string FontId { get; set; } = "comic-shanns";
     public double FontSize { get; set; } = 16;
     public bool Bold { get; set; }

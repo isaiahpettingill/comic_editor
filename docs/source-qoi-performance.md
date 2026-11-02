@@ -1,8 +1,9 @@
 # QOI source artwork, PNG game assets
 
 This change is **source-only**. Editable RGBA `.ctsc` documents write wire version 5
-with QOI in layer field 6 (`rgba_qoi`). Indexed documents still write version 3
-with palette-index bytes. Source versions 1–4 remain readable; old RGBA PNG
+with QOI in layer field 6 (`rgba_qoi`). Indexed documents now write version 6
+with indexed PNG; see [indexed source compression](indexed-source-compression.md).
+The measurements below describe the earlier RGBA-only codec change. Source versions 1–4 remain readable; old RGBA PNG
 version 4 files are upgraded when saved. The editable model stays version 4.
 ComicEditor/compiler v0.1.33 and earlier reject new source version 5: retain a
 backup when sharing with older editors. This feature needs the compiler built

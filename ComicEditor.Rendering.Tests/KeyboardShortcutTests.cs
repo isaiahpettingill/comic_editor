@@ -2,8 +2,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using ComicEditor.Editing;
+using ComicEditor.Format;
 using ComicEditor.Views;
 
 namespace ComicEditor.Rendering.Tests;
@@ -129,6 +131,85 @@ public partial class CanvasTests
             window.Content = view; _ = Capture(window);
             HostKey(Key.N, KeyModifiers.Alt); Assert.Equal(afterDuplicate + 2, editor.Scene.Frames.Count);
             window.Close();
+        }, CancellationToken.None);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RawKeyboardShortcutsWorkAtStartupAndAfterFocusedRowsAreRebuilt(bool compact)
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(compact);
+            var window = new Window { Content = view, Width = 1280, Height = 800 };
+            window.Show(); _ = Capture(window);
+            // Use the headless platform's raw input path, not a direct handler
+            // invocation or RaiseEvent: focus determines the actual event source.
+            void Press(Key key, RawInputModifiers modifiers, PhysicalKey physical)
+            {
+                window.KeyPress(key, modifiers, physical, null);
+                window.KeyRelease(key, modifiers, physical, null);
+            }
+            var editor = State(view);
+            window.FocusManager!.Focus(null);
+            Assert.Null(window.FocusManager.GetFocusedElement());
+            Press(Key.N, RawInputModifiers.Alt, PhysicalKey.N);
+            Assert.Equal(2, editor.Scene.Frames.Count);
+            if (compact) Click(window, Named<Button>(window, "CompactFrames"));
+            _ = Capture(window);
+            Assert.True(Named<Border>(window, "FrameRow1").Focus());
+            Press(Key.N, RawInputModifiers.Alt, PhysicalKey.N);
+            Assert.Equal(3, editor.Scene.Frames.Count);
+            Press(Key.N, RawInputModifiers.Alt, PhysicalKey.N);
+            Assert.Equal(4, editor.Scene.Frames.Count);
+            Press(Key.N, RawInputModifiers.Control, PhysicalKey.N);
+            Assert.NotSame(editor, State(view));
+            Assert.Single(State(view).Scene.Frames);
+            Press(Key.N, RawInputModifiers.Alt, PhysicalKey.N);
+            Assert.Equal(2, State(view).Scene.Frames.Count);
+            window.Close();
+        }, CancellationToken.None);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RawCtrlSSavesOutsideTextFields(bool focusFrame)
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(async () =>
+        {
+            var path = Path.Combine(Path.GetTempPath(), "comic-shortcut-" + Guid.NewGuid().ToString("N") + ".ctsc");
+            var view = new MainView(); var editor = State(view);
+            var window = new Window { Content = view, Width = 1280, Height = 800 };
+            window.Show();
+            try
+            {
+                var original = CutsceneFile.Write(editor.Scene);
+                await File.WriteAllBytesAsync(path, original);
+                editor.MarkSaved(original);
+                var file = await window.StorageProvider.TryGetFileFromPathAsync(new Uri(path));
+                Assert.NotNull(file);
+                await (Task)Invoke(view, "BindFile", file, original)!;
+                editor.AddFrame(false);
+                Assert.True(editor.FastDirty);
+                Invoke(view, "RefreshAll"); _ = Capture(window);
+                if (focusFrame) Assert.True(Named<Border>(window, "FrameRow1").Focus());
+                else
+                {
+                    window.FocusManager!.Focus(null);
+                    Assert.Null(window.FocusManager.GetFocusedElement());
+                }
+                window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
+                window.KeyRelease(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
+                // Wait for the real asynchronous file write, not just Handled=true.
+                for (var i = 0; i < 100 && editor.FastDirty; i++) await Task.Delay(20);
+                Assert.False(editor.FastDirty);
+                Assert.Equal(2, CutsceneFile.Parse(await File.ReadAllBytesAsync(path)).Frames.Count);
+            }
+            finally { window.Close(); File.Delete(path); }
         }, CancellationToken.None);
     }
 

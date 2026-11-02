@@ -38,7 +38,7 @@ public sealed class PaletteTests
         Assert.Equal(3, result.Version); Assert.Equal(count, result.Palette.Count);
         Assert.Equal(count - 1, result.Frames[0].Layers[0].Pixel(0, 0)); Assert.Equal(-1, result.Frames[0].Layers[0].Pixel(1, 0));
         var wire = ComicEditor.Wire.CutsceneDocument.Parser.ParseFrom(bytes);
-        Assert.Equal(new byte[] { (byte)(count - 1), 255 }, wire.Frames[0].Layers[0].Pixels.ToByteArray());
+        Assert.Equal(new byte[] { (byte)(count - 1), 255 }, IndexedSourcePng.Decode(wire.Frames[0].Layers[0].IndexedPng.Span, 2, 1, scene.Palette));
         var gpl = new GplPalette("Test", scene.Palette.Select(hex => new GplColor(hex)).ToArray());
         Assert.Equal(count, GplPalette.Parse(gpl.Write()).Colors.Count);
     }
@@ -50,7 +50,7 @@ public sealed class PaletteTests
         Assert.Equal(256, GplPalette.Parse(tooMany).Colors.Count);
         var scene = Cutscene.Create(1, 1); scene.Palette = Enumerable.Repeat("#000000", 256).ToList();
         Assert.Throws<InvalidDataException>(() => CutsceneFile.Write(scene));
-        var old = ComicEditor.Wire.CutsceneDocument.Parser.ParseFrom(CutsceneFile.Write(Cutscene.Create(2, 1))); old.Version = 2;
+        var old = ComicEditor.Wire.CutsceneDocument.Parser.ParseFrom(CutsceneFile.Write(Cutscene.Create(2, 1))); old.Version = 2; old.Frames[0].Layers[0].IndexedPng = ByteString.Empty;
         old.Frames[0].Layers[0].Pixels = ByteString.CopyFrom([127, 255]);
         var restored = CutsceneFile.Parse(old.ToByteArray()); Assert.Equal(3, restored.Version);
         Assert.Equal(127, restored.Frames[0].Layers[0].Pixel(0, 0)); Assert.Equal(-1, restored.Frames[0].Layers[0].Pixel(1, 0));

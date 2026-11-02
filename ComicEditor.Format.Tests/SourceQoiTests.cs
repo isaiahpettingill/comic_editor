@@ -36,13 +36,14 @@ public sealed class SourceQoiTests
     }
 
     [Fact]
-    public void IndexedSourceRemainsVersionThreeAndUnencoded()
+    public void IndexedSourceUsesVersionSixAndIndexedPng()
     {
         var scene = Cutscene.Create(2, 1); scene.Frames[0].Layers[0].SetPixel(0, 0, 1);
         var wire = Wire.CutsceneDocument.Parser.ParseFrom(CutsceneFile.Write(scene));
-        Assert.Equal(3u, wire.Version);
+        Assert.Equal(6u, wire.Version);
         var layer = wire.Frames[0].Layers[0];
-        Assert.Equal(new byte[] { 1, 255 }, layer.Pixels.ToByteArray());
+        Assert.True(layer.Pixels.IsEmpty);
+        Assert.Equal(new byte[] { 1, 255 }, IndexedSourcePng.Decode(layer.IndexedPng.Span, 2, 1, scene.Palette));
         Assert.True(layer.RgbaPng.IsEmpty); Assert.True(layer.RgbaQoi.IsEmpty);
     }
 
@@ -85,7 +86,7 @@ public sealed class SourceQoiTests
         var layer = document.Frames[0].Layers[0]; layer.RgbaPng = ByteString.Empty;
         layer.RgbaQoi = ByteString.CopyFrom(RgbaQoi.Encode(1, 1, [0u]));
         Assert.Throws<InvalidDataException>(() => CutsceneFile.Parse(document.ToByteArray()));
-        document.Version = 6;
+        document.Version = 7;
         var error = Assert.Throws<InvalidDataException>(() => CutsceneFile.Parse(document.ToByteArray()));
         Assert.Contains("Unsupported cutscene version", error.Message);
     }

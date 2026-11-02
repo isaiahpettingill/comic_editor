@@ -202,7 +202,7 @@ public partial class MainView : UserControl
         ), ("Move later|Alt+Down", () => MoveSelectedFrames(1)
         )));
         menu.Items.Add(ViewMenu());
-        menu.Items.Add(MenuGroup("_Canvas", ("Resize canvas…", ResizeCanvas), ("Convert to RGBA color…", EnableRgbaMode)));
+        menu.Items.Add(MenuGroup("_Canvas", ("Resize canvas…", ResizeCanvas), ("Color mode…", ShowColorMode)));
         menu.Items.Add(MenuGroup("_Palette", ("Palette editor…", EditPalette), ("Edit selected color…", EditPaletteColor)));
         menu.Items.Add(MenuGroup("_Languages", ("Manage languages…", ManageLanguages)));
         AddUpdateMenu(menu);
@@ -478,8 +478,8 @@ public partial class MainView : UserControl
     }
     private void EnableRgbaMode()
     {
-        if (editor.Scene.IsRgba) return;
-        FinishPath(); editor.BeforeChange(); editor.Scene.ConvertToRgba();
+        if (fileBusy || editor.Scene.IsRgba) return;
+        EndInlineTextEdit(); FinishPath(); editor.BeforeChange(); editor.Scene.ConvertToRgba();
         editor.Preferences.RgbaCanvas = true; editor.Preferences.Palette = editor.Scene.Palette.ToArray(); editor.Preferences.Save();
         selection = null; Build(compact);
     }

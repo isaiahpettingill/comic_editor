@@ -14,6 +14,15 @@ Download desktop and Android builds from [Releases](https://github.com/isaiahpet
 - **Android arm64:** install `ComicEditor-android-arm64.apk`.
 - **Browser:** open [comic-editor.pages.dev](https://comic-editor.pages.dev).
 
+## Color mode and editable file size
+
+New documents default to compact **Indexed** color (existing preferences are retained).
+Use the visible **Color mode** button beside the palette, or **Canvas → Color mode…**,
+to convert a document to RGBA with Undo support. Indexed sources now use lossless
+indexed PNG; RGBA sources use QOI. See [compression and compatibility](docs/indexed-source-compression.md).
+**Upgrade the official comic-compile alongside the editor** when importing new
+indexed files into Destructos; compiler v0.1.34 and earlier cannot read source v6.
+
 ## Frame timing and audio
 
 - Edit a frame’s seconds directly in the storyboard; Enter commits, Escape restores the value. New frames start at **4 seconds**. Existing durations are preserved.

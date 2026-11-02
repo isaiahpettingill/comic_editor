@@ -213,4 +213,31 @@ public partial class CanvasTests
         }, CancellationToken.None);
     }
 
+    [Fact]
+    public async Task AltFrameChordDoesNotActivateMenuButBareAltStillDoes()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(TestApp));
+        await session.Dispatch(() =>
+        {
+            var view = new MainView(); var window = new Window { Content = view, Width = 1280, Height = 800 };
+            window.Show(); _ = Capture(window);
+            void AltDown() => window.KeyPress(Key.LeftAlt, RawInputModifiers.Alt, PhysicalKey.AltLeft, null);
+            void AltUp() => window.KeyRelease(Key.LeftAlt, RawInputModifiers.None, PhysicalKey.AltLeft, null);
+            for (var count = 2; count <= 3; count++)
+            {
+                AltDown();
+                window.KeyPress(Key.N, RawInputModifiers.Alt, PhysicalKey.N, null);
+                window.KeyRelease(Key.N, RawInputModifiers.Alt, PhysicalKey.N, null);
+                AltUp();
+                Assert.Equal(count, State(view).Scene.Frames.Count);
+                Assert.IsNotType<MenuItem>(window.FocusManager!.GetFocusedElement());
+                _ = Capture(window);
+                Assert.True(Named<Border>(window, $"FrameRow{count - 1}").Focus());
+            }
+            AltDown(); AltUp();
+            Assert.IsType<MenuItem>(window.FocusManager!.GetFocusedElement());
+            window.Close();
+        }, CancellationToken.None);
+    }
+
 }

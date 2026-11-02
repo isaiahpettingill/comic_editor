@@ -9,8 +9,8 @@ version 5/QOI. Saving an existing indexed file upgrades its source encoding.
 **Compatibility:** ComicEditor/compiler v0.1.34 and earlier reject source v6.
 Keep an original backup for older editors, and upgrade the official
 `comic-compile` executable alongside ComicEditor. Destructos delegates editable
-source imports to that executable: select the compiler bundled with a release
-containing this change. Its older “v0.1.32+” guidance is not sufficient for v6.
+source imports to that executable: select **comic-compile v0.1.35 or later**
+from the matching editor release. Its older “v0.1.32+” guidance is not sufficient for v6.
 No Godot PNG/QOI extension or runtime codec change is required.
 Compiled CBOR remains v2 and compiled indexed protobuf remains v2; tests compare
 the complete compiled bytes from equivalent v3/v6 sources. Native compiler

@@ -21,7 +21,8 @@ Use the visible **Color mode** button beside the palette, or **Canvas → Color 
 to convert a document to RGBA with Undo support. Indexed sources now use lossless
 indexed PNG; RGBA sources use QOI. See [compression and compatibility](docs/indexed-source-compression.md).
 **Upgrade the official comic-compile alongside the editor** when importing new
-indexed files into Destructos; compiler v0.1.34 and earlier cannot read source v6.
+indexed files into Destructos: use **comic-compile v0.1.35 or later**. Older
+compilers cannot read source v6.
 
 ## Frame timing and audio
 
